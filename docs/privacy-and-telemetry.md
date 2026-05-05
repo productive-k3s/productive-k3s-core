@@ -62,7 +62,14 @@ Interpretation of those events belongs on the receiving side, not in the local b
 
 ## Delivery Controls
 
-Telemetry delivery is disabled by default.
+Telemetry delivery remains explicit opt-in.
+
+Decision rules:
+
+- if `TELEMETRY_ENABLED=true`, telemetry is enabled without prompting
+- if `TELEMETRY_ENABLED=false`, telemetry is disabled without prompting
+- if `TELEMETRY_ENABLED` is unset and the bootstrap is running interactively, the bootstrap asks once whether to enable anonymous telemetry for that run, with `Yes` as the default answer
+- if `TELEMETRY_ENABLED` is unset and the bootstrap is not running interactively, telemetry stays disabled
 
 Environment variables:
 
