@@ -14,6 +14,7 @@ theme:
   language: en
   features:
     - navigation.tabs
+    - navigation.indexes
     - navigation.path
     - navigation.sections
     - navigation.expand
@@ -62,16 +63,16 @@ nav:
   - Home: index.md
   - English:
       - Overview: en/index.md
-      - Product overview:
-          - Overview: en/overview/index.md
+      - Product:
+          - en/overview/index.md
           - Reasons behind: en/overview/reasons-behind.md
           - Supported platforms: en/overview/supported-platforms.md
       - Guides:
-          - Overview: en/guides/index.md
+          - en/guides/index.md
           - Post-development testing: en/guides/post-development-testing.md
           - Windows development: en/guides/windows-development.md
       - Reference:
-          - Overview: en/reference/index.md
+          - en/reference/index.md
           - k3s checks: en/reference/k3s-checks.md
           - Ingress checks: en/reference/ingress-checks.md
           - Rancher checks: en/reference/rancher-checks.md
@@ -81,22 +82,22 @@ nav:
           - Certificate checks: en/reference/certificate-checks.md
           - Privacy and telemetry: en/reference/privacy-and-telemetry.md
       - Contributor docs:
-          - Overview: en/contributor/index.md
+          - en/contributor/index.md
           - GitHub Actions and releases: en/contributor/github-actions.md
           - Debian 12 support baseline: en/contributor/debian-12-supported.md
           - Debian 13 support baseline: en/contributor/debian-13-supported.md
   - Español:
       - Resumen: es/index.md
       - Producto:
-          - Resumen: es/overview/index.md
+          - es/overview/index.md
           - Razones del diseño: es/overview/reasons-behind.md
           - Plataformas soportadas: es/overview/supported-platforms.md
       - Guías:
-          - Resumen: es/guides/index.md
+          - es/guides/index.md
           - Pruebas después de cambios: es/guides/post-development-testing.md
           - Desarrollo en Windows: es/guides/windows-development.md
       - Referencia:
-          - Resumen: es/reference/index.md
+          - es/reference/index.md
           - Verificaciones de k3s: es/reference/k3s-checks.md
           - Verificaciones de ingress: es/reference/ingress-checks.md
           - Verificaciones de Rancher: es/reference/rancher-checks.md
@@ -106,7 +107,7 @@ nav:
           - Verificaciones de certificados: es/reference/certificate-checks.md
           - Privacidad y telemetría: es/reference/privacy-and-telemetry.md
       - Documentación para contribuidores:
-          - Resumen: es/contributor/index.md
+          - es/contributor/index.md
           - GitHub Actions y releases: es/contributor/github-actions.md
           - Soporte validado para Debian 12: es/contributor/debian-12-supported.md
           - Soporte validado para Debian 13: es/contributor/debian-13-supported.md
