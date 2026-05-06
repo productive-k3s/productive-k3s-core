@@ -10,10 +10,10 @@ At the same time, the development workflow provides a practical way for contribu
 
 The repository is validated and supported on:
 
-- Ubuntu `24.04` LTS
-- Ubuntu `22.04` LTS
-- Debian `13` `trixie`
-- Debian `12` `bookworm`
+- Ubuntu `24.04` LTS on `amd64`
+- Ubuntu `22.04` LTS on `amd64`
+- Debian `13` `trixie` on `amd64`
+- Debian `12` `bookworm` on `amd64`
 
 Support means the retained validation evidence includes these flows:
 
@@ -28,6 +28,7 @@ Support means the retained validation evidence includes these flows:
 - Ubuntu `24.04` has both direct hosted validation and VM-based validation
 - Ubuntu `22.04`, Debian `12`, and Debian `13` are validated through the VM harness
 - Debian support refers to the runtime inside the validated VM guest, not to GitHub-hosted direct-run CI
+- `arm64` targets are not yet part of the supported validation matrix
 
 ## Platform Assumptions
 

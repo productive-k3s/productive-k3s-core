@@ -6,6 +6,7 @@ Esta sección agrupa verificaciones operativas y páginas de referencia orientad
 
 ### Verificaciones
 
+- [Preflight del host](host-preflight.md)
 - [Verificaciones de k3s](k3s-checks.md)
 - [Verificaciones de ingress](ingress-checks.md)
 - [Verificaciones de Rancher](rancher-checks.md)

@@ -23,6 +23,11 @@ Bootstrap modes:
 - `agent`: join a node to an existing K3S server
 - `stack`: install or reuse stack components on top of an existing cluster
 
+Current public support baseline:
+
+- Ubuntu `24.04` and `22.04` on `amd64`
+- Debian `12` and `13` on `amd64`
+
 ## Documentation
 
 The long-form documentation lives in the published site.
@@ -49,6 +54,7 @@ Use these pages for the high-level product view instead of repeating the same ra
 
 Operational checks and user-facing references:
 
+- [Host preflight](https://productive-k3s.io/en/user-docs/host-preflight/)
 - [k3s checks](https://productive-k3s.io/en/user-docs/k3s-checks/)
 - [Ingress checks](https://productive-k3s.io/en/user-docs/ingress-checks/)
 - [Rancher checks](https://productive-k3s.io/en/user-docs/rancher-checks/)
@@ -84,6 +90,8 @@ If you only want to install and operate the stack locally, the practical host-si
 - `curl`
 - `getent`
 - `make`
+
+Before bootstrap, you can validate the target host with [Host preflight](https://productive-k3s.io/en/user-docs/host-preflight/) or directly with `make preflight`.
 
 If you also want full repository validation coverage, add:
 

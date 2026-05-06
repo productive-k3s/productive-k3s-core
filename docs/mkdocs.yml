@@ -71,6 +71,7 @@ nav:
           - Relationship with Productive K3S Infra: en/product/productive-k3s-infra-relationship.md
       - User docs:
           - en/user-docs/index.md
+          - Host preflight: en/user-docs/host-preflight.md
           - Checks:
               - K3s: en/user-docs/k3s-checks.md
               - Ingress: en/user-docs/ingress-checks.md
@@ -106,6 +107,7 @@ nav:
           - Relación con Productive K3S Infra: es/product/productive-k3s-infra-relationship.md
       - Documentación para usuarios:
           - es/user-docs/index.md
+          - Preflight del host: es/user-docs/host-preflight.md
           - Verificaciones:
               - K3s: es/user-docs/k3s-checks.md
               - Ingress: es/user-docs/ingress-checks.md

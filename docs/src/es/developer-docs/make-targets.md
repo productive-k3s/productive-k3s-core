@@ -8,6 +8,8 @@ Estos son los entrypoints de uso diario más comunes desde la raíz del reposito
 
 | Target | Propósito |
 | --- | --- |
+| `make preflight` | Ejecutar los chequeos de preflight del host con guía en nivel warning |
+| `make preflight-strict` | Ejecutar los chequeos de preflight del host y fallar también por warnings |
 | `make bootstrap` | Ejecutar el flujo interactivo de bootstrap en su modo default `single-node` |
 | `make dry-run` | Ejecutar el bootstrap en modo planificación sin aplicar cambios |
 | `make backup` | Capturar un snapshot de backup del host y del clúster |
@@ -25,6 +27,7 @@ El `Makefile` raíz también expone algunos entrypoints de tests cómodos para d
 
 | Target | Propósito |
 | --- | --- |
+| `make test-preflight-host` | Verificar la CLI del preflight del host, su salida JSON y el comportamiento de strict mode |
 | `make test-bootstrap-modes` | Verificar que la ayuda CLI y la validación de modos de bootstrap se comporten correctamente |
 | `make test-agent-smoke` | Ejercitar el modo `agent` dentro de Docker |
 | `make test-smoke` | Ejecutar un smoke check del bootstrap dry-run basado en Docker |
