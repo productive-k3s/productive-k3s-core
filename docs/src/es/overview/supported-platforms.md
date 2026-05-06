@@ -2,7 +2,11 @@
 
 Esta página resume los targets soportados por Productive K3S y la guía práctica de dimensionamiento para un host de nodo único.
 
-## Targets Linux soportados
+La herramienta está preparada para entornos orientados a producción basados en los sistemas operativos no propietarios más utilizados en plataformas comunes de cloud y de VMs. En la práctica, por eso los targets de runtime soportados terminan siendo distribuciones Linux.
+
+Al mismo tiempo, el flujo de desarrollo da una forma práctica para que contribuidores que usan Windows o macOS puedan trabajar en mejoras sobre los scripts de la herramienta usando Multipass y VMs Linux soportadas.
+
+## Targets soportados
 
 El repositorio está validado y soportado sobre:
 
@@ -55,6 +59,8 @@ Recomendado para una experiencia más fluida:
 
 ## Ver también
 
+- [Baseline soportado para Ubuntu 22.04](../contributor/ubuntu-22-04-supported.md)
+- [Baseline soportado para Ubuntu 24.04](../contributor/ubuntu-24-04-supported.md)
 - [Baseline soportado para Debian 12](../contributor/debian-12-supported.md)
 - [Baseline soportado para Debian 13](../contributor/debian-13-supported.md)
 - [Pruebas después de cambios](../guides/post-development-testing.md)

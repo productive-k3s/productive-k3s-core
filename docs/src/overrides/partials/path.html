@@ -3,51 +3,59 @@
 -#}
 {% if page and page.url and page.url.startswith('es/') %}
   {% set crumb_home_label = "Inicio" %}
-  {% set crumb_home_url = (config.extra.homepage | d(nav.homepage.url, true) | url) ~ "?lang=es" %}
+  {% set crumb_home_url = base_url ~ "?lang=es" %}
 {% else %}
   {% set crumb_home_label = "Home" %}
-  {% set crumb_home_url = config.extra.homepage | d(nav.homepage.url, true) | url %}
+  {% set crumb_home_url = base_url %}
 {% endif %}
 
 {% set crumbs = [] %}
 {% if page and page.url %}
   {% if page.url in ['en/', 'es/'] %}
-    {% set crumbs = [{"label": "Resumen" if page.url == 'es/' else "Overview", "url": None}] %}
+    {% set crumbs = [] %}
   {% elif page.url in ['en/overview/', 'es/overview/'] %}
-    {% set crumbs = [
-      {"label": "Producto" if page.url.startswith('es/') else "Product", "url": "es/overview/" if page.url.startswith('es/') else "en/overview/"},
-      {"label": "Resumen" if page.url.startswith('es/') else "Overview", "url": None}
-    ] %}
+    {% set crumbs = [{"label": "Producto" if page.url.startswith('es/') else "Product", "url": None}] %}
   {% elif '/overview/' in page.url %}
     {% set crumbs = [{"label": "Producto" if page.url.startswith('es/') else "Product", "url": "es/overview/" if page.url.startswith('es/') else "en/overview/"}] %}
   {% elif page.url in ['en/guides/', 'es/guides/'] %}
     {% set crumbs = [
-      {"label": "Guías" if page.url.startswith('es/') else "Guides", "url": "es/guides/" if page.url.startswith('es/') else "en/guides/"},
-      {"label": "Resumen" if page.url.startswith('es/') else "Overview", "url": None}
+      {"label": "Documentación para contribuidores" if page.url.startswith('es/') else "Contributor Docs", "url": "es/contributor/" if page.url.startswith('es/') else "en/contributor/"},
+      {"label": "Guías" if page.url.startswith('es/') else "Guides", "url": None}
     ] %}
   {% elif '/guides/' in page.url %}
-    {% set crumbs = [{"label": "Guías" if page.url.startswith('es/') else "Guides", "url": "es/guides/" if page.url.startswith('es/') else "en/guides/"}] %}
-  {% elif page.url in ['en/reference/', 'es/reference/'] %}
-    {% set crumbs = [
-      {"label": "Referencia" if page.url.startswith('es/') else "Reference", "url": "es/reference/" if page.url.startswith('es/') else "en/reference/"},
-      {"label": "Resumen" if page.url.startswith('es/') else "Overview", "url": None}
-    ] %}
-  {% elif '/reference/' in page.url %}
-    {% set crumbs = [{"label": "Referencia" if page.url.startswith('es/') else "Reference", "url": "es/reference/" if page.url.startswith('es/') else "en/reference/"}] %}
-  {% elif page.url in ['en/contributor/', 'es/contributor/'] %}
     {% set crumbs = [
       {"label": "Documentación para contribuidores" if page.url.startswith('es/') else "Contributor Docs", "url": "es/contributor/" if page.url.startswith('es/') else "en/contributor/"},
-      {"label": "Resumen" if page.url.startswith('es/') else "Overview", "url": None}
+      {"label": "Guías" if page.url.startswith('es/') else "Guides", "url": "es/guides/" if page.url.startswith('es/') else "en/guides/"}
     ] %}
+  {% elif page.url in ['en/reference/', 'es/reference/'] %}
+    {% set crumbs = [{"label": "Documentación para usuarios" if page.url.startswith('es/') else "User Docs", "url": None}] %}
+  {% elif '/reference/' in page.url %}
+    {% if '/reference/k3s-checks' in page.url or '/reference/ingress-checks' in page.url or '/reference/rancher-checks' in page.url or '/reference/registry-checks' in page.url or '/reference/longhorn-checks' in page.url or '/reference/certificate-checks' in page.url %}
+      {% set crumbs = [
+        {"label": "Documentación para usuarios" if page.url.startswith('es/') else "User Docs", "url": "es/reference/" if page.url.startswith('es/') else "en/reference/"},
+        {"label": "Verificaciones" if page.url.startswith('es/') else "Checks", "url": None}
+      ] %}
+    {% else %}
+      {% set crumbs = [{"label": "Documentación para usuarios" if page.url.startswith('es/') else "User Docs", "url": "es/reference/" if page.url.startswith('es/') else "en/reference/"}] %}
+    {% endif %}
+  {% elif page.url in ['en/contributor/', 'es/contributor/'] %}
+    {% set crumbs = [{"label": "Documentación para contribuidores" if page.url.startswith('es/') else "Contributor Docs", "url": None}] %}
   {% elif '/contributor/' in page.url %}
-    {% set crumbs = [{"label": "Documentación para contribuidores" if page.url.startswith('es/') else "Contributor Docs", "url": "es/contributor/" if page.url.startswith('es/') else "en/contributor/"}] %}
+    {% if '/contributor/ubuntu-' in page.url or '/contributor/debian-' in page.url %}
+      {% set crumbs = [
+        {"label": "Documentación para contribuidores" if page.url.startswith('es/') else "Contributor Docs", "url": "es/contributor/" if page.url.startswith('es/') else "en/contributor/"},
+        {"label": "Baseline de soporte" if page.url.startswith('es/') else "Support baseline", "url": None}
+      ] %}
+    {% else %}
+      {% set crumbs = [{"label": "Documentación para contribuidores" if page.url.startswith('es/') else "Contributor Docs", "url": "es/contributor/" if page.url.startswith('es/') else "en/contributor/"}] %}
+    {% endif %}
   {% endif %}
 {% endif %}
 
 <nav class="md-path" aria-label="{{ 'Navegación' if page and page.url and page.url.startswith('es/') else lang.t('nav') }}">
   <ol class="md-path__list">
     <li class="md-path__item">
-      <a href="{{ crumb_home_url | url }}" class="md-path__link">
+      <a href="{{ crumb_home_url }}" class="md-path__link">
         <span class="md-ellipsis">{{ crumb_home_label }}</span>
       </a>
     </li>

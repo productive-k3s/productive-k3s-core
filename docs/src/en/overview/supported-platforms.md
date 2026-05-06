@@ -2,7 +2,11 @@
 
 This page summarizes the supported runtime targets for Productive K3S and the practical sizing guidance for a single-node host.
 
-## Supported Linux Targets
+The tool is prepared for production-oriented environments based on the most widely used non-proprietary operating systems across common cloud and VM platforms. In practice, that is why the supported runtime targets end up being Linux distributions.
+
+At the same time, the development workflow provides a practical way for contributors using Windows or macOS to work on improvements to the tool scripts by using Multipass and supported Linux VMs.
+
+## Supported Targets
 
 The repository is validated and supported on:
 
@@ -55,6 +59,8 @@ Recommended for a smoother experience:
 
 ## See also
 
+- [Ubuntu 22.04 support baseline](../contributor/ubuntu-22-04-supported.md)
+- [Ubuntu 24.04 support baseline](../contributor/ubuntu-24-04-supported.md)
 - [Debian 12 support baseline](../contributor/debian-12-supported.md)
 - [Debian 13 support baseline](../contributor/debian-13-supported.md)
 - [Post-development testing](../guides/post-development-testing.md)

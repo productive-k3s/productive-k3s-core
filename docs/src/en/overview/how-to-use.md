@@ -1,0 +1,56 @@
+# How to Use Productive K3S
+
+The simplest way to use `productive-k3s` is to run the release installer on one of the [supported platforms](supported-platforms.md), in a host or a VM with those operating systems.
+
+Required host/VM commands for this install path:
+
+- `bash`
+- `sudo`
+- `curl`
+- `tar`
+- `sha256sum`
+- `mktemp`
+
+## Before install
+
+If you want to see how the installer would run before changing anything on the machine, you can first do an optional dry run:
+
+```bash
+curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/vX.Y.Z/install-productive-k3s.sh | bash -s -- --dry-run
+```
+
+Even in `dry-run`, the script may still show prompts based on what it detects on the host, for example whether an existing `k3s` installation should be reused. Those prompts are used to build the execution plan, but `dry-run` still does not apply changes.
+
+## What will happen on the host
+
+The bootstrap is expected to run on the target machine itself. It can:
+
+- install missing OS packages with `apt-get`
+- install or reuse `k3s`
+- install or reuse `helm`
+- configure the local single-node stack components
+
+By default, the practical target is a single supported VM or Linux host.
+
+This is not intended for an arbitrary Linux distribution. The target must match the [supported platforms](supported-platforms.md) page, whether it is a real host or a VM.
+
+## Basic install
+
+Replace `vX.Y.Z` with the release you want to install:
+
+```bash
+curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/vX.Y.Z/install-productive-k3s.sh | bash
+```
+
+That installer downloads the matching release bundle and runs the bootstrap on the host.
+
+## After install
+
+Once the bootstrap finishes, use the validation and reference docs to inspect the result:
+
+- [k3s checks](../reference/k3s-checks.md)
+- [Ingress checks](../reference/ingress-checks.md)
+- [Rancher checks](../reference/rancher-checks.md)
+- [Registry checks](../reference/registry-checks.md)
+- [Longhorn checks](../reference/longhorn-checks.md)
+- [Certificate checks](../reference/certificate-checks.md)

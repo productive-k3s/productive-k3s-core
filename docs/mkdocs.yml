@@ -62,55 +62,67 @@ plugins:
 nav:
   - Home: index.md
   - English:
-      - Overview: en/index.md
+      - Home: en/index.md
       - Product:
           - en/overview/index.md
+          - How to use: en/overview/how-to-use.md
           - Reasons behind: en/overview/reasons-behind.md
           - Supported platforms: en/overview/supported-platforms.md
-      - Guides:
-          - en/guides/index.md
-          - Post-development testing: en/guides/post-development-testing.md
-          - Windows development: en/guides/windows-development.md
-      - Reference:
+      - User docs:
           - en/reference/index.md
-          - k3s checks: en/reference/k3s-checks.md
-          - Ingress checks: en/reference/ingress-checks.md
-          - Rancher checks: en/reference/rancher-checks.md
-          - Registry checks: en/reference/registry-checks.md
-          - Longhorn checks: en/reference/longhorn-checks.md
+          - Checks:
+              - K3s: en/reference/k3s-checks.md
+              - Ingress: en/reference/ingress-checks.md
+              - Rancher: en/reference/rancher-checks.md
+              - Registry: en/reference/registry-checks.md
+              - Longhorn: en/reference/longhorn-checks.md
+              - Certificates: en/reference/certificate-checks.md
           - Longhorn single-node notes: en/reference/longhorn-single-node-notes.md
-          - Certificate checks: en/reference/certificate-checks.md
           - Privacy and telemetry: en/reference/privacy-and-telemetry.md
       - Contributor docs:
           - en/contributor/index.md
+          - Guides:
+              - en/guides/index.md
+              - macOS development: en/guides/macos-development.md
+              - Post-development testing: en/guides/post-development-testing.md
+              - Windows development: en/guides/windows-development.md
           - GitHub Actions and releases: en/contributor/github-actions.md
-          - Debian 12 support baseline: en/contributor/debian-12-supported.md
-          - Debian 13 support baseline: en/contributor/debian-13-supported.md
+          - Support baseline:
+              - Ubuntu 22.04: en/contributor/ubuntu-22-04-supported.md
+              - Ubuntu 24.04: en/contributor/ubuntu-24-04-supported.md
+              - Debian 12: en/contributor/debian-12-supported.md
+              - Debian 13: en/contributor/debian-13-supported.md
   - Español:
-      - Resumen: es/index.md
+      - Inicio: es/index.md
       - Producto:
           - es/overview/index.md
+          - Cómo usar: es/overview/how-to-use.md
           - Razones del diseño: es/overview/reasons-behind.md
           - Plataformas soportadas: es/overview/supported-platforms.md
-      - Guías:
-          - es/guides/index.md
-          - Pruebas después de cambios: es/guides/post-development-testing.md
-          - Desarrollo en Windows: es/guides/windows-development.md
-      - Referencia:
+      - Documentación para usuarios:
           - es/reference/index.md
-          - Verificaciones de k3s: es/reference/k3s-checks.md
-          - Verificaciones de ingress: es/reference/ingress-checks.md
-          - Verificaciones de Rancher: es/reference/rancher-checks.md
-          - Verificaciones del registry: es/reference/registry-checks.md
-          - Verificaciones de Longhorn: es/reference/longhorn-checks.md
+          - Verificaciones:
+              - K3s: es/reference/k3s-checks.md
+              - Ingress: es/reference/ingress-checks.md
+              - Rancher: es/reference/rancher-checks.md
+              - Registry: es/reference/registry-checks.md
+              - Longhorn: es/reference/longhorn-checks.md
+              - Certificados: es/reference/certificate-checks.md
           - Notas de Longhorn para nodo único: es/reference/longhorn-single-node-notes.md
-          - Verificaciones de certificados: es/reference/certificate-checks.md
           - Privacidad y telemetría: es/reference/privacy-and-telemetry.md
       - Documentación para contribuidores:
           - es/contributor/index.md
+          - Guías:
+              - es/guides/index.md
+              - Desarrollo en macOS: es/guides/macos-development.md
+              - Pruebas después de cambios: es/guides/post-development-testing.md
+              - Desarrollo en Windows: es/guides/windows-development.md
           - GitHub Actions y releases: es/contributor/github-actions.md
-          - Soporte validado para Debian 12: es/contributor/debian-12-supported.md
-          - Soporte validado para Debian 13: es/contributor/debian-13-supported.md
+          - Baseline de soporte:
+              - Ubuntu 22.04: es/contributor/ubuntu-22-04-supported.md
+              - Ubuntu 24.04: es/contributor/ubuntu-24-04-supported.md
+              - Debian 12: es/contributor/debian-12-supported.md
+              - Debian 13: es/contributor/debian-13-supported.md
 
 extra:
   social:

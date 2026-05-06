@@ -11,7 +11,7 @@ The important model is:
 
 ## Support Statement
 
-This repository has been developed and validated against Linux hosts and supported Linux Multipass VMs.
+This tool has been developed and validated against Linux hosts and supported Linux Multipass VMs.
 
 For Windows developers, the supported target model is:
 
@@ -20,6 +20,8 @@ For Windows developers, the supported target model is:
 - run repository scripts inside those Linux VMs through `tests/test-in-vm.sh`
 
 Do not treat this as native Windows support.
+
+The same practical model applies to macOS: you can collaborate on the development of the tool from macOS, but that does not mean the tool runs natively on macOS. The supported approach is to use macOS only as the developer host and validate the tool inside supported Linux VMs.
 
 Native Windows execution is out of scope because the scripts assume Linux host behavior such as:
 

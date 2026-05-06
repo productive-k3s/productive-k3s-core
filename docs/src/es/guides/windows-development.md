@@ -11,7 +11,7 @@ El modelo importante es:
 
 ## Declaración de soporte
 
-Este repositorio fue desarrollado y validado contra hosts Linux y VMs Linux soportadas por Multipass.
+Esta herramienta fue desarrollada y validada sobre hosts Linux y VMs Linux soportadas por Multipass.
 
 Para desarrolladores Windows, el modelo objetivo soportado es:
 
@@ -20,6 +20,8 @@ Para desarrolladores Windows, el modelo objetivo soportado es:
 - ejecutar los scripts del repositorio dentro de esas VMs Linux mediante `tests/test-in-vm.sh`
 
 No trates esto como soporte nativo de Windows.
+
+El mismo modelo práctico aplica a macOS: podés colaborar en el desarrollo de la herramienta desde macOS, pero eso no significa que la herramienta corra de forma nativa en macOS. El camino soportado es usar macOS sólo como host de desarrollo y validar la herramienta dentro de VMs Linux soportadas.
 
 La ejecución nativa en Windows queda fuera de alcance porque los scripts asumen comportamiento de host Linux, como por ejemplo:
 

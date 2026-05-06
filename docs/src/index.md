@@ -21,11 +21,11 @@ secondary_url: https://github.com/jemacchi/productive-k3s/blob/main/README.md
 card_title: What it does
 card_title_es: Qué hace
 card_items:
-  - Deploys a single-node k3s cluster on a standard VM
+  - Deploys a single-node k3s cluster on a supported VM or host
   - Provides a Kubernetes-compatible environment out of the box
   - Enables real workloads using manifests, Helm charts, and Kubernetes-native tooling
 card_items_es:
-  - Despliega un clúster k3s de nodo único sobre una VM estándar
+  - Despliega un clúster k3s de nodo único sobre una VM o un host soportados
   - Proporciona un entorno compatible con Kubernetes desde el inicio
   - Permite ejecutar workloads reales usando manifests, charts de Helm y tooling nativo de Kubernetes
 why_title: Why it exists

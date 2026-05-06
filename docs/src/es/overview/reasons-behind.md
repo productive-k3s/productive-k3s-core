@@ -2,7 +2,7 @@
 
 La configuración de `productive-k3s` fue diseñada para ofrecer un entorno local de Kubernetes liviano pero orientado a producción sobre un único host. La idea es ir más allá de despliegues locales ad hoc y ofrecer un stack más cercano a operaciones reales de Kubernetes, pero que siga siendo lo bastante simple como para ejecutarlo y validarlo localmente.
 
-## `k3s`
+## k3s
 
 Se eligió `k3s` como distribución de Kubernetes porque ofrece un clúster completamente funcional con una huella operativa mucho menor que una instalación upstream estándar. Encaja muy bien en entornos de nodo único y clusters pequeños, por lo que resulta una opción fuerte para infraestructura local que igual necesita comportarse como un cluster real.
 
@@ -17,7 +17,7 @@ Referencias:
 - [k3s](https://k3s.io/)
 - [documentación de k3s](https://docs.k3s.io/)
 
-## `cert-manager`
+## cert-manager
 
 Se incluyó `cert-manager` para manejar el ciclo de vida de certificados dentro del cluster. Incluso en entornos locales o semi-locales, TLS pasa a ser necesario apenas los servicios se exponen por ingress o son consumidos por varios componentes.
 
@@ -32,7 +32,7 @@ Referencias:
 - [cert-manager](https://cert-manager.io/)
 - [documentación de cert-manager](https://cert-manager.io/docs/)
 
-## `Longhorn`
+## Longhorn
 
 Se eligió `Longhorn` como capa de almacenamiento persistente cloud-native para cargas stateful en Kubernetes. En vez de depender de mounts de disco locales ad hoc para todo, Longhorn permite administrar volúmenes persistentes de una manera consistente con los patrones de Kubernetes.
 
@@ -48,7 +48,7 @@ Referencias:
 - [Longhorn](https://longhorn.io/)
 - [documentación de Longhorn](https://longhorn.io/docs/)
 
-## `Rancher`
+## Rancher
 
 Se agregó `Rancher` para ofrecer una interfaz de gestión y operaciones del cluster. Aunque todo puede hacerse con `kubectl`, contar con un dashboard simplifica la administración local, el troubleshooting y la validación.
 

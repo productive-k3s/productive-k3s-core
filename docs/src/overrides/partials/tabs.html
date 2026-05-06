@@ -2,21 +2,19 @@
   Language-aware top tabs.
 -#}
 {% set is_es = page and page.url and page.url.startswith('es/') %}
-{% set home_root = config.extra.homepage | d(nav.homepage.url, true) | url %}
+{% set home_root = base_url %}
 {% if is_es %}
   {% set tabs = [
     {"label": "Inicio", "url": home_root ~ "?lang=es", "key": "home"},
     {"label": "Producto", "url": "es/overview/", "key": "overview"},
-    {"label": "Guías", "url": "es/guides/", "key": "guides"},
-    {"label": "Referencia", "url": "es/reference/", "key": "reference"},
+    {"label": "Documentación para usuarios", "url": "es/reference/", "key": "reference"},
     {"label": "Documentación para contribuidores", "url": "es/contributor/", "key": "contributor"},
   ] %}
 {% else %}
   {% set tabs = [
     {"label": "Home", "url": home_root, "key": "home"},
     {"label": "Product", "url": "en/overview/", "key": "overview"},
-    {"label": "Guides", "url": "en/guides/", "key": "guides"},
-    {"label": "Reference", "url": "en/reference/", "key": "reference"},
+    {"label": "User Docs", "url": "en/reference/", "key": "reference"},
     {"label": "Contributor Docs", "url": "en/contributor/", "key": "contributor"},
   ] %}
 {% endif %}
@@ -27,7 +25,7 @@
   {% elif '/overview/' in page.url %}
     {% set current_key = 'overview' %}
   {% elif '/guides/' in page.url %}
-    {% set current_key = 'guides' %}
+    {% set current_key = 'contributor' %}
   {% elif '/reference/' in page.url %}
     {% set current_key = 'reference' %}
   {% elif '/contributor/' in page.url %}
@@ -44,7 +42,7 @@
     <ul class="md-tabs__list">
       {% for item in tabs %}
         <li class="md-tabs__item{% if item.key == current_key %} md-tabs__item--active{% endif %}">
-          <a href="{{ item.url | url }}" class="md-tabs__link">
+          <a href="{{ home_root if item.key == 'home' and not is_es else (home_root ~ '?lang=es') if item.key == 'home' else (item.url | url) }}" class="md-tabs__link">
             {{ item.label }}
           </a>
         </li>
