@@ -13,6 +13,22 @@ Comandos requeridos en el host o la VM para este camino de instalación:
 
 ## Antes de instalar
 
+Antes de correr el bootstrap, podés validar si el host destino coincide con los supuestos públicos de plataforma y con la guía de hardware:
+
+```bash
+make preflight
+```
+
+Si querés que también fallen los warnings, usá:
+
+```bash
+make preflight-strict
+```
+
+Este preflight chequea la lista de plataformas soportadas, la expectativa de `systemd`, los comandos requeridos y la guía práctica de hardware para el modo seleccionado.
+
+Ver [Preflight del host](../user-docs/host-preflight.md) para el comportamiento detallado.
+
 Si querés ver cómo se ejecutaría el instalador antes de cambiar algo en la máquina, primero podés hacer un `dry-run` opcional:
 
 ```bash
@@ -48,6 +64,7 @@ Ese instalador descarga el bundle correspondiente a ese release y ejecuta el boo
 
 Cuando el bootstrap termina, usá la documentación de validación y referencia para inspeccionar el resultado:
 
+- [Preflight del host](../user-docs/host-preflight.md)
 - [Verificaciones de k3s](../user-docs/k3s-checks.md)
 - [Verificaciones de ingress](../user-docs/ingress-checks.md)
 - [Verificaciones de Rancher](../user-docs/rancher-checks.md)

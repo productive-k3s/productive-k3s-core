@@ -1,4 +1,10 @@
-.PHONY: bootstrap dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test-bootstrap-modes test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all
+.PHONY: preflight preflight-strict bootstrap dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test-preflight-host test-bootstrap-modes test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all
+
+preflight:
+	./scripts/preflight-host.sh
+
+preflight-strict:
+	./scripts/preflight-host.sh --strict
 
 bootstrap:
 	./scripts/bootstrap-k3s-stack.sh
@@ -29,6 +35,9 @@ docs-down:
 
 docs-clean:
 	./docs/clean.sh
+
+test-preflight-host:
+	bash ./tests/test-preflight-host.sh
 
 test-bootstrap-modes:
 	bash ./tests/test-bootstrap-modes.sh

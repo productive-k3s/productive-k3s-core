@@ -2,6 +2,32 @@
 
 Esta página resume las principales opciones CLI y parámetros respaldados por entorno que exponen los scripts del repositorio.
 
+## `scripts/preflight-host.sh`
+
+### Opciones CLI
+
+| Opción | Significado |
+| --- | --- |
+| `--mode <single-node|server|agent|stack>` | Evaluar el host contra el perfil de runtime seleccionado |
+| `--strict` | Terminar con código no cero también ante warnings |
+| `--json-output` | Emitir JSON machine-readable en lugar de salida legible para humanos |
+| `-h`, `--help` | Mostrar ayuda CLI |
+
+### Qué chequea
+
+El preflight del host valida:
+
+- OS y versión soportados
+- arquitectura de CPU soportada
+- `systemd` como PID 1
+- comandos requeridos para el bootstrap o para el camino de instalación vía release
+- postura de `sudo`
+- guía publicada de hardware para `single-node` y `stack`
+
+Para `server` y `agent`, igual captura el snapshot de recursos del host, pero no aplica la misma guía de dimensionamiento del stack completo.
+
+Por ahora, la baseline pública soportada es `amd64`/`x86_64`. El preflight reporta `arm64`/`aarch64` como no soportadas hasta que esos targets entren explícitamente en la matriz soportada.
+
 ## `scripts/bootstrap-k3s-stack.sh`
 
 ### Opciones CLI
@@ -138,6 +164,9 @@ Este helper consume:
 
 !!! note
     El script de bootstrap es intencionalmente interactivo. La mayoría de las decisiones de instalación se piden en runtime en lugar de exponerse como una superficie enorme de flags.
+
+!!! note
+    El preflight del host es un chequeo de compatibilidad, no un instalador. Sirve para ver si el destino parece alineado con los supuestos de plataforma soportada antes de que el bootstrap empiece a cambiar cosas.
 
 !!! note
     Si necesitás orquestación automatizada, la separación por modos más los settings registrados en el manifest son hoy los puntos de integración más estables.

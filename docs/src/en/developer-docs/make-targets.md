@@ -8,6 +8,8 @@ These are the day-to-day entry points most developers use from the repository ro
 
 | Target | Purpose |
 | --- | --- |
+| `make preflight` | Run the host preflight checks with warning-level guidance |
+| `make preflight-strict` | Run the host preflight checks and fail on warnings too |
 | `make bootstrap` | Run the interactive bootstrap flow in its default `single-node` mode |
 | `make dry-run` | Run the bootstrap flow in planning mode without applying changes |
 | `make backup` | Capture a host and cluster backup snapshot |
@@ -25,6 +27,7 @@ The root `Makefile` also exposes a set of developer-friendly test entry points:
 
 | Target | Purpose |
 | --- | --- |
+| `make test-preflight-host` | Verify the host preflight CLI, JSON output, and strict-mode behavior |
 | `make test-bootstrap-modes` | Verify that bootstrap mode CLI help and validation behave correctly |
 | `make test-agent-smoke` | Exercise the `agent` mode in Docker |
 | `make test-smoke` | Run a Docker-based smoke check for bootstrap dry-run |

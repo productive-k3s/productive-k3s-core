@@ -13,6 +13,22 @@ Required host/VM commands for this install path:
 
 ## Before install
 
+Before running the bootstrap, you can validate whether the target host matches the public platform assumptions and hardware guidance:
+
+```bash
+make preflight
+```
+
+If you want warnings to fail the command as well, use:
+
+```bash
+make preflight-strict
+```
+
+This preflight checks the supported platform list, `systemd` expectation, required commands, and practical hardware guidance for the selected mode.
+
+See [Host preflight](../user-docs/host-preflight.md) for the detailed behavior.
+
 If you want to see how the installer would run before changing anything on the machine, you can first do an optional dry run:
 
 ```bash
@@ -48,6 +64,7 @@ That installer downloads the matching release bundle and runs the bootstrap on t
 
 Once the bootstrap finishes, use the validation and reference docs to inspect the result:
 
+- [Host preflight](../user-docs/host-preflight.md)
 - [k3s checks](../user-docs/k3s-checks.md)
 - [Ingress checks](../user-docs/ingress-checks.md)
 - [Rancher checks](../user-docs/rancher-checks.md)

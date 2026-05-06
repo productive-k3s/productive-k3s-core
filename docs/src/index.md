@@ -31,14 +31,14 @@ card_items_es:
 why_title: Why it exists
 why_title_es: Por qué existe
 why_options:
-  - label: Option 1
+  - label: DIY INFRASTRUCTURE
     text: A single VM with Docker Compose is simple, but not Kubernetes.
-  - label: Option 2
+  - label: FULL PLATFORM
     text: A full Kubernetes cluster is powerful, but complex and costly.
 why_options_es:
-  - label: Opción 1
+  - label: INFRAESTRUCTURA DIY
     text: Una única VM con Docker Compose es simple, pero no es Kubernetes.
-  - label: Opción 2
+  - label: PLATAFORMA COMPLETA
     text: Un clúster Kubernetes completo es potente, pero complejo y costoso.
 bridge_note: Productive K3S bridges that gap.
 bridge_note_es: Productive K3S cubre ese espacio intermedio.
