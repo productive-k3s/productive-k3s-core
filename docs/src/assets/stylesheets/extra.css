@@ -20,11 +20,18 @@
   --md-typeset-a-color: #2f6fed;
 }
 
+html,
+body {
+  background-color: var(--pk3s-bg);
+}
+
 body {
   background:
     radial-gradient(circle at top left, #edf3ff 0, transparent 36%),
     radial-gradient(circle at bottom right, rgba(236, 243, 255, 0.7) 0, transparent 28%),
     linear-gradient(180deg, #fbfcfe 0%, var(--pk3s-bg) 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 28rem, 100% 28rem, 100% 100%;
 }
 
 .md-header {
@@ -112,6 +119,16 @@ body {
   font-size: 0.78rem;
   font-weight: 400;
   line-height: 1.45;
+}
+
+.pk3s-footer-credit {
+  width: 100%;
+  margin-bottom: 0.55rem;
+  color: var(--pk3s-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .md-path {
