@@ -1,6 +1,6 @@
-# Longhorn Checks
+# Verificaciones de Longhorn
 
-## Quick commands
+## Comandos rápidos
 
 ```bash
 sudo k3s kubectl get ns longhorn-system
@@ -11,14 +11,14 @@ sudo k3s kubectl get volumes.longhorn.io -n longhorn-system
 sudo k3s kubectl get settings.longhorn.io -n longhorn-system
 ```
 
-## Helper utility
+## Utilidad auxiliar
 
 ```bash
 ./utils/inspect-longhorn.sh
 ./utils/inspect-longhorn-volumes.sh
 ```
 
-## Useful related objects
+## Objetos relacionados útiles
 
 ```bash
 sudo k3s kubectl get csidrivers
@@ -26,14 +26,14 @@ sudo k3s kubectl get volumeattachments
 sudo k3s kubectl get pvc -A
 ```
 
-## What to confirm
+## Qué confirmar
 
-- Longhorn pods are `Running`
-- exactly one default `StorageClass` is configured for your intended setup
-- PVCs bound to Longhorn have attached, healthy backing volumes
+- los pods de Longhorn están en `Running`
+- hay exactamente un `StorageClass` default configurado para la topología buscada
+- los PVCs ligados a Longhorn tienen volúmenes adjuntos y saludables
 
-## Single-node note
+## Nota para nodo único
 
-If this cluster is running on a single node, also read:
+Si este cluster corre sobre un solo nodo, leé también:
 
-- [Longhorn single-node notes](./longhorn-single-node-notes.md)
+- [Notas de Longhorn para nodo único](longhorn-single-node-notes.md)

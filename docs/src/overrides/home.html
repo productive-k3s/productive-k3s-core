@@ -1,0 +1,219 @@
+{% extends "main.html" %}
+
+{% block tabs %}
+  {% include "partials/tabs.html" %}
+  <section class="pk3s-hero">
+    <div class="pk3s-container pk3s-hero-grid">
+      <div class="pk3s-hero-copy">
+        <div class="pk3s-eyebrow" data-pk3s-text="eyebrow">{{ page.meta.eyebrow }}</div>
+        <h1 data-pk3s-text="hero_title">{{ page.meta.hero_title }}</h1>
+        <p class="pk3s-lead" data-pk3s-text="lead">{{ page.meta.lead }}</p>
+        <p class="pk3s-sublead" data-pk3s-text="sublead">{{ page.meta.sublead }}</p>
+        <div class="pk3s-actions">
+          <a class="md-button md-button--primary" href="{{ page.meta.primary_url }}" data-pk3s-text="primary_label">{{ page.meta.primary_label }}</a>
+          <a class="md-button" href="{{ page.meta.secondary_url }}" data-pk3s-text="secondary_label">{{ page.meta.secondary_label }}</a>
+        </div>
+      </div>
+      <aside class="pk3s-card pk3s-hero-card">
+        <h2 data-pk3s-text="card_title">{{ page.meta.card_title }}</h2>
+        <ul data-pk3s-list="card_items">
+          {% for item in page.meta.card_items %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+      </aside>
+    </div>
+  </section>
+{% endblock %}
+
+{% block container %}
+  <div class="md-content pk3s-home-shell" data-md-component="content">
+    <article class="md-content__inner md-typeset pk3s-home">
+      <section class="pk3s-home-section">
+        <h2 data-pk3s-text="why_title">{{ page.meta.why_title }}</h2>
+        <div class="pk3s-option-grid">
+          {% set left_option = page.meta.why_options[0] %}
+          {% set right_option = page.meta.why_options[1] %}
+          <article class="pk3s-card pk3s-option-card">
+            <div class="pk3s-option-label" data-pk3s-text="why_option_0_label">{{ left_option.label }}</div>
+            <p data-pk3s-text="why_option_0_text">{{ left_option.text }}</p>
+          </article>
+          <div class="pk3s-gap-divider" aria-hidden="true">
+            <span class="pk3s-gap-divider__horizontal">↔</span>
+            <span class="pk3s-gap-divider__vertical">↕</span>
+          </div>
+          <article class="pk3s-card pk3s-option-card">
+            <div class="pk3s-option-label" data-pk3s-text="why_option_1_label">{{ right_option.label }}</div>
+            <p data-pk3s-text="why_option_1_text">{{ right_option.text }}</p>
+          </article>
+        </div>
+        <p class="pk3s-bridge-note" data-pk3s-text="bridge_note">{{ page.meta.bridge_note }}</p>
+        <div class="pk3s-pill-grid" data-pk3s-list="bridge_points" data-pk3s-list-class="pk3s-pill">
+          {% for item in page.meta.bridge_points %}<div class="pk3s-pill">{{ item }}</div>{% endfor %}
+        </div>
+      </section>
+
+      <section class="pk3s-home-section pk3s-two-col">
+        <article class="pk3s-card">
+          <h2 data-pk3s-text="use_cases_title">{{ page.meta.use_cases_title }}</h2>
+          <ul data-pk3s-list="use_cases">
+            {% for item in page.meta.use_cases %}<li>{{ item }}</li>{% endfor %}
+          </ul>
+        </article>
+        <article class="pk3s-card">
+          <h2 data-pk3s-text="principles_title">{{ page.meta.principles_title }}</h2>
+          <ul data-pk3s-list="principles" data-pk3s-list-type="principles">
+            {% for item in page.meta.principles %}<li><strong>{{ item.title }}</strong>: {{ item.text }}</li>{% endfor %}
+          </ul>
+        </article>
+      </section>
+
+      <section class="pk3s-home-section pk3s-two-col">
+        <article class="pk3s-card">
+          <h2 data-pk3s-text="environments_title">{{ page.meta.environments_title }}</h2>
+          <ul data-pk3s-list="environments">
+            {% for item in page.meta.environments %}<li>{{ item }}</li>{% endfor %}
+          </ul>
+        </article>
+        <article class="pk3s-card">
+          <h2 data-pk3s-text="not_title">{{ page.meta.not_title }}</h2>
+          <ul data-pk3s-list="not_items">
+            {% for item in page.meta.not_items %}<li>{{ item }}</li>{% endfor %}
+          </ul>
+          <p class="pk3s-card-note"><strong data-pk3s-text="not_note">{{ page.meta.not_note }}</strong></p>
+        </article>
+      </section>
+    </article>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      const requestedLang = params.get("lang") === "es" ? "es" : "en";
+      if (requestedLang === "es") {
+        document.documentElement.lang = "es";
+      }
+      const langSwitch = document.querySelector(".pk3s-lang-switch");
+      if (langSwitch) {
+        const [enLink, esLink] = langSwitch.querySelectorAll("a");
+        enLink.classList.toggle("is-active", requestedLang === "en");
+        esLink.classList.toggle("is-active", requestedLang === "es");
+      }
+      const tabs = document.querySelector(".md-tabs__list");
+      if (tabs) {
+        const tabLinks = tabs.querySelectorAll(".md-tabs__link");
+        const rootTabs = {
+          en: [
+            { label: "Home", href: "." },
+            { label: "Product", href: "en/overview/" },
+            { label: "Guides", href: "en/guides/" },
+            { label: "Reference", href: "en/reference/" },
+            { label: "Contributor Docs", href: "en/contributor/" }
+          ],
+          es: [
+            { label: "Inicio", href: ".?lang=es" },
+            { label: "Producto", href: "es/overview/" },
+            { label: "Guías", href: "es/guides/" },
+            { label: "Referencia", href: "es/reference/" },
+            { label: "Documentación para contribuidores", href: "es/contributor/" }
+          ]
+        };
+        rootTabs[requestedLang].forEach((item, index) => {
+          const link = tabLinks[index];
+          if (!link) {
+            return;
+          }
+          link.textContent = item.label;
+          link.setAttribute("href", item.href);
+        });
+      }
+
+      const translations = {
+        en: {
+          eyebrow: {{ page.meta.eyebrow | tojson }},
+          hero_title: {{ page.meta.hero_title | tojson }},
+          lead: {{ page.meta.lead | tojson }},
+          sublead: {{ page.meta.sublead | tojson }},
+          primary_label: {{ page.meta.primary_label | tojson }},
+          secondary_label: {{ page.meta.secondary_label | tojson }},
+          card_title: {{ page.meta.card_title | tojson }},
+          card_items: {{ page.meta.card_items | tojson }},
+          why_title: {{ page.meta.why_title | tojson }},
+          why_option_0_label: {{ page.meta.why_options[0].label | tojson }},
+          why_option_0_text: {{ page.meta.why_options[0].text | tojson }},
+          why_option_1_label: {{ page.meta.why_options[1].label | tojson }},
+          why_option_1_text: {{ page.meta.why_options[1].text | tojson }},
+          bridge_note: {{ page.meta.bridge_note | tojson }},
+          bridge_points: {{ page.meta.bridge_points | tojson }},
+          use_cases_title: {{ page.meta.use_cases_title | tojson }},
+          use_cases: {{ page.meta.use_cases | tojson }},
+          principles_title: {{ page.meta.principles_title | tojson }},
+          principles: {{ page.meta.principles | tojson }},
+          environments_title: {{ page.meta.environments_title | tojson }},
+          environments: {{ page.meta.environments | tojson }},
+          not_title: {{ page.meta.not_title | tojson }},
+          not_items: {{ page.meta.not_items | tojson }},
+          not_note: {{ page.meta.not_note | tojson }}
+        },
+        es: {
+          eyebrow: {{ page.meta.eyebrow_es | tojson }},
+          hero_title: {{ page.meta.hero_title_es | tojson }},
+          lead: {{ page.meta.lead_es | tojson }},
+          sublead: {{ page.meta.sublead_es | tojson }},
+          primary_label: {{ page.meta.primary_label_es | tojson }},
+          secondary_label: {{ page.meta.secondary_label_es | tojson }},
+          card_title: {{ page.meta.card_title_es | tojson }},
+          card_items: {{ page.meta.card_items_es | tojson }},
+          why_title: {{ page.meta.why_title_es | tojson }},
+          why_option_0_label: {{ page.meta.why_options_es[0].label | tojson }},
+          why_option_0_text: {{ page.meta.why_options_es[0].text | tojson }},
+          why_option_1_label: {{ page.meta.why_options_es[1].label | tojson }},
+          why_option_1_text: {{ page.meta.why_options_es[1].text | tojson }},
+          bridge_note: {{ page.meta.bridge_note_es | tojson }},
+          bridge_points: {{ page.meta.bridge_points_es | tojson }},
+          use_cases_title: {{ page.meta.use_cases_title_es | tojson }},
+          use_cases: {{ page.meta.use_cases_es | tojson }},
+          principles_title: {{ page.meta.principles_title_es | tojson }},
+          principles: {{ page.meta.principles_es | tojson }},
+          environments_title: {{ page.meta.environments_title_es | tojson }},
+          environments: {{ page.meta.environments_es | tojson }},
+          not_title: {{ page.meta.not_title_es | tojson }},
+          not_items: {{ page.meta.not_items_es | tojson }},
+          not_note: {{ page.meta.not_note_es | tojson }}
+        }
+      };
+
+      const active = translations[requestedLang];
+      document.querySelectorAll("[data-pk3s-text]").forEach((node) => {
+        const key = node.dataset.pk3sText;
+        if (active[key]) {
+          node.textContent = active[key];
+        }
+      });
+
+      document.querySelectorAll("[data-pk3s-list]").forEach((node) => {
+        const key = node.dataset.pk3sList;
+        const listClass = node.dataset.pk3sListClass || "";
+        const listType = node.dataset.pk3sListType || "default";
+        const items = active[key];
+        if (!Array.isArray(items)) {
+          return;
+        }
+        node.innerHTML = "";
+        items.forEach((item) => {
+          const child = document.createElement(listClass ? "div" : "li");
+          if (listClass) {
+            child.className = listClass;
+            child.textContent = item;
+          } else if (listType === "principles") {
+            child.innerHTML = `<strong>${item.title}</strong>: ${item.text}`;
+          } else {
+            child.textContent = item;
+          }
+          node.appendChild(child);
+        });
+      });
+    })();
+  </script>
+{% endblock %}

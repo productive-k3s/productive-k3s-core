@@ -1,0 +1,118 @@
+site_name: Productive K3S
+site_description: Production-like Kubernetes on a single VM, with bilingual documentation.
+site_author: Productive K3S
+site_url: https://jemacchi.github.io/productive-k3s/
+repo_url: https://github.com/jemacchi/productive-k3s
+repo_name: GitHub
+edit_uri: edit/main/docs/src/
+docs_dir: src
+site_dir: site
+
+theme:
+  name: material
+  custom_dir: src/overrides
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.indexes
+    - navigation.path
+    - navigation.sections
+    - navigation.expand
+    - navigation.footer
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: white
+      accent: blue
+  font: false
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - English:
+      - Overview: en/index.md
+      - Product:
+          - en/overview/index.md
+          - Reasons behind: en/overview/reasons-behind.md
+          - Supported platforms: en/overview/supported-platforms.md
+      - Guides:
+          - en/guides/index.md
+          - Post-development testing: en/guides/post-development-testing.md
+          - Windows development: en/guides/windows-development.md
+      - Reference:
+          - en/reference/index.md
+          - k3s checks: en/reference/k3s-checks.md
+          - Ingress checks: en/reference/ingress-checks.md
+          - Rancher checks: en/reference/rancher-checks.md
+          - Registry checks: en/reference/registry-checks.md
+          - Longhorn checks: en/reference/longhorn-checks.md
+          - Longhorn single-node notes: en/reference/longhorn-single-node-notes.md
+          - Certificate checks: en/reference/certificate-checks.md
+          - Privacy and telemetry: en/reference/privacy-and-telemetry.md
+      - Contributor docs:
+          - en/contributor/index.md
+          - GitHub Actions and releases: en/contributor/github-actions.md
+          - Debian 12 support baseline: en/contributor/debian-12-supported.md
+          - Debian 13 support baseline: en/contributor/debian-13-supported.md
+  - Español:
+      - Resumen: es/index.md
+      - Producto:
+          - es/overview/index.md
+          - Razones del diseño: es/overview/reasons-behind.md
+          - Plataformas soportadas: es/overview/supported-platforms.md
+      - Guías:
+          - es/guides/index.md
+          - Pruebas después de cambios: es/guides/post-development-testing.md
+          - Desarrollo en Windows: es/guides/windows-development.md
+      - Referencia:
+          - es/reference/index.md
+          - Verificaciones de k3s: es/reference/k3s-checks.md
+          - Verificaciones de ingress: es/reference/ingress-checks.md
+          - Verificaciones de Rancher: es/reference/rancher-checks.md
+          - Verificaciones del registry: es/reference/registry-checks.md
+          - Verificaciones de Longhorn: es/reference/longhorn-checks.md
+          - Notas de Longhorn para nodo único: es/reference/longhorn-single-node-notes.md
+          - Verificaciones de certificados: es/reference/certificate-checks.md
+          - Privacidad y telemetría: es/reference/privacy-and-telemetry.md
+      - Documentación para contribuidores:
+          - es/contributor/index.md
+          - GitHub Actions y releases: es/contributor/github-actions.md
+          - Soporte validado para Debian 12: es/contributor/debian-12-supported.md
+          - Soporte validado para Debian 13: es/contributor/debian-13-supported.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/jemacchi/productive-k3s

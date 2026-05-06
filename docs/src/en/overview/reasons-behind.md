@@ -108,6 +108,6 @@ In short, the setup is meant to be small enough to run locally, but structured e
 
 ## See Also
 
-- [Operations docs index](./README.md)
-- [Longhorn single-node notes](./longhorn-single-node-notes.md)
-- [Certificate checks](./certificate-checks.md)
+- [Product overview](index.md)
+- [Longhorn single-node notes](../reference/longhorn-single-node-notes.md)
+- [Certificate checks](../reference/certificate-checks.md)

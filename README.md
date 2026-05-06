@@ -44,10 +44,10 @@ Core rationale:
 
 Detailed rationale:
 
-- [Why this stack exists](./docs/reasons-behind.md)
-- [Post-development testing guide](./docs/post-development-testing.md)
-- [GitHub Actions and release automation](./docs/github-actions.md)
-- [Privacy and telemetry contract](./docs/privacy-and-telemetry.md)
+- [Why this stack exists](./docs/src/en/overview/reasons-behind.md)
+- [Post-development testing guide](./docs/src/en/guides/post-development-testing.md)
+- [GitHub Actions and release automation](./docs/src/en/contributor/github-actions.md)
+- [Privacy and telemetry contract](./docs/src/en/reference/privacy-and-telemetry.md)
 
 ## Supported Platforms
 
@@ -86,8 +86,8 @@ Validation evidence model:
 
 Platform-specific validation notes:
 
-- [Debian 13 supported platform](./docs/debian-13-supported.md)
-- [Debian 12 supported platform](./docs/debian-12-supported.md)
+- [Debian 13 supported platform](./docs/src/en/contributor/debian-13-supported.md)
+- [Debian 12 supported platform](./docs/src/en/contributor/debian-12-supported.md)
 
 ## Minimum Hardware
 

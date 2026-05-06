@@ -1,0 +1,81 @@
+{#-
+  Custom header for Productive K3S docs.
+-#}
+{% import "partials/language.html" as lang with context %}
+{% set class = "md-header" %}
+{% if "navigation.tabs.sticky" in features %}
+  {% set class = class ~ " md-header--shadow md-header--lifted" %}
+{% elif "navigation.tabs" not in features %}
+  {% set class = class ~ " md-header--shadow" %}
+{% endif %}
+{% if page and page.url %}
+  {% if page.url.startswith('en/') %}
+    {% set en_target = page.url %}
+    {% set es_target = 'es/' ~ page.url[3:] %}
+  {% elif page.url.startswith('es/') %}
+    {% set en_target = 'en/' ~ page.url[3:] %}
+    {% set es_target = page.url %}
+  {% else %}
+    {% set en_target = config.extra.homepage | d(nav.homepage.url, true) | url %}
+    {% set es_target = (config.extra.homepage | d(nav.homepage.url, true) | url) ~ '?lang=es' %}
+  {% endif %}
+{% else %}
+  {% set en_target = config.extra.homepage | d(nav.homepage.url, true) | url %}
+  {% set es_target = (config.extra.homepage | d(nav.homepage.url, true) | url) ~ '?lang=es' %}
+{% endif %}
+<header class="{{ class }}" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="{{ lang.t('header') }}">
+    <a href="{{ config.extra.homepage | d(nav.homepage.url, true) | url }}" title="{{ config.site_name | e }}" class="md-header__button md-logo" aria-label="{{ config.site_name }}" data-md-component="logo">
+      {% include "partials/logo.html" %}
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      {% set icon = config.theme.icon.menu or "material/menu" %}
+      {% include ".icons/" ~ icon ~ ".svg" %}
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            {{ config.site_name }}
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            {% if page.meta and page.meta.title %}
+              {{ page.meta.title }}
+            {% else %}
+              {{ page.title }}
+            {% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="pk3s-header-actions">
+      {% if config.repo_url %}
+        <div class="md-header__source">
+          {% include "partials/source.html" %}
+        </div>
+      {% endif %}
+      <div class="pk3s-lang-switch" aria-label="Language selector">
+        <a class="{% if page and page.url and page.url.startswith('en/') %}is-active{% endif %}" href="{{ en_target | url }}">EN</a>
+        <span aria-hidden="true">|</span>
+        <a class="{% if page and page.url and page.url.startswith('es/') %}is-active{% endif %}" href="{{ es_target | url }}">ES</a>
+      </div>
+    </div>
+    {% if "material/search" in config.plugins %}
+      {% set search = config.plugins["material/search"] | attr("config") %}
+      {% if search.enabled %}
+        <label class="md-header__button md-icon" for="__search">
+          {% set icon = config.theme.icon.search or "material/magnify" %}
+          {% include ".icons/" ~ icon ~ ".svg" %}
+        </label>
+        {% include "partials/search.html" %}
+      {% endif %}
+    {% endif %}
+  </nav>
+  {% if "navigation.tabs.sticky" in features %}
+    {% if "navigation.tabs" in features %}
+      {% include "partials/tabs.html" %}
+    {% endif %}
+  {% endif %}
+</header>

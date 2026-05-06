@@ -49,7 +49,7 @@ OS_PRETTY_NAME="unknown"
 PLATFORM_SUPPORT="unsupported"
 AGENT_SERVER_URL=""
 AGENT_CLUSTER_TOKEN=""
-TELEMETRY_ENABLED="${TELEMETRY_ENABLED:-false}"
+TELEMETRY_ENABLED="${TELEMETRY_ENABLED:-}"
 TELEMETRY_ENDPOINT="${TELEMETRY_ENDPOINT:-}"
 TELEMETRY_MAX_RETRIES="${TELEMETRY_MAX_RETRIES:-3}"
 TELEMETRY_CONNECT_TIMEOUT_SECONDS="${TELEMETRY_CONNECT_TIMEOUT_SECONDS:-5}"
@@ -407,6 +407,25 @@ prompt_yesno() {
     n|N) printf -v "$var" 'n' ;;
     *) warn "Invalid input, using default: $d"; printf -v "$var" '%s' "$d" ;;
   esac
+}
+
+resolve_telemetry_enabled() {
+  if [[ -n "${TELEMETRY_ENABLED:-}" ]]; then
+    return 0
+  fi
+
+  if can_use_tty; then
+    local telemetry_consent="y"
+    prompt_yesno telemetry_consent "y" "Productive K3S can send anonymous telemetry about this run to help improve the installation flow. It does not include any sensitive information like hostnames or other environment-specific identifiers. Enable anonymous telemetry for this run?"
+    if [[ "${telemetry_consent}" == "y" ]]; then
+      TELEMETRY_ENABLED="true"
+    else
+      TELEMETRY_ENABLED="false"
+    fi
+    return 0
+  fi
+
+  TELEMETRY_ENABLED="false"
 }
 
 bind_stdin_to_tty() {
@@ -1857,6 +1876,7 @@ main() {
   trap cleanup_exit EXIT
   detect_host_platform
   bind_stdin_to_tty
+  resolve_telemetry_enabled
   sudo_keepalive
 
   log "Detected host platform: ${OS_PRETTY_NAME}"

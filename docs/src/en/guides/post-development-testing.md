@@ -455,10 +455,10 @@ A change is considered validated when:
 
 ## Related Docs
 
-- [Operations docs index](./README.md)
-- [k3s checks](./k3s-checks.md)
-- [Ingress checks](./ingress-checks.md)
-- [Rancher checks](./rancher-checks.md)
-- [Registry checks](./registry-checks.md)
-- [Longhorn checks](./longhorn-checks.md)
-- [Certificate checks](./certificate-checks.md)
+- [Guides overview](index.md)
+- [k3s checks](../reference/k3s-checks.md)
+- [Ingress checks](../reference/ingress-checks.md)
+- [Rancher checks](../reference/rancher-checks.md)
+- [Registry checks](../reference/registry-checks.md)
+- [Longhorn checks](../reference/longhorn-checks.md)
+- [Certificate checks](../reference/certificate-checks.md)

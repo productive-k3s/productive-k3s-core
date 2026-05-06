@@ -125,6 +125,7 @@ main() {
   bash -n tests/test-in-vm.sh
   bash -n scripts/rollback-k3s-stack.sh
   bash -n scripts/clean-k3s-stack.sh
+  bash ./tests/test-telemetry-consent.sh
 
   echo "[INFO] Running hosted full bootstrap on ubuntu-24.04"
   local answers
