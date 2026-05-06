@@ -46,4 +46,4 @@ jobs:
           publish_dir: ./docs/site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: docs: publish site [skip ci]
+          commit_message: "docs: publish site [skip ci]"
