@@ -212,6 +212,20 @@
           node.appendChild(child);
         });
       });
+
+      const footerSlogan = document.querySelector("[data-pk3s-footer-slogan]");
+      if (footerSlogan) {
+        footerSlogan.textContent = requestedLang === "es"
+          ? footerSlogan.dataset.pk3sFooterSloganEs
+          : footerSlogan.dataset.pk3sFooterSloganEn;
+      }
+
+      const footerCreditPrefix = document.querySelector("[data-pk3s-footer-credit-prefix]");
+      if (footerCreditPrefix) {
+        footerCreditPrefix.textContent = requestedLang === "es"
+          ? footerCreditPrefix.dataset.pk3sFooterCreditPrefixEs
+          : footerCreditPrefix.dataset.pk3sFooterCreditPrefixEn;
+      }
     })();
   </script>
 {% endblock %}
