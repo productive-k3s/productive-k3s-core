@@ -28,6 +28,18 @@ O invocando el script directamente:
 ./scripts/preflight-host.sh
 ```
 
+O llamando al wrapper operativo:
+
+```bash
+./scripts/productive-k3s.sh preflight
+```
+
+O usando el camino del instalador release sin clonar el repositorio:
+
+```bash
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
+```
+
 ## Modo estricto
 
 Por defecto, los hallazgos de nivel warning no hacen fallar el comando.
@@ -41,7 +53,7 @@ make preflight-strict
 O:
 
 ```bash
-./scripts/preflight-host.sh --strict
+./scripts/productive-k3s.sh preflight --strict
 ```
 
 ## Chequeos sensibles al modo
@@ -88,7 +100,7 @@ La herramienta emite:
 Para automatización, usá salida machine-readable:
 
 ```bash
-./scripts/preflight-host.sh --json-output
+./scripts/productive-k3s.sh preflight --json-output
 ```
 
 ## Qué no hace

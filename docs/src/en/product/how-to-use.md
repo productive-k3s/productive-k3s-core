@@ -16,23 +16,30 @@ Required host/VM commands for this install path:
 Before running the bootstrap, you can validate whether the target host matches the public platform assumptions and hardware guidance:
 
 ```bash
-make preflight
+curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
 ```
 
 If you want warnings to fail the command as well, use:
 
 ```bash
-make preflight-strict
+curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- preflight --strict
 ```
 
 This preflight checks the supported platform list, `systemd` expectation, required commands, and practical hardware guidance for the selected mode.
+
+If you already have the repository checked out locally, the equivalent root targets are still available:
+
+```bash
+make preflight
+make preflight-strict
+```
 
 See [Host preflight](../user-docs/host-preflight.md) for the detailed behavior.
 
 If you want to see how the installer would run before changing anything on the machine, you can first do an optional dry run:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/vX.Y.Z/install-productive-k3s.sh | bash -s -- --dry-run
+curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- bootstrap --dry-run
 ```
 
 Even in `dry-run`, the script may still show prompts based on what it detects on the host, for example whether an existing `k3s` installation should be reused. Those prompts are used to build the execution plan, but `dry-run` still does not apply changes.
@@ -55,10 +62,10 @@ This is not intended for an arbitrary Linux distribution. The target must match 
 Replace `vX.Y.Z` with the release you want to install:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/vX.Y.Z/install-productive-k3s.sh | bash
+curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- bootstrap
 ```
 
-That installer downloads the matching release bundle and runs the bootstrap on the host.
+That installer downloads the matching release bundle and runs the public `productive-k3s` CLI on the host.
 
 ## After install
 

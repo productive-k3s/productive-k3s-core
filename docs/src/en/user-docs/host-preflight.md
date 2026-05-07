@@ -28,6 +28,18 @@ Or call the script directly:
 ./scripts/preflight-host.sh
 ```
 
+Or call the operational wrapper:
+
+```bash
+./scripts/productive-k3s.sh preflight
+```
+
+Or use the release installer path without cloning the repository:
+
+```bash
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
+```
+
 ## Strict mode
 
 By default, warning-level findings do not fail the command.
@@ -41,7 +53,7 @@ make preflight-strict
 Or:
 
 ```bash
-./scripts/preflight-host.sh --strict
+./scripts/productive-k3s.sh preflight --strict
 ```
 
 ## Mode-aware checks
@@ -88,7 +100,7 @@ The tool emits:
 For automation, use machine-readable output:
 
 ```bash
-./scripts/preflight-host.sh --json-output
+./scripts/productive-k3s.sh preflight --json-output
 ```
 
 ## What it does not do

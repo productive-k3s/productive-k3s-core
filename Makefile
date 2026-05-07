@@ -1,76 +1,79 @@
-.PHONY: preflight preflight-strict bootstrap dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test-preflight-host test-bootstrap-modes test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all
+.PHONY: preflight preflight-strict bootstrap dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test-preflight-host test-bootstrap-modes test-productive-k3s-cli test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all
 
 preflight:
-	./scripts/preflight-host.sh
+	./scripts/productive-k3s.sh preflight
 
 preflight-strict:
-	./scripts/preflight-host.sh --strict
+	./scripts/productive-k3s.sh preflight --strict
 
 bootstrap:
-	./scripts/bootstrap-k3s-stack.sh
+	./scripts/productive-k3s.sh bootstrap
 
 dry-run:
-	./scripts/bootstrap-k3s-stack.sh --dry-run
+	./scripts/productive-k3s.sh bootstrap --dry-run
 
 backup:
-	./scripts/backup-k3s-stack.sh
+	./scripts/productive-k3s.sh backup
 
 validate:
-	./scripts/validate-k3s-stack.sh
+	./scripts/productive-k3s.sh validate
 
 validate-strict:
-	./scripts/validate-k3s-stack.sh --strict
+	./scripts/productive-k3s.sh validate --strict
 
 docs-build:
-	./docs/build.sh
+	./scripts/productive-k3s-dev.sh docs-build
 
 docs-serve:
-	./docs/serve.sh
+	./scripts/productive-k3s-dev.sh docs-serve
 
 docs-up:
-	./docs/serve.sh --background
+	./scripts/productive-k3s-dev.sh docs-up
 
 docs-down:
-	./docs/clean.sh
+	./scripts/productive-k3s-dev.sh docs-down
 
 docs-clean:
-	./docs/clean.sh
+	./scripts/productive-k3s-dev.sh docs-clean
 
 test-preflight-host:
-	bash ./tests/test-preflight-host.sh
+	./scripts/productive-k3s-dev.sh test-preflight-host
 
 test-bootstrap-modes:
-	bash ./tests/test-bootstrap-modes.sh
+	./scripts/productive-k3s-dev.sh test-bootstrap-modes
+
+test-productive-k3s-cli:
+	./scripts/productive-k3s-dev.sh test-productive-k3s-cli
 
 test-agent-smoke:
-	bash ./tests/test-agent-in-docker.sh
+	./scripts/productive-k3s-dev.sh test-agent-smoke
 
 test-smoke:
-	./tests/test-in-docker.sh
+	./scripts/productive-k3s-dev.sh test-smoke
 
 test-core:
-	./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile core
+	./scripts/productive-k3s-dev.sh test-core
 
 test-core-debian12:
-	./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 --profile core
+	./scripts/productive-k3s-dev.sh test-core-debian12
 
 test-core-debian13:
-	./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 --profile core
+	./scripts/productive-k3s-dev.sh test-core-debian13
 
 test-matrix-smoke:
-	$(MAKE) -C tests run-smoke-tests
+	./scripts/productive-k3s-dev.sh test-matrix-smoke
 
 test-matrix-core:
-	$(MAKE) -C tests run-core-tests
+	./scripts/productive-k3s-dev.sh test-matrix-core
 
 test-matrix-full:
-	$(MAKE) -C tests run-full-tests
+	./scripts/productive-k3s-dev.sh test-matrix-full
 
 test-matrix-full-rollback:
-	$(MAKE) -C tests run-full-rollback-tests
+	./scripts/productive-k3s-dev.sh test-matrix-full-rollback
 
 test-matrix-full-clean:
-	$(MAKE) -C tests run-full-clean-tests
+	./scripts/productive-k3s-dev.sh test-matrix-full-clean
 
 test-matrix-all:
-	$(MAKE) -C tests run-all-tests
+	./scripts/productive-k3s-dev.sh test-matrix-all

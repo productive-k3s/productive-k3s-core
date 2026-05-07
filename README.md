@@ -89,9 +89,15 @@ If you only want to install and operate the stack locally, the practical host-si
 - `sudo`
 - `curl`
 - `getent`
-- `make`
+- `tar`
+- `sha256sum`
+- `mktemp`
 
-Before bootstrap, you can validate the target host with [Host preflight](https://productive-k3s.io/en/user-docs/host-preflight/) or directly with `make preflight`.
+Before bootstrap, you can validate the target host with [Host preflight](https://productive-k3s.io/en/user-docs/host-preflight/), directly with `make preflight`, or through the release installer path:
+
+```bash
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
+```
 
 If you also want full repository validation coverage, add:
 

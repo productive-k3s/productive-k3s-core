@@ -2,6 +2,11 @@
 
 El repositorio expone un `Makefile` pequeño en la raíz más un `Makefile` de matriz más grande bajo `tests/`.
 
+El `Makefile` raíz delega a dos dispatchers shell:
+
+- `./scripts/productive-k3s.sh` para comandos operativos que también forman parte del contrato de instalación release
+- `./scripts/productive-k3s-dev.sh` para docs, tests y otros entry points de desarrollo
+
 ## Targets de raíz
 
 Estos son los entrypoints de uso diario más comunes desde la raíz del repositorio.
@@ -29,6 +34,7 @@ El `Makefile` raíz también expone algunos entrypoints de tests cómodos para d
 | --- | --- |
 | `make test-preflight-host` | Verificar la CLI del preflight del host, su salida JSON y el comportamiento de strict mode |
 | `make test-bootstrap-modes` | Verificar que la ayuda CLI y la validación de modos de bootstrap se comporten correctamente |
+| `make test-productive-k3s-cli` | Verificar el contrato del CLI público y el enrutamiento del `Makefile` root |
 | `make test-agent-smoke` | Ejercitar el modo `agent` dentro de Docker |
 | `make test-smoke` | Ejecutar un smoke check del bootstrap dry-run basado en Docker |
 | `make test-core` | Ejecutar el perfil VM `core` sobre Ubuntu `24.04` |
