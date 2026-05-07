@@ -96,7 +96,7 @@ If you only want to install and operate the stack locally, the practical host-si
 Before bootstrap, you can validate the target host with [Host preflight](https://productive-k3s.io/en/user-docs/host-preflight/), directly with `make preflight`, or through the release installer path:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
 ```
 
 If you also want full repository validation coverage, add:

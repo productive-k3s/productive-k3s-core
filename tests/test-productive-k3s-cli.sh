@@ -14,10 +14,18 @@ pass() {
 }
 
 cli_help="$(cd "$REPO_DIR" && ./scripts/productive-k3s.sh help)"
+root_cli_help="$(cd "$REPO_DIR" && ./productive-k3s.sh help)"
 printf '%s\n' "$cli_help" | grep -q "bootstrap" || fail "public CLI help does not list bootstrap"
 printf '%s\n' "$cli_help" | grep -q "preflight" || fail "public CLI help does not list preflight"
 printf '%s\n' "$cli_help" | grep -q "validate" || fail "public CLI help does not list validate"
+printf '%s\n' "$cli_help" | grep -q "bundle" || fail "public CLI help does not list bundle"
+printf '%s\n' "$root_cli_help" | grep -q "bootstrap" || fail "root public CLI help does not list bootstrap"
 pass "public CLI help lists operational commands"
+
+bundle_info_json="$(cd "$REPO_DIR" && ./productive-k3s.sh bundle info --json)"
+printf '%s\n' "$bundle_info_json" | grep -q '"bundle_name": "productive-k3s"' || fail "bundle info json missing bundle_name"
+printf '%s\n' "$bundle_info_json" | grep -q '"cli_entrypoint": "productive-k3s.sh"' || fail "bundle info json missing cli_entrypoint"
+pass "bundle info command returns expected json"
 
 bootstrap_help="$(cd "$REPO_DIR" && ./scripts/productive-k3s.sh bootstrap --help)"
 printf '%s\n' "$bootstrap_help" | grep -q -- '--dry-run' || fail "bootstrap help was not forwarded"
@@ -38,17 +46,17 @@ grep -q "Unsupported command" /tmp/productive-k3s-cli-unsupported.out || fail "u
 pass "unsupported public CLI command is rejected"
 
 preflight_recipe="$(cd "$REPO_DIR" && make -n preflight)"
-printf '%s\n' "$preflight_recipe" | grep -q './scripts/productive-k3s.sh preflight' || fail "make preflight does not target public CLI"
+printf '%s\n' "$preflight_recipe" | grep -q './productive-k3s.sh preflight' || fail "make preflight does not target public CLI"
 pass "make preflight targets public CLI"
 
 preflight_strict_recipe="$(cd "$REPO_DIR" && make -n preflight-strict)"
-printf '%s\n' "$preflight_strict_recipe" | grep -q './scripts/productive-k3s.sh preflight --strict' || fail "make preflight-strict does not map to base command plus flag"
+printf '%s\n' "$preflight_strict_recipe" | grep -q './productive-k3s.sh preflight --strict' || fail "make preflight-strict does not map to base command plus flag"
 pass "make preflight-strict maps to preflight --strict"
 
 dry_run_recipe="$(cd "$REPO_DIR" && make -n dry-run)"
-printf '%s\n' "$dry_run_recipe" | grep -q './scripts/productive-k3s.sh bootstrap --dry-run' || fail "make dry-run does not map to bootstrap --dry-run"
+printf '%s\n' "$dry_run_recipe" | grep -q './productive-k3s.sh bootstrap --dry-run' || fail "make dry-run does not map to bootstrap --dry-run"
 pass "make dry-run maps to bootstrap --dry-run"
 
 validate_strict_recipe="$(cd "$REPO_DIR" && make -n validate-strict)"
-printf '%s\n' "$validate_strict_recipe" | grep -q './scripts/productive-k3s.sh validate --strict' || fail "make validate-strict does not map to validate --strict"
+printf '%s\n' "$validate_strict_recipe" | grep -q './productive-k3s.sh validate --strict' || fail "make validate-strict does not map to validate --strict"
 pass "make validate-strict maps to validate --strict"

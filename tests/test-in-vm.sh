@@ -24,6 +24,7 @@ PUBLIC_ARTIFACT_PATH=""
 ARTIFACT_STATUS="failed"
 BOOTSTRAP_MANIFEST_REMOTE=""
 BOOTSTRAP_MANIFEST_LOCAL=""
+TRANSFER_STAGED_REPO=""
 
 usage() {
   cat <<'EOU'
@@ -122,6 +123,10 @@ apply_platform_defaults() {
 
 cleanup() {
   write_artifacts
+  if [[ -n "$TRANSFER_STAGED_REPO" ]]; then
+    rm -rf "$(dirname "$TRANSFER_STAGED_REPO")"
+    TRANSFER_STAGED_REPO=""
+  fi
   if [[ "$KEEP_VM" == "y" || "$VM_CREATED" != "y" ]]; then
     return
   fi
@@ -303,11 +308,36 @@ launch_vm() {
 }
 
 copy_repo() {
+  prepare_repo_transfer_dir
   local remote_parent
   remote_parent="$(dirname "$REMOTE_DIR")"
   log "Copying repository to VM"
   multipass exec "$VM_NAME" -- bash -lc "sudo mkdir -p '$remote_parent' && sudo chown '$REMOTE_USER':'$REMOTE_USER' '$remote_parent' && rm -rf '$REMOTE_DIR'"
-  multipass transfer -r "$REPO_DIR" "$VM_NAME:$REMOTE_DIR"
+  multipass transfer -r "$TRANSFER_STAGED_REPO" "$VM_NAME:$remote_parent"
+}
+
+prepare_repo_transfer_dir() {
+  local stage_root stage_repo
+  stage_root="${ARTIFACTS_DIR}/.transfer-staging/${ARTIFACT_BASENAME}"
+  stage_repo="${stage_root}/${REPO_NAME}"
+  rm -rf "$stage_root"
+  mkdir -p "$stage_repo"
+  (
+    cd "$REPO_DIR"
+    tar \
+      --exclude=.git \
+      --exclude=.codex \
+      --exclude=dist \
+      --exclude=runs \
+      --exclude=test-artifacts \
+      --exclude=docs/.venv \
+      --exclude=docs/site \
+      -cf - .
+  ) | (
+    cd "$stage_repo"
+    tar -xf -
+  )
+  TRANSFER_STAGED_REPO="$stage_repo"
 }
 
 run_in_vm() {

@@ -31,13 +31,13 @@ O invocando el script directamente:
 O llamando al wrapper operativo:
 
 ```bash
-./scripts/productive-k3s.sh preflight
+./productive-k3s.sh preflight
 ```
 
 O usando el camino del instalador release sin clonar el repositorio:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
 ```
 
 ## Modo estricto
@@ -53,7 +53,7 @@ make preflight-strict
 O:
 
 ```bash
-./scripts/productive-k3s.sh preflight --strict
+./productive-k3s.sh preflight --strict
 ```
 
 ## Chequeos sensibles al modo
@@ -100,7 +100,7 @@ La herramienta emite:
 Para automatización, usá salida machine-readable:
 
 ```bash
-./scripts/productive-k3s.sh preflight --json-output
+./productive-k3s.sh preflight --json-output
 ```
 
 ## Qué no hace

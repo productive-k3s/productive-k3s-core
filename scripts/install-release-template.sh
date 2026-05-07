@@ -36,21 +36,21 @@ echo "${ARCHIVE_SHA256}  ${ARCHIVE_PATH}" | sha256sum -c -
 mkdir -p "$BOOTSTRAP_DIR"
 tar -xzf "$ARCHIVE_PATH" -C "$WORK_DIR"
 
-if [[ ! -x "${BOOTSTRAP_DIR}/scripts/productive-k3s.sh" ]]; then
+if [[ ! -x "${BOOTSTRAP_DIR}/productive-k3s.sh" ]]; then
   echo "Public productive-k3s CLI not found in extracted archive" >&2
   exit 1
 fi
 
 cd "$BOOTSTRAP_DIR"
 if (($# == 0)); then
-  exec ./scripts/productive-k3s.sh bootstrap
+  exec ./productive-k3s.sh bootstrap
 fi
 
 case "$1" in
   -*)
-    exec ./scripts/productive-k3s.sh bootstrap "$@"
+    exec ./productive-k3s.sh bootstrap "$@"
     ;;
   *)
-    exec ./scripts/productive-k3s.sh "$@"
+    exec ./productive-k3s.sh "$@"
     ;;
 esac

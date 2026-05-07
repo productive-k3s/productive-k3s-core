@@ -1,25 +1,25 @@
 .PHONY: preflight preflight-strict bootstrap dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test-preflight-host test-bootstrap-modes test-productive-k3s-cli test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all
 
 preflight:
-	./scripts/productive-k3s.sh preflight
+	./productive-k3s.sh preflight
 
 preflight-strict:
-	./scripts/productive-k3s.sh preflight --strict
+	./productive-k3s.sh preflight --strict
 
 bootstrap:
-	./scripts/productive-k3s.sh bootstrap
+	./productive-k3s.sh bootstrap
 
 dry-run:
-	./scripts/productive-k3s.sh bootstrap --dry-run
+	./productive-k3s.sh bootstrap --dry-run
 
 backup:
-	./scripts/productive-k3s.sh backup
+	./productive-k3s.sh backup
 
 validate:
-	./scripts/productive-k3s.sh validate
+	./productive-k3s.sh validate
 
 validate-strict:
-	./scripts/productive-k3s.sh validate --strict
+	./productive-k3s.sh validate --strict
 
 docs-build:
 	./scripts/productive-k3s-dev.sh docs-build

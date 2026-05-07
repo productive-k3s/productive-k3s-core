@@ -31,13 +31,13 @@ Or call the script directly:
 Or call the operational wrapper:
 
 ```bash
-./scripts/productive-k3s.sh preflight
+./productive-k3s.sh preflight
 ```
 
 Or use the release installer path without cloning the repository:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/vX.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
 ```
 
 ## Strict mode
@@ -53,7 +53,7 @@ make preflight-strict
 Or:
 
 ```bash
-./scripts/productive-k3s.sh preflight --strict
+./productive-k3s.sh preflight --strict
 ```
 
 ## Mode-aware checks
@@ -100,7 +100,7 @@ The tool emits:
 For automation, use machine-readable output:
 
 ```bash
-./scripts/productive-k3s.sh preflight --json-output
+./productive-k3s.sh preflight --json-output
 ```
 
 ## What it does not do
