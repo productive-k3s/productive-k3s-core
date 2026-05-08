@@ -209,7 +209,7 @@ parse_args() {
   apply_platform_defaults
 
   if [[ -z "$VM_NAME" ]]; then
-    VM_NAME="productive-k3s-test-${PLATFORM}-${PROFILE}-$(date +%Y%m%d-%H%M%S)"
+    VM_NAME="productive-k3s-core-test-${PLATFORM}-${PROFILE}-$(date +%Y%m%d-%H%M%S)"
   fi
 
   ARTIFACT_BASENAME="test-in-vm-${RUN_TIMESTAMP}-${PROFILE}-${VM_NAME}"

@@ -1,6 +1,6 @@
 # English Documentation
 
-This is the default documentation entry point for Productive K3S.
+This is the default documentation entry point for Productive K3S Core.
 
 Use this tree when you want the repository guidance, operational references, and contributor notes in English.
 

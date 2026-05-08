@@ -1,6 +1,6 @@
-# Productive K3S Documentation Workspace
+# Productive K3S Core Documentation Workspace
 
-This directory contains the MkDocs workspace for the Productive K3S documentation site.
+This directory contains the MkDocs workspace for the Productive K3S Core documentation site.
 
 ## Layout
 

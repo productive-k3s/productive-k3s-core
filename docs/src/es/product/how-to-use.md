@@ -1,6 +1,6 @@
-# Cómo usar Productive K3S
+# Cómo usar Productive K3S Core
 
-La forma más simple de usar `productive-k3s` es ejecutar el instalador del release sobre una de las [plataformas soportadas](supported-platforms.md), en un host o una VM con esos sistemas operativos.
+La forma más simple de usar `productive-k3s-core` es ejecutar el instalador del release sobre una de las [plataformas soportadas](supported-platforms.md), en un host o una VM con esos sistemas operativos.
 
 Comandos requeridos en el host o la VM para este camino de instalación:
 
@@ -16,13 +16,13 @@ Comandos requeridos en el host o la VM para este camino de instalación:
 Antes de correr el bootstrap, podés validar si el host destino coincide con los supuestos públicos de plataforma y con la guía de hardware:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
+curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight
 ```
 
 Si querés que también fallen los warnings, usá:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- preflight --strict
+curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight --strict
 ```
 
 Este preflight chequea la lista de plataformas soportadas, la expectativa de `systemd`, los comandos requeridos y la guía práctica de hardware para el modo seleccionado.
@@ -39,7 +39,7 @@ Ver [Preflight del host](../user-docs/host-preflight.md) para el comportamiento 
 Si querés ver cómo se ejecutaría el instalador antes de cambiar algo en la máquina, primero podés hacer un `dry-run` opcional:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- bootstrap --dry-run
+curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap --dry-run
 ```
 
 Incluso en `dry-run`, el script puede seguir mostrando prompts según lo que detecte en el host, por ejemplo si una instalación existente de `k3s` debería reutilizarse. Esos prompts se usan para armar el plan de ejecución, pero el `dry-run` igualmente no aplica cambios.
@@ -62,10 +62,10 @@ Esto no está pensado para cualquier distribución Linux. El destino tiene que c
 Reemplazá `X.Y.Z` por el release que quieras instalar:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- bootstrap
+curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap
 ```
 
-Ese instalador descarga el bundle correspondiente a ese release y ejecuta sobre el host el CLI público de `productive-k3s`.
+Ese instalador descarga el bundle correspondiente a ese release y ejecuta sobre el host el CLI público de `productive-k3s-core`.
 
 ## Después de instalar
 

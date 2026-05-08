@@ -77,7 +77,7 @@ Preferí un path nativo de WSL, por ejemplo:
 ```bash
 mkdir -p ~/src
 cd ~/src
-git clone <repo-url> productive-k3s
+git clone <repo-url> productive-k3s-core
 cd productive-k3s
 ```
 
@@ -189,7 +189,7 @@ multipass shell <vm-name>
 Dentro de la VM:
 
 ```bash
-cd /home/ubuntu/productive-k3s
+cd /home/ubuntu/productive-k3s-core
 sudo k3s kubectl get nodes
 sudo k3s kubectl get pods -A -o wide
 sudo k3s kubectl get ingress -A
@@ -227,7 +227,7 @@ multipass purge
 El helper de cleanup sólo apunta a VMs cuyos nombres empiezan con:
 
 ```text
-productive-k3s-test-
+productive-k3s-core-test-
 ```
 
 ## Lectura de resultados de prueba

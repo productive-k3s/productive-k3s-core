@@ -1,6 +1,6 @@
 # Privacidad y telemetría
 
-`productive-k3s` escribe un manifiesto estructurado de ejecución por cada bootstrap.
+`productive-k3s-core` escribe un manifiesto estructurado de ejecución por cada bootstrap.
 
 Objetivos:
 

@@ -60,27 +60,27 @@ Outputs:
 
 - `productive-k3s-<tag>.tar.gz`
 - `productive-k3s-<tag>.tar.gz.sha256`
-- `productive-k3s-cli.sh`
+- `productive-k3s-core-cli.sh`
 
 The release workflow creates a GitHub Release and uploads those files as release assets.
 
 The installer script is versioned per release and can be used like this:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- bootstrap
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap
 ```
 
 The installer now exposes the same operational command family as the bundled public CLI. For example:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- validate --strict
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- validate --strict
 ```
 
 Additional bootstrap flags can still be passed:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- bootstrap --dry-run
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap --dry-run
 ```
 
 ## Hosted Validation Workflow

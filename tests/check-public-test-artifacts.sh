@@ -81,7 +81,7 @@ assert_public_privacy() {
     exit 1
   fi
 
-  if rg -n '/home/|/tmp/|/var/|/srv/|productive-k3s-test-|bootstrap-[0-9]{8}-[0-9]{6}.*\.json|jmacchi|ubuntu@|debian@' "$artifact" >/dev/null; then
+  if rg -n '/home/|/tmp/|/var/|/srv/|productive-k3s-core-test-|bootstrap-[0-9]{8}-[0-9]{6}.*\.json|jmacchi|ubuntu@|debian@' "$artifact" >/dev/null; then
     echo "[ERROR] Public artifact contains path-like or host-specific content: $artifact" >&2
     cat "$artifact" >&2
     exit 1

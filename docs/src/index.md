@@ -1,23 +1,23 @@
 ---
-title: Productive K3S
+title: Productive K3S Core
 template: home.html
 hide:
   - navigation
   - toc
 eyebrow: Single-node Kubernetes, done right
 eyebrow_es: Kubernetes de nodo único, bien hecho
-hero_title: Productive K3S
-hero_title_es: Productive K3S
-lead: Productive K3S provides a simple way to run a production-like Kubernetes environment on a single virtual machine.
-lead_es: Productive K3S ofrece una forma simple de ejecutar un entorno Kubernetes similar a producción sobre una única máquina virtual.
+hero_title: Productive K3S Core
+hero_title_es: Productive K3S Core
+lead: Productive K3S Core provides a simple way to run a production-like Kubernetes environment on a single virtual machine.
+lead_es: Productive K3S Core ofrece una forma simple de ejecutar un entorno Kubernetes similar a producción sobre una única máquina virtual.
 sublead: It is designed for teams that want to adopt Kubernetes practices without the operational overhead and cost of managing a full multi-node cluster.
 sublead_es: Está pensado para equipos que quieren adoptar prácticas de Kubernetes sin la sobrecarga operativa ni el costo de administrar un clúster completo de varios nodos.
 primary_label: View on GitHub
 primary_label_es: Ver en GitHub
-primary_url: https://github.com/jemacchi/productive-k3s
+primary_url: https://github.com/jemacchi/productive-k3s-core
 secondary_label: Open README
 secondary_label_es: Abrir README
-secondary_url: https://github.com/jemacchi/productive-k3s/blob/main/README.md
+secondary_url: https://github.com/jemacchi/productive-k3s-core/blob/main/README.md
 card_title: What it does
 card_title_es: Qué hace
 card_items:
@@ -40,8 +40,8 @@ why_options_es:
     text: Una única VM con Docker Compose es simple, pero no es Kubernetes.
   - label: PLATAFORMA COMPLETA
     text: Un clúster Kubernetes completo es potente, pero complejo y costoso.
-bridge_note: Productive K3S bridges that gap.
-bridge_note_es: Productive K3S cubre ese espacio intermedio.
+bridge_note: Productive K3S Core bridges that gap.
+bridge_note_es: Productive K3S Core cubre ese espacio intermedio.
 bridge_points:
   - Work with Kubernetes from day one
   - Keep infrastructure simple, just one VM

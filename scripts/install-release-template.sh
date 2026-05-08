@@ -26,9 +26,9 @@ cleanup() {
 trap cleanup EXIT
 
 ARCHIVE_PATH="${WORK_DIR}/${ARCHIVE_NAME}"
-BOOTSTRAP_DIR="${WORK_DIR}/productive-k3s-${VERSION}"
+BOOTSTRAP_DIR="${WORK_DIR}/productive-k3s-core-${VERSION}"
 
-echo "[INFO] Downloading productive-k3s ${VERSION}"
+echo "[INFO] Downloading productive-k3s-core ${VERSION}"
 curl -fsSL "${RELEASE_BASE_URL}/${ARCHIVE_NAME}" -o "$ARCHIVE_PATH"
 
 echo "${ARCHIVE_SHA256}  ${ARCHIVE_PATH}" | sha256sum -c -
@@ -36,21 +36,21 @@ echo "${ARCHIVE_SHA256}  ${ARCHIVE_PATH}" | sha256sum -c -
 mkdir -p "$BOOTSTRAP_DIR"
 tar -xzf "$ARCHIVE_PATH" -C "$WORK_DIR"
 
-if [[ ! -x "${BOOTSTRAP_DIR}/productive-k3s.sh" ]]; then
-  echo "Public productive-k3s CLI not found in extracted archive" >&2
+if [[ ! -x "${BOOTSTRAP_DIR}/productive-k3s-core.sh" ]]; then
+  echo "Public productive-k3s-core CLI not found in extracted archive" >&2
   exit 1
 fi
 
 cd "$BOOTSTRAP_DIR"
 if (($# == 0)); then
-  exec ./productive-k3s.sh bootstrap
+  exec ./productive-k3s-core.sh bootstrap
 fi
 
 case "$1" in
   -*)
-    exec ./productive-k3s.sh bootstrap "$@"
+    exec ./productive-k3s-core.sh bootstrap "$@"
     ;;
   *)
-    exec ./productive-k3s.sh "$@"
+    exec ./productive-k3s-core.sh "$@"
     ;;
 esac

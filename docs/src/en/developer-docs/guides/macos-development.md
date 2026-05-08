@@ -162,7 +162,7 @@ multipass shell <vm-name>
 Inside the VM:
 
 ```bash
-cd /home/ubuntu/productive-k3s
+cd /home/ubuntu/productive-k3s-core
 sudo k3s kubectl get nodes
 sudo k3s kubectl get pods -A -o wide
 sudo k3s kubectl get ingress -A
@@ -200,7 +200,7 @@ multipass purge
 The cleanup helper only targets VMs whose names start with:
 
 ```text
-productive-k3s-test-
+productive-k3s-core-test-
 ```
 
 ## Reading Test Results
@@ -302,7 +302,7 @@ Check:
 Recommended repository path example:
 
 ```bash
-~/src/productive-k3s
+~/src/productive-k3s-core
 ```
 
 ### Full profiles are slow

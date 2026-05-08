@@ -1,6 +1,6 @@
 # Plataformas soportadas
 
-Esta página resume los targets soportados por Productive K3S y la guía práctica de dimensionamiento para un host de nodo único.
+Esta página resume los targets soportados por Productive K3S Core y la guía práctica de dimensionamiento para un host de nodo único.
 
 La herramienta está preparada para entornos orientados a producción basados en los sistemas operativos no propietarios más utilizados en plataformas comunes de cloud y de VMs. En la práctica, por eso los targets de runtime soportados terminan siendo distribuciones Linux.
 

@@ -1,6 +1,6 @@
 # Supported Platforms
 
-This page summarizes the supported runtime targets for Productive K3S and the practical sizing guidance for a single-node host.
+This page summarizes the supported runtime targets for Productive K3S Core and the practical sizing guidance for a single-node host.
 
 The tool is prepared for production-oriented environments based on the most widely used non-proprietary operating systems across common cloud and VM platforms. In practice, that is why the supported runtime targets end up being Linux distributions.
 

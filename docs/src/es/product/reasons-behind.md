@@ -1,6 +1,6 @@
-# Razones del diseño de `productive-k3s`
+# Razones del diseño de `productive-k3s-core`
 
-La configuración de `productive-k3s` fue diseñada para ofrecer un entorno local de Kubernetes liviano pero orientado a producción sobre un único host. La idea es ir más allá de despliegues locales ad hoc y ofrecer un stack más cercano a operaciones reales de Kubernetes, pero que siga siendo lo bastante simple como para ejecutarlo y validarlo localmente.
+La configuración de `productive-k3s-core` fue diseñada para ofrecer un entorno local de Kubernetes liviano pero orientado a producción sobre un único host. La idea es ir más allá de despliegues locales ad hoc y ofrecer un stack más cercano a operaciones reales de Kubernetes, pero que siga siendo lo bastante simple como para ejecutarlo y validarlo localmente.
 
 ## k3s
 

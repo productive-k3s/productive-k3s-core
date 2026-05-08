@@ -6,7 +6,7 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/productive-k3s-dev.sh <command> [args...]
+Usage: ./scripts/productive-k3s-core-dev.sh <command> [args...]
 
 Development commands:
   docs-build
@@ -14,9 +14,12 @@ Development commands:
   docs-up
   docs-down
   docs-clean
+  test-clean
+  test-checkstatus
   test-preflight-host
   test-bootstrap-modes
-  test-productive-k3s-cli
+  test-artifact-tools
+  test-productive-k3s-core-cli
   test-agent-smoke
   test-smoke
   test-core
@@ -59,6 +62,14 @@ main() {
       shift
       exec "${REPO_DIR}/docs/clean.sh" "$@"
       ;;
+    test-clean)
+      shift
+      run_tests_make clean-test-state "$@"
+      ;;
+    test-checkstatus)
+      shift
+      run_tests_make check-test-status "$@"
+      ;;
     test-preflight-host)
       shift
       exec bash "${REPO_DIR}/tests/test-preflight-host.sh" "$@"
@@ -67,9 +78,13 @@ main() {
       shift
       exec bash "${REPO_DIR}/tests/test-bootstrap-modes.sh" "$@"
       ;;
-    test-productive-k3s-cli)
+    test-artifact-tools)
       shift
-      exec bash "${REPO_DIR}/tests/test-productive-k3s-cli.sh" "$@"
+      exec bash "${REPO_DIR}/tests/test-artifact-tools.sh" "$@"
+      ;;
+    test-productive-k3s-core-cli)
+      shift
+      exec bash "${REPO_DIR}/tests/test-productive-k3s-core-cli.sh" "$@"
       ;;
     test-agent-smoke)
       shift

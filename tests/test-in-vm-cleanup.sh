@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PREFIX="productive-k3s-test-"
+PREFIX="productive-k3s-core-test-"
 PURGE="n"
 TARGET=""
 ALL="n"
@@ -14,7 +14,7 @@ Usage:
 
 Notes:
   - Requires Multipass on the host.
-  - --all deletes only VMs whose name starts with productive-k3s-test-
+  - --all deletes only VMs whose name starts with productive-k3s-core-test-
 EOU
 }
 

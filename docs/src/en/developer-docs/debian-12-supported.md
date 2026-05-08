@@ -45,7 +45,7 @@ When `--platform debian12` is used, the harness defaults to:
 
 - image: `https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2`
 - remote user: `ubuntu`
-- remote directory: `/home/ubuntu/productive-k3s`
+- remote directory: `/home/ubuntu/productive-k3s-core`
 
 These values can be overridden:
 

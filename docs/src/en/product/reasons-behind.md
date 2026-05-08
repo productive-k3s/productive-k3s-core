@@ -1,6 +1,6 @@
-# Reasons Behind the `productive-k3s` Setup
+# Reasons Behind the `productive-k3s-core` Setup
 
-The `productive-k3s` setup was designed to provide a lightweight but production-oriented local Kubernetes environment on a single host. The goal is to move beyond ad hoc local deployments and offer a stack that is closer to real Kubernetes operations, while still being simple enough to run and validate locally.
+The `productive-k3s-core` setup was designed to provide a lightweight but production-oriented local Kubernetes environment on a single host. The goal is to move beyond ad hoc local deployments and offer a stack that is closer to real Kubernetes operations, while still being simple enough to run and validate locally.
 
 ## k3s
 

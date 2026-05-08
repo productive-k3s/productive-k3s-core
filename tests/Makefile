@@ -7,7 +7,14 @@ DEBIAN12_IMAGE := https://cloud.debian.org/images/cloud/bookworm/latest/debian-1
 DEBIAN13_IMAGE := https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2
 
 .PHONY: \
+	clean-test-state \
 	clean-test-artifacts \
+	check-test-status \
+	verify-smoke-artifacts \
+	verify-core-artifacts \
+	verify-full-artifacts \
+	verify-full-rollback-artifacts \
+	verify-full-clean-artifacts \
 	run-smoke-tests \
 	run-core-tests \
 	run-full-tests \
@@ -20,10 +27,16 @@ DEBIAN13_IMAGE := https://cloud.debian.org/images/cloud/trixie/latest/debian-13-
 	full-rollback-ubuntu-24.04 full-rollback-ubuntu-22.04 full-rollback-debian12 full-rollback-debian13 \
 	full-clean-ubuntu-24.04 full-clean-ubuntu-22.04 full-clean-debian12 full-clean-debian13
 
-clean-test-artifacts:
-	rm -f ../test-artifacts/test-in-vm-*.json ../test-artifacts/test-in-vm-*-public.json ../test-artifacts/test-in-vm-*-bootstrap-manifest.json
+clean-test-state:
+	bash ./clean-test-state.sh
 
-run-smoke-tests: clean-test-artifacts smoke-ubuntu-24.04 smoke-ubuntu-22.04 smoke-debian12 smoke-debian13
+clean-test-artifacts:
+	bash ./clean-test-state.sh
+
+check-test-status:
+	bash ./check-test-status.sh
+
+verify-smoke-artifacts:
 	$(ARTIFACT_CHECK) --profile smoke \
 		--expect 'ubuntu|24.04' \
 		--expect 'ubuntu|22.04' \
@@ -35,7 +48,7 @@ run-smoke-tests: clean-test-artifacts smoke-ubuntu-24.04 smoke-ubuntu-22.04 smok
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
-run-core-tests: clean-test-artifacts core-ubuntu-24.04 core-ubuntu-22.04 core-debian12 core-debian13
+verify-core-artifacts:
 	$(ARTIFACT_CHECK) --profile core \
 		--expect 'ubuntu|24.04' \
 		--expect 'ubuntu|22.04' \
@@ -47,7 +60,7 @@ run-core-tests: clean-test-artifacts core-ubuntu-24.04 core-ubuntu-22.04 core-de
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
-run-full-tests: clean-test-artifacts full-ubuntu-24.04 full-ubuntu-22.04 full-debian12 full-debian13
+verify-full-artifacts:
 	$(ARTIFACT_CHECK) --profile full \
 		--expect 'ubuntu|24.04' \
 		--expect 'ubuntu|22.04' \
@@ -59,7 +72,7 @@ run-full-tests: clean-test-artifacts full-ubuntu-24.04 full-ubuntu-22.04 full-de
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
-run-full-rollback-tests: clean-test-artifacts full-rollback-ubuntu-24.04 full-rollback-ubuntu-22.04 full-rollback-debian12 full-rollback-debian13
+verify-full-rollback-artifacts:
 	$(ARTIFACT_CHECK) --profile full-rollback \
 		--expect 'ubuntu|24.04' \
 		--expect 'ubuntu|22.04' \
@@ -71,7 +84,7 @@ run-full-rollback-tests: clean-test-artifacts full-rollback-ubuntu-24.04 full-ro
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
-run-full-clean-tests: clean-test-artifacts full-clean-ubuntu-24.04 full-clean-ubuntu-22.04 full-clean-debian12 full-clean-debian13
+verify-full-clean-artifacts:
 	$(ARTIFACT_CHECK) --profile full-clean \
 		--expect 'ubuntu|24.04' \
 		--expect 'ubuntu|22.04' \
@@ -83,7 +96,22 @@ run-full-clean-tests: clean-test-artifacts full-clean-ubuntu-24.04 full-clean-ub
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
-run-all-tests: run-smoke-tests run-core-tests run-full-tests run-full-rollback-tests run-full-clean-tests
+run-smoke-tests: clean-test-state smoke-ubuntu-24.04 smoke-ubuntu-22.04 smoke-debian12 smoke-debian13 verify-smoke-artifacts
+
+run-core-tests: clean-test-state core-ubuntu-24.04 core-ubuntu-22.04 core-debian12 core-debian13 verify-core-artifacts
+
+run-full-tests: clean-test-state full-ubuntu-24.04 full-ubuntu-22.04 full-debian12 full-debian13 verify-full-artifacts
+
+run-full-rollback-tests: clean-test-state full-rollback-ubuntu-24.04 full-rollback-ubuntu-22.04 full-rollback-debian12 full-rollback-debian13 verify-full-rollback-artifacts
+
+run-full-clean-tests: clean-test-state full-clean-ubuntu-24.04 full-clean-ubuntu-22.04 full-clean-debian12 full-clean-debian13 verify-full-clean-artifacts
+
+run-all-tests: clean-test-state \
+	smoke-ubuntu-24.04 smoke-ubuntu-22.04 smoke-debian12 smoke-debian13 verify-smoke-artifacts \
+	core-ubuntu-24.04 core-ubuntu-22.04 core-debian12 core-debian13 verify-core-artifacts \
+	full-ubuntu-24.04 full-ubuntu-22.04 full-debian12 full-debian13 verify-full-artifacts \
+	full-rollback-ubuntu-24.04 full-rollback-ubuntu-22.04 full-rollback-debian12 full-rollback-debian13 verify-full-rollback-artifacts \
+	full-clean-ubuntu-24.04 full-clean-ubuntu-22.04 full-clean-debian12 full-clean-debian13 verify-full-clean-artifacts
 
 smoke-ubuntu-24.04:
 	$(VM_TEST) --platform ubuntu --image 24.04 --profile smoke --purge-on-cleanup

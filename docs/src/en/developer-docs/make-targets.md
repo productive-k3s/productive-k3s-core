@@ -4,8 +4,8 @@ The repository exposes a small root `Makefile` plus a larger matrix `Makefile` u
 
 The root `Makefile` delegates to two shell dispatchers:
 
-- `./productive-k3s.sh` for operational commands that are also part of the release install contract
-- `./scripts/productive-k3s-dev.sh` for docs, tests, and other development entry points
+- `./productive-k3s-core.sh` for operational commands that are also part of the release install contract
+- `./scripts/productive-k3s-core-dev.sh` for docs, tests, and other development entry points
 
 ## Root targets
 
@@ -25,6 +25,8 @@ These are the day-to-day entry points most developers use from the repository ro
 | `make docs-up` | Start the docs server in the background |
 | `make docs-down` | Stop the local docs server and clean its artifacts |
 | `make docs-clean` | Clean docs artifacts and local docs virtualenv |
+| `make test-clean` | Remove local test result artifacts and other local test state |
+| `make test-checkstatus` | Summarize the current recorded test outcomes from local artifacts |
 
 ## Focused test targets
 
@@ -34,7 +36,7 @@ The root `Makefile` also exposes a set of developer-friendly test entry points:
 | --- | --- |
 | `make test-preflight-host` | Verify the host preflight CLI, JSON output, and strict-mode behavior |
 | `make test-bootstrap-modes` | Verify that bootstrap mode CLI help and validation behave correctly |
-| `make test-productive-k3s-cli` | Verify the public CLI contract and the root `Makefile` routing |
+| `make test-productive-k3s-core-cli` | Verify the public CLI contract and the root `Makefile` routing |
 | `make test-agent-smoke` | Exercise the `agent` mode in Docker |
 | `make test-smoke` | Run a Docker-based smoke check for bootstrap dry-run |
 | `make test-core` | Run the `core` VM profile on Ubuntu `24.04` |
@@ -63,7 +65,8 @@ Examples:
 - `make -C tests smoke-ubuntu-24.04`
 - `make -C tests core-debian12`
 - `make -C tests full-rollback-ubuntu-22.04`
-- `make -C tests clean-test-artifacts`
+- `make -C tests clean-test-state`
+- `make -C tests check-test-status`
 
 ## Notes
 

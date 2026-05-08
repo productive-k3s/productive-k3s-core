@@ -208,7 +208,7 @@ build_plan() {
 
 print_warning_block() {
   err "DESTRUCTIVE CLEANUP"
-  line "  This script is intended to remove the local productive-k3s stack completely."
+  line "  This script is intended to remove the local productive-k3s-core stack completely."
   line "  It can uninstall k3s and delete cluster namespaces and local host integrations."
   line "  It does not try to preserve cluster state."
   line "  It does not remove arbitrary user files under storage paths, but Longhorn-backed data may become unreachable once the stack is removed."

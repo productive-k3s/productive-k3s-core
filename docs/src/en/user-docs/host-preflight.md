@@ -1,12 +1,12 @@
 # Host Preflight
 
-`Productive K3S` includes a host-side compatibility check you can run before bootstrap.
+`Productive K3S Core` includes a host-side compatibility check you can run before bootstrap.
 
 ## Purpose
 
 Use this tool when you want to answer a simple question before installation:
 
-Is this host or VM aligned with the supported platform assumptions for `productive-k3s`?
+Is this host or VM aligned with the supported platform assumptions for `productive-k3s-core`?
 
 It is especially useful when:
 
@@ -31,13 +31,13 @@ Or call the script directly:
 Or call the operational wrapper:
 
 ```bash
-./productive-k3s.sh preflight
+./productive-k3s-core.sh preflight
 ```
 
 Or use the release installer path without cloning the repository:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight
 ```
 
 ## Strict mode
@@ -53,7 +53,7 @@ make preflight-strict
 Or:
 
 ```bash
-./productive-k3s.sh preflight --strict
+./productive-k3s-core.sh preflight --strict
 ```
 
 ## Mode-aware checks
@@ -100,7 +100,7 @@ The tool emits:
 For automation, use machine-readable output:
 
 ```bash
-./productive-k3s.sh preflight --json-output
+./productive-k3s-core.sh preflight --json-output
 ```
 
 ## What it does not do

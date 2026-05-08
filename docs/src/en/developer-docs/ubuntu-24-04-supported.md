@@ -46,7 +46,7 @@ When `--platform ubuntu` is used, the harness defaults to:
 
 - image: `24.04`
 - remote user: `ubuntu`
-- remote directory: `/home/ubuntu/productive-k3s`
+- remote directory: `/home/ubuntu/productive-k3s-core`
 
 These values can be overridden:
 

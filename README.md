@@ -1,6 +1,6 @@
-# Productive-k3s
+# Productive K3S Core
 
-A simple way to bootstrap, validate, and operate a production-oriented `k3s` stack on a supported single host or VM.
+`productive-k3s-core` is the bootstrap, validation, and operations engine for a production-oriented `k3s` stack on a supported single host or VM.
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-yellow.svg)](./LICENSE)
 ![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04%20LTS-E95420?logo=ubuntu&logoColor=white)
@@ -45,7 +45,7 @@ Start here:
 
 Use these pages for the high-level product view instead of repeating the same rationale in the README:
 
-- [How to use Productive K3S](https://productive-k3s.io/en/product/how-to-use/)
+- [How to use Productive K3S Core](https://productive-k3s.io/en/product/how-to-use/)
 - [Reasons behind the stack](https://productive-k3s.io/en/product/reasons-behind/)
 - [Supported platforms](https://productive-k3s.io/en/product/supported-platforms/)
 - [Relationship with Productive K3S Infra](https://productive-k3s.io/en/product/productive-k3s-infra-relationship/)
@@ -69,7 +69,7 @@ Operational checks and user-facing references:
 Repository references and maintainer guidance:
 
 - [Make targets for development](https://productive-k3s.io/en/developer-docs/make-targets/)
-- [Productive K3S modes](https://productive-k3s.io/en/developer-docs/productive-k3s-modes/)
+- [Productive K3S Core modes](https://productive-k3s.io/en/developer-docs/productive-k3s-modes/)
 - [Scripts parameters](https://productive-k3s.io/en/developer-docs/script-parameters/)
 - [GitHub Actions and release automation](https://productive-k3s.io/en/developer-docs/github-actions/)
 - [macOS development](https://productive-k3s.io/en/developer-docs/guides/macos-development/)
@@ -96,7 +96,7 @@ If you only want to install and operate the stack locally, the practical host-si
 Before bootstrap, you can validate the target host with [Host preflight](https://productive-k3s.io/en/user-docs/host-preflight/), directly with `make preflight`, or through the release installer path:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-cli.sh | bash -s -- preflight
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight
 ```
 
 If you also want full repository validation coverage, add:

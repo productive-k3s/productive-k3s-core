@@ -7,7 +7,7 @@ This section is for repository developers and maintainers.
 ### Developer references
 
 - [Make targets for development](make-targets.md)
-- [Productive K3S modes](productive-k3s-modes.md)
+- [Productive K3S Core modes](productive-k3s-modes.md)
 - [Scripts parameters](script-parameters.md)
 
 ### Guides

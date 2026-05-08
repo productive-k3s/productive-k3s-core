@@ -7,8 +7,8 @@ BUNDLE_INFO_PATH="${SCRIPT_DIR}/../bundle-info.json"
 usage() {
   cat <<'EOF'
 Usage:
-  ./productive-k3s.sh <command> [args...]
-  ./productive-k3s.sh [bootstrap args...]
+  ./productive-k3s-core.sh <command> [args...]
+  ./productive-k3s-core.sh [bootstrap args...]
 
 Operational commands:
   bundle      Show bundle metadata for automation
@@ -19,11 +19,11 @@ Operational commands:
   help        Show this help
 
 Examples:
-  ./productive-k3s.sh bundle info --json
-  ./productive-k3s.sh preflight
-  ./productive-k3s.sh preflight --strict
-  ./productive-k3s.sh bootstrap --dry-run
-  ./productive-k3s.sh validate --strict
+  ./productive-k3s-core.sh bundle info --json
+  ./productive-k3s-core.sh preflight
+  ./productive-k3s-core.sh preflight --strict
+  ./productive-k3s-core.sh bootstrap --dry-run
+  ./productive-k3s-core.sh validate --strict
 
 If no command is provided, or the first argument is an option, the wrapper
 defaults to `bootstrap` for release-installer compatibility.
@@ -73,10 +73,10 @@ print_bundle_info_json() {
   cat <<EOF
 {
   "schema_version": "1",
-  "bundle_name": "productive-k3s",
-  "bundle_type": "productive-k3s",
+  "bundle_name": "productive-k3s-core",
+  "bundle_type": "productive-k3s-core",
   "bundle_version": "${version}",
-  "cli_entrypoint": "productive-k3s.sh",
+  "cli_entrypoint": "productive-k3s-core.sh",
   "platform": "any",
   "api_compatibility": {
     "contract": "productive-k3s-cli-bundle-info/v1"
@@ -87,7 +87,7 @@ EOF
 
 run_bundle() {
   if (($# != 2)) || [[ "$1" != "info" || "$2" != "--json" ]]; then
-    printf 'Usage: ./productive-k3s.sh bundle info --json\n' >&2
+    printf 'Usage: ./productive-k3s-core.sh bundle info --json\n' >&2
     return 2
   fi
   print_bundle_info_json

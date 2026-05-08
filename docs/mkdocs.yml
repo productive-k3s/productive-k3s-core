@@ -1,8 +1,8 @@
-site_name: Productive K3S
+site_name: Productive K3S Core
 site_description: Production-like Kubernetes on a single VM, with bilingual documentation.
-site_author: Productive K3S
+site_author: Productive K3S Core
 site_url: https://productive-k3s.io/
-repo_url: https://github.com/jemacchi/productive-k3s
+repo_url: https://github.com/jemacchi/productive-k3s-core
 repo_name: GitHub
 edit_uri: edit/main/docs/src/
 docs_dir: src
@@ -84,7 +84,7 @@ nav:
       - Developer docs:
           - en/developer-docs/index.md
           - Make targets: en/developer-docs/make-targets.md
-          - Productive K3S modes: en/developer-docs/productive-k3s-modes.md
+          - Productive K3S Core modes: en/developer-docs/productive-k3s-modes.md
           - Scripts parameters: en/developer-docs/script-parameters.md
           - Guides:
               - en/developer-docs/guides/index.md
@@ -120,7 +120,7 @@ nav:
       - Documentación para desarrolladores:
           - es/developer-docs/index.md
           - Targets de Make: es/developer-docs/make-targets.md
-          - Modos de Productive K3S: es/developer-docs/productive-k3s-modes.md
+          - Modos de Productive K3S Core: es/developer-docs/productive-k3s-modes.md
           - Parámetros de scripts: es/developer-docs/script-parameters.md
           - Guías:
               - es/developer-docs/guides/index.md
@@ -137,4 +137,4 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/jemacchi/productive-k3s
+      link: https://github.com/jemacchi/productive-k3s-core

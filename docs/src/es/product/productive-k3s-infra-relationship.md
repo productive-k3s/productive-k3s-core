@@ -1,8 +1,8 @@
 # Relación Con `productive-k3s-infra`
 
-`productive-k3s` es la capa de bootstrap. `productive-k3s-infra` es la capa compañera de infraestructura construida alrededor de ella.
+`productive-k3s-core` es la capa de bootstrap. `productive-k3s-infra` es la capa compañera de infraestructura construida alrededor de ella.
 
-## Qué aporta `productive-k3s`
+## Qué aporta `productive-k3s-core`
 
 Este repositorio aporta el contrato de bootstrap para:
 
@@ -32,7 +32,7 @@ Agrega concerns como:
 
 ## Por qué esto importa para un clúster real
 
-Por sí solo, `productive-k3s` ya alcanza para bootstrapear un entorno K3S real.
+Por sí solo, `productive-k3s-core` ya alcanza para bootstrapear un entorno K3S real.
 
 El repositorio de infraestructura extiende eso hacia caminos más cercanos al ciclo de vida de un clúster real, por ejemplo:
 
@@ -50,7 +50,7 @@ Eso es lo que permite que otro repositorio arme un clúster multinodo real sin r
 
 ## Interpretación práctica
 
-Si sólo necesitás un camino de bootstrap directo sobre una sola máquina, `productive-k3s` es el proyecto principal.
+Si sólo necesitás un camino de bootstrap directo sobre una sola máquina, `productive-k3s-core` es el proyecto principal.
 
 Si además necesitás:
 
@@ -65,4 +65,4 @@ entonces `productive-k3s-infra` es la siguiente capa por encima.
 
 - [Resumen del producto](index.md)
 - [Razones del diseño](reasons-behind.md)
-- [Cómo usar Productive K3S](how-to-use.md)
+- [Cómo usar Productive K3S Core](how-to-use.md)

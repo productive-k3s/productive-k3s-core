@@ -1,6 +1,6 @@
 # Privacy And Telemetry
 
-`productive-k3s` writes a structured run manifest for each bootstrap execution.
+`productive-k3s-core` writes a structured run manifest for each bootstrap execution.
 
 Goals:
 

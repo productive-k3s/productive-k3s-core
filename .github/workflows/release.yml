@@ -47,8 +47,8 @@ jobs:
             -e "s|__REPO__|${GITHUB_REPOSITORY#*/}|g" \
             -e "s|__ARCHIVE_NAME__|${archive_name}|g" \
             -e "s|__ARCHIVE_SHA256__|${archive_sha}|g" \
-            scripts/install-release-template.sh > dist/productive-k3s-cli.sh
-          chmod +x dist/productive-k3s-cli.sh
+            scripts/install-release-template.sh > dist/productive-k3s-core-cli.sh
+          chmod +x dist/productive-k3s-core-cli.sh
           {
             echo "archive_path=${archive_path}"
             echo "archive_name=${archive_name}"
@@ -63,7 +63,7 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             "${{ steps.bundle.outputs.archive_path }}" \
             "${{ steps.bundle.outputs.archive_path }}.sha256" \
-            "dist/productive-k3s-cli.sh" \
+            "dist/productive-k3s-core-cli.sh" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
             --verify-tag

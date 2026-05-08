@@ -1,8 +1,8 @@
 # Relationship With `productive-k3s-infra`
 
-`productive-k3s` is the bootstrap layer. `productive-k3s-infra` is the infrastructure companion layer built around it.
+`productive-k3s-core` is the bootstrap layer. `productive-k3s-infra` is the infrastructure companion layer built around it.
 
-## What `productive-k3s` provides
+## What `productive-k3s-core` provides
 
 This repository provides the bootstrap contract for:
 
@@ -32,7 +32,7 @@ It adds concerns such as:
 
 ## Why this matters for a real cluster
 
-On its own, `productive-k3s` is already enough to bootstrap a real K3S environment.
+On its own, `productive-k3s-core` is already enough to bootstrap a real K3S environment.
 
 The infrastructure repository extends that into paths that are closer to a real cluster lifecycle, for example:
 
@@ -50,7 +50,7 @@ That is what lets another repository assemble a real multi-node cluster without 
 
 ## Practical interpretation
 
-If you only need a direct bootstrap path on one machine, `productive-k3s` is the primary project.
+If you only need a direct bootstrap path on one machine, `productive-k3s-core` is the primary project.
 
 If you also need:
 
@@ -65,4 +65,4 @@ then `productive-k3s-infra` is the next layer above it.
 
 - [Product overview](index.md)
 - [Reasons behind the stack](reasons-behind.md)
-- [How to use Productive K3S](how-to-use.md)
+- [How to use Productive K3S Core](how-to-use.md)

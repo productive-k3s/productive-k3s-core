@@ -1,6 +1,6 @@
 # Documentación en español
 
-Este es el punto de entrada en español para la documentación de Productive K3S.
+Este es el punto de entrada en español para la documentación de Productive K3S Core.
 
 Usá este árbol cuando quieras leer la guía del repositorio, las referencias operativas y la documentación para contribuidores en español.
 

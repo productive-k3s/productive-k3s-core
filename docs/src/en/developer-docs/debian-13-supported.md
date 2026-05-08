@@ -45,7 +45,7 @@ When `--platform debian13` is used, the harness defaults to:
 
 - image: `https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2`
 - remote user: `ubuntu`
-- remote directory: `/home/ubuntu/productive-k3s`
+- remote directory: `/home/ubuntu/productive-k3s-core`
 
 These values can be overridden:
 

@@ -19,10 +19,10 @@ fi
 TAG="$1"
 OUTPUT_DIR="$2"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ARCHIVE_NAME="productive-k3s-${TAG}.tar.gz"
+ARCHIVE_NAME="productive-k3s-core-${TAG}.tar.gz"
 ARCHIVE_PATH="${OUTPUT_DIR}/${ARCHIVE_NAME}"
 TMP_DIR="$(mktemp -d)"
-STAGE_DIR="${TMP_DIR}/productive-k3s-${TAG}"
+STAGE_DIR="${TMP_DIR}/productive-k3s-core-${TAG}"
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -64,10 +64,10 @@ fi
 cat > "${STAGE_DIR}/bundle-info.json" <<EOF
 {
   "schema_version": "1",
-  "bundle_name": "productive-k3s",
-  "bundle_type": "productive-k3s",
+  "bundle_name": "productive-k3s-core",
+  "bundle_type": "productive-k3s-core",
   "bundle_version": "${TAG}",
-  "cli_entrypoint": "productive-k3s.sh",
+  "cli_entrypoint": "productive-k3s-core.sh",
   "platform": "any",
   "api_compatibility": {
     "contract": "productive-k3s-cli-bundle-info/v1"
@@ -75,6 +75,6 @@ cat > "${STAGE_DIR}/bundle-info.json" <<EOF
 }
 EOF
 
-tar -czf "$ARCHIVE_PATH" -C "$TMP_DIR" "productive-k3s-${TAG}"
+tar -czf "$ARCHIVE_PATH" -C "$TMP_DIR" "productive-k3s-core-${TAG}"
 
 printf '%s\n' "$ARCHIVE_PATH"

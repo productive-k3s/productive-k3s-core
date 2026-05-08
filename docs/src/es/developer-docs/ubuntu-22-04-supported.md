@@ -45,12 +45,12 @@ Cuando se usa `--platform ubuntu`, el harness deja por defecto:
 
 - image: `24.04`
 - remote user: `ubuntu`
-- remote directory: `/home/ubuntu/productive-k3s`
+- remote directory: `/home/ubuntu/productive-k3s-core`
 
 Para validar Ubuntu 22.04 específicamente, overrideá la image:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 22.04 --remote-user ubuntu --remote-dir /home/ubuntu/productive-k3s
+./tests/test-in-vm.sh --platform ubuntu --image 22.04 --remote-user ubuntu --remote-dir /home/ubuntu/productive-k3s-core
 ```
 
 El bootstrap detecta el OS del host mediante `/etc/os-release`.

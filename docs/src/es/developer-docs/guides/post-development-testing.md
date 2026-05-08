@@ -1,238 +1,129 @@
 # Guía de pruebas después de cambios
 
-Esta guía define la secuencia recomendada de validación después de hacer cambios en este repositorio.
+Esta página define el workflow local por default para correr tests después de hacer cambios en `productive-k3s-core`.
 
-El objetivo es mantener un camino de pruebas consistente para que cambios en bootstrap, validación, rollback, cleanup, documentación o scripts auxiliares se revisen en un orden predecible.
+La idea es simple:
 
-## Alcance
+1. arrancar desde un estado local limpio de tests
+2. correr el target de test que te interese
+3. pedirle al repositorio un resumen de qué tests pasaron y cuáles fallaron
 
-Usá esta guía después de cambios en:
+## Workflow local recomendado
 
-- `scripts/bootstrap-k3s-stack.sh`
-- `scripts/validate-k3s-stack.sh`
-- `scripts/rollback-k3s-stack.sh`
-- `scripts/clean-k3s-stack.sh`
-- `tests/test-in-vm.sh`
-- `tests/test-in-docker.sh`
-- `utils/`
-- `docs/`
-- `Makefile`
-
-## Secuencia recomendada
-
-Ejecutá los checks en este orden.
-
-### 1. Smoke test en Docker
-
-Chequeo rápido de sanidad para el harness de bootstrap y el empaquetado del repositorio.
+Para el desarrollo diario, usá esta secuencia desde la raíz del repositorio:
 
 ```bash
-make test-smoke
+make test-clean
+make <test-target>
+make test-checkstatus
 ```
 
-Qué cubre:
-
-- contexto de build en Docker
-- harness de smoke containerizado
-- camino de dry-run del bootstrap
-
-### 2. Test core en VM
-
-Valida el camino mínimo de instalación con `k3s` y `helm`, sin forzar el stack opcional completo.
+Ejemplo:
 
 ```bash
-make test-core
+make test-clean
+make test-matrix-all
+make test-checkstatus
 ```
 
-Qué cubre:
+## Qué hace cada target
 
-- provisión de la VM
-- copia del repositorio dentro de la VM
-- camino mínimo de instalación del bootstrap
-- validación no estricta del perfil core
+### `make test-clean`
 
-Resultado esperado:
+Elimina los archivos locales que este repositorio usa como estado de tests:
 
-- éxito con posibles warnings por componentes opcionales omitidos
+- `test-artifacts/`
+- `runs/bootstrap-*.json` locales
+- `runs/telemetry-outbox/bootstrap-*.json` locales
+- `runs/telemetry-outbox/bootstrap-*.status` locales
 
-### 3. Test full en VM
+Usalo antes de empezar un nuevo ciclo de validación cuando querés que `make test-checkstatus` describa sólo la corrida actual.
 
-Valida el camino de instalación del stack completo.
+### `make test-checkstatus`
+
+Recorre los artifacts de resultados actuales bajo `test-artifacts/` e imprime un resumen corto de los estados registrados.
+
+Reporta entradas como:
+
+- resultados de tests en VM escritos por `tests/test-in-vm.sh`
+- resultados de resumen hosted escritos por `tests/test-on-gh-hosted.sh`
+
+Ignora a propósito archivos que no son el resultado top-level real del test:
+
+- manifests copiados de bootstrap como `*-bootstrap-manifest.json`
+- artifacts públicos saneados como `*-public.json`
+
+Si al menos un resultado registrado está en fallo, `make test-checkstatus` termina con exit code no cero.
+
+Si no hay artifacts de resultado, también termina con exit code no cero e indica que no pudo determinar el estado.
+
+## Targets de test más comunes
+
+Estos son los targets root que más suelen usarse:
+
+| Target | Propósito |
+| --- | --- |
+| `make test-smoke` | Validación rápida smoke basada en Docker |
+| `make test-core` | Validación VM del perfil core sobre Ubuntu `24.04` |
+| `make test-core-debian12` | Validación VM del perfil core sobre Debian `12` |
+| `make test-core-debian13` | Validación VM del perfil core sobre Debian `13` |
+| `make test-matrix-smoke` | Matriz smoke sobre Ubuntu y Debian |
+| `make test-matrix-core` | Matriz core sobre Ubuntu y Debian |
+| `make test-matrix-full` | Matriz full stack sobre Ubuntu y Debian |
+| `make test-matrix-full-rollback` | Matriz full rollback sobre Ubuntu y Debian |
+| `make test-matrix-full-clean` | Matriz full cleanup sobre Ubuntu y Debian |
+| `make test-matrix-all` | Ejecuta todos los perfiles de matriz en secuencia y conserva todos los artifacts de resultado para revisar el estado final |
+
+## Por qué `test-matrix-all` es especial
+
+Los perfiles de matriz bajo `tests/Makefile` siguen validando cada perfil por separado, pero el camino agregado `run-all-tests` ahora limpia sólo una vez al principio.
+
+Eso permite que este workflow funcione como esperás:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full
+make test-clean
+make test-matrix-all
+make test-checkstatus
 ```
 
-Qué cubre:
+Al final de esa secuencia, `test-checkstatus` todavía puede ver los artifacts acumulados de la corrida completa de matriz, en lugar de quedarse sólo con el último perfil.
 
-- `k3s`
-- `helm`
-- `cert-manager`
-- `Longhorn`
-- `Rancher`
-- registry interno
-- configuración de NFS
-- convergencia de validación estricta
+## Cuando un test falla
 
-Resultado esperado:
-
-- éxito con `Failures: 0`
-- la validación estricta converge limpiamente
-
-### 4. Test full-rollback
-
-Valida el rollback guiado por manifiesto después de una instalación full.
+Arrancá por:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-rollback
+make test-checkstatus
 ```
 
-Qué cubre:
+Después inspeccioná los archivos de artifact correspondientes en `test-artifacts/`.
 
-- camino completo de bootstrap
-- generación del plan de rollback
-- aplicación del flujo de rollback
-- remoción de componentes del stack instalados por la corrida de prueba
-
-Resultado esperado:
-
-- el rollback completa
-- los namespaces y recursos cluster-scoped objetivo se eliminan como corresponde
-- el artefacto de prueba termina con `status: "success"`
-- los checks post-rollback confirman la remoción de:
-  - `cert-manager`
-  - `longhorn-system`
-  - `cattle-system`
-  - `registry`
-  - `selfsigned` `ClusterIssuer`
-  - export NFS administrado por el bootstrap
-  - entradas `/etc/hosts` administradas por el bootstrap
-
-### 5. Test full-clean
-
-Valida la limpieza destructiva después de una instalación full.
-
-```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-clean
-```
-
-Qué cubre:
-
-- camino completo de bootstrap
-- flujo de cleanup destructivo
-- camino de uninstall/cleanup de `k3s`
-
-Resultado esperado:
-
-- el cleanup completa
-- `k3s` ya no está activo en la VM
-
-### 6. Limpieza de VMs
-
-Si quedan VMs de prueba, eliminarlas explícitamente.
-
-```bash
-./tests/test-in-vm-cleanup.sh
-```
-
-Checks de seguimiento útiles:
+Comandos útiles de seguimiento:
 
 ```bash
 ls -1 test-artifacts
-multipass list
+jq . test-artifacts/<artifact>.json
 ```
 
-## Referencia rápida de Multipass
-
-Este repositorio usa `multipass` sólo como harness de VM del lado host para pruebas de integración.
-
-Los comandos mínimos que suelen necesitar los contribuidores son estos.
-
-### Verificar que Multipass está disponible
-
-```bash
-multipass version
-multipass list
-multipass find --force-update
-```
-
-Usalo antes de arrancar pruebas basadas en VM.
-
-`multipass find --force-update` es especialmente útil cuando Multipass falla al refrescar metadata de imágenes o al descargar una imagen de VM.
-
-### Ejecutar un perfil de prueba en VM
-
-Perfil core:
-
-```bash
-make test-core
-```
-
-Perfiles full:
-
-```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-rollback
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-clean
-```
-
-### Preservar una VM para inspección manual
-
-Si querés que la VM de prueba quede viva después de la corrida:
+Para fallos en VM, podés preservar la VM cuando haga falta:
 
 ```bash
 ./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full --keep-vm
 ```
 
-Esto es útil cuando una prueba falla y querés inspeccionar la máquina manualmente.
-
-### Abrir una shell en una VM preservada
+Y después inspeccionarla:
 
 ```bash
 multipass shell <vm-name>
-```
-
-Checks típicos dentro de la VM:
-
-```bash
-cd /home/ubuntu/productive-k3s
+cd /home/ubuntu/productive-k3s-core
 sudo k3s kubectl get nodes
 sudo k3s kubectl get pods -A -o wide
 ```
 
-### Eliminar una VM preservada
+## Notas
 
-```bash
-./tests/test-in-vm-cleanup.sh --name <vm-name>
-```
+!!! note
+    `make test-checkstatus` resume resultados registrados. No reemplaza leer el JSON completo del artifact cuando necesitás contexto detallado de debugging.
 
-Comando directo equivalente de `multipass`:
-
-```bash
-multipass delete <vm-name>
-```
-
-### Eliminar todas las VMs de prueba creadas por este repositorio
-
-```bash
-./tests/test-in-vm-cleanup.sh --all
-```
-
-## Criterios de aprobación
-
-Un cambio se considera validado cuando:
-
-- la secuencia de pruebas relevante termina con éxito
-- la validación del perfil full converge limpiamente
-- las pruebas de rollback o clean pasan cuando el cambio toca la lógica de teardown
-- la validación local sigue comportándose como se espera para cambios del lado host
-
-## Documentación relacionada
-
-- [Resumen de guías](index.md)
-- [Verificaciones de k3s](../../user-docs/k3s-checks.md)
-- [Verificaciones de ingress](../../user-docs/ingress-checks.md)
-- [Verificaciones de Rancher](../../user-docs/rancher-checks.md)
-- [Verificaciones del registry](../../user-docs/registry-checks.md)
-- [Verificaciones de Longhorn](../../user-docs/longhorn-checks.md)
-- [Verificaciones de certificados](../../user-docs/certificate-checks.md)
+!!! note
+    `make test-clean` elimina sólo el estado local de tests de este repositorio. No borra VMs de Multipass preservadas. Para eso usá `./tests/test-in-vm-cleanup.sh`.

@@ -7,7 +7,7 @@ Esta sección está orientada a desarrolladores y mantenedores del repositorio.
 ### Referencias para desarrollo
 
 - [Targets de Make para desarrollo](make-targets.md)
-- [Modos de Productive K3S](productive-k3s-modes.md)
+- [Modos de Productive K3S Core](productive-k3s-modes.md)
 - [Parámetros de scripts](script-parameters.md)
 
 ### Guías
