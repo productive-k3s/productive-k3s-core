@@ -1,7 +1,7 @@
 site_name: Productive K3S Core
 site_description: Production-like Kubernetes on a single VM, with bilingual documentation.
 site_author: Productive K3S Core
-site_url: https://productive-k3s.io/
+site_url: https://core.productive-k3s.io/
 repo_url: https://github.com/jemacchi/productive-k3s-core
 repo_name: GitHub
 edit_uri: edit/main/docs/src/

@@ -45,6 +45,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./docs/site
           publish_branch: gh-pages
-          cname: productive-k3s.io
+          cname: core.productive-k3s.io
           force_orphan: true
           commit_message: "docs: publish site [skip ci]"

@@ -34,51 +34,51 @@ The long-form documentation lives in the published site.
 
 Start here:
 
-- [Site home](https://productive-k3s.io/)
-- [English docs](https://productive-k3s.io/en/)
-- [Spanish docs](https://productive-k3s.io/es/)
-- [Product overview](https://productive-k3s.io/en/product/)
-- [User docs](https://productive-k3s.io/en/user-docs/)
-- [Developer docs](https://productive-k3s.io/en/developer-docs/)
+- [Site home](https://core.productive-k3s.io/)
+- [English docs](https://core.productive-k3s.io/en/)
+- [Spanish docs](https://core.productive-k3s.io/es/)
+- [Product overview](https://core.productive-k3s.io/en/product/)
+- [User docs](https://core.productive-k3s.io/en/user-docs/)
+- [Developer docs](https://core.productive-k3s.io/en/developer-docs/)
 
 ## Product
 
 Use these pages for the high-level product view instead of repeating the same rationale in the README:
 
-- [How to use Productive K3S Core](https://productive-k3s.io/en/product/how-to-use/)
-- [Reasons behind the stack](https://productive-k3s.io/en/product/reasons-behind/)
-- [Supported platforms](https://productive-k3s.io/en/product/supported-platforms/)
-- [Relationship with Productive K3S Infra](https://productive-k3s.io/en/product/productive-k3s-infra-relationship/)
+- [How to use Productive K3S Core](https://core.productive-k3s.io/en/product/how-to-use/)
+- [Reasons behind the stack](https://core.productive-k3s.io/en/product/reasons-behind/)
+- [Supported platforms](https://core.productive-k3s.io/en/product/supported-platforms/)
+- [Relationship with Productive K3S Infra](https://core.productive-k3s.io/en/product/productive-k3s-infra-relationship/)
 
 ## User Docs
 
 Operational checks and user-facing references:
 
-- [Host preflight](https://productive-k3s.io/en/user-docs/host-preflight/)
-- [k3s checks](https://productive-k3s.io/en/user-docs/k3s-checks/)
-- [Ingress checks](https://productive-k3s.io/en/user-docs/ingress-checks/)
-- [Rancher checks](https://productive-k3s.io/en/user-docs/rancher-checks/)
-- [Registry checks](https://productive-k3s.io/en/user-docs/registry-checks/)
-- [Longhorn checks](https://productive-k3s.io/en/user-docs/longhorn-checks/)
-- [Certificate checks](https://productive-k3s.io/en/user-docs/certificate-checks/)
-- [Longhorn single-node notes](https://productive-k3s.io/en/user-docs/longhorn-single-node-notes/)
-- [Privacy and telemetry](https://productive-k3s.io/en/user-docs/privacy-and-telemetry/)
+- [Host preflight](https://core.productive-k3s.io/en/user-docs/host-preflight/)
+- [k3s checks](https://core.productive-k3s.io/en/user-docs/k3s-checks/)
+- [Ingress checks](https://core.productive-k3s.io/en/user-docs/ingress-checks/)
+- [Rancher checks](https://core.productive-k3s.io/en/user-docs/rancher-checks/)
+- [Registry checks](https://core.productive-k3s.io/en/user-docs/registry-checks/)
+- [Longhorn checks](https://core.productive-k3s.io/en/user-docs/longhorn-checks/)
+- [Certificate checks](https://core.productive-k3s.io/en/user-docs/certificate-checks/)
+- [Longhorn single-node notes](https://core.productive-k3s.io/en/user-docs/longhorn-single-node-notes/)
+- [Privacy and telemetry](https://core.productive-k3s.io/en/user-docs/privacy-and-telemetry/)
 
 ## Developer Docs
 
 Repository references and maintainer guidance:
 
-- [Make targets for development](https://productive-k3s.io/en/developer-docs/make-targets/)
-- [Productive K3S Core modes](https://productive-k3s.io/en/developer-docs/productive-k3s-modes/)
-- [Scripts parameters](https://productive-k3s.io/en/developer-docs/script-parameters/)
-- [GitHub Actions and release automation](https://productive-k3s.io/en/developer-docs/github-actions/)
-- [macOS development](https://productive-k3s.io/en/developer-docs/guides/macos-development/)
-- [Windows development](https://productive-k3s.io/en/developer-docs/guides/windows-development/)
-- [Post-development testing](https://productive-k3s.io/en/developer-docs/guides/post-development-testing/)
-- [Ubuntu 24.04 supported platform](https://productive-k3s.io/en/developer-docs/ubuntu-24-04-supported/)
-- [Ubuntu 22.04 supported platform](https://productive-k3s.io/en/developer-docs/ubuntu-22-04-supported/)
-- [Debian 13 supported platform](https://productive-k3s.io/en/developer-docs/debian-13-supported/)
-- [Debian 12 supported platform](https://productive-k3s.io/en/developer-docs/debian-12-supported/)
+- [Make targets for development](https://core.productive-k3s.io/en/developer-docs/make-targets/)
+- [Productive K3S Core modes](https://core.productive-k3s.io/en/developer-docs/productive-k3s-modes/)
+- [Scripts parameters](https://core.productive-k3s.io/en/developer-docs/script-parameters/)
+- [GitHub Actions and release automation](https://core.productive-k3s.io/en/developer-docs/github-actions/)
+- [macOS development](https://core.productive-k3s.io/en/developer-docs/guides/macos-development/)
+- [Windows development](https://core.productive-k3s.io/en/developer-docs/guides/windows-development/)
+- [Post-development testing](https://core.productive-k3s.io/en/developer-docs/guides/post-development-testing/)
+- [Ubuntu 24.04 supported platform](https://core.productive-k3s.io/en/developer-docs/ubuntu-24-04-supported/)
+- [Ubuntu 22.04 supported platform](https://core.productive-k3s.io/en/developer-docs/ubuntu-22-04-supported/)
+- [Debian 13 supported platform](https://core.productive-k3s.io/en/developer-docs/debian-13-supported/)
+- [Debian 12 supported platform](https://core.productive-k3s.io/en/developer-docs/debian-12-supported/)
 
 ## Practical Summary
 
@@ -93,7 +93,7 @@ If you only want to install and operate the stack locally, the practical host-si
 - `sha256sum`
 - `mktemp`
 
-Before bootstrap, you can validate the target host with [Host preflight](https://productive-k3s.io/en/user-docs/host-preflight/), directly with `make preflight`, or through the release installer path:
+Before bootstrap, you can validate the target host with [Host preflight](https://core.productive-k3s.io/en/user-docs/host-preflight/), directly with `make preflight`, or through the release installer path:
 
 ```bash
 curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight
