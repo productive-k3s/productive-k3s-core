@@ -54,9 +54,22 @@ archive_path="$(cd "$REPO_DIR" && ./scripts/build-release-bundle.sh HEAD "$TMP_D
 extract_dir="${TMP_DIR}/bundle"
 mkdir -p "$extract_dir"
 tar -xzf "$archive_path" -C "$extract_dir"
+bundle_listing="$(tar -tzf "$archive_path")"
 
 bundle_root="${extract_dir}/productive-k3s-core-HEAD"
 [[ -x "${bundle_root}/productive-k3s-core.sh" ]] || fail "bundle root entrypoint is missing"
+for required_path in \
+  "productive-k3s-core-HEAD/bundle-info.json" \
+  "productive-k3s-core-HEAD/scripts/productive-k3s-core.sh" \
+  "productive-k3s-core-HEAD/scripts/preflight-host.sh" \
+  "productive-k3s-core-HEAD/scripts/bootstrap-k3s-stack.sh" \
+  "productive-k3s-core-HEAD/scripts/backup-k3s-stack.sh" \
+  "productive-k3s-core-HEAD/scripts/validate-k3s-stack.sh" \
+  "productive-k3s-core-HEAD/scripts/send-telemetry.sh"
+do
+  printf '%s\n' "$bundle_listing" | grep -q "^${required_path}$" || fail "bundle release is missing required runtime file: ${required_path}"
+done
+pass "release bundle includes required runtime files"
 
 bundle_info="$(cd "$bundle_root" && ./productive-k3s-core.sh bundle info --json)"
 printf '%s\n' "$bundle_info" | jq -e '
