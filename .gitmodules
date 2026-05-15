@@ -1,0 +1,3 @@
+[submodule ".shared/productive-k3s-docs-theme"]
+	path = .shared/productive-k3s-docs-theme
+	url = git@github.com:jemacchi/productive-k3s-docs-theme.git

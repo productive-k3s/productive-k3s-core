@@ -5,3 +5,12 @@ docs/.venv/
 docs/site/
 docs/.mkdocs.pid
 docs/.mkdocs.log
+docs/src/overrides/main.html
+docs/src/overrides/partials/logo.html
+docs/src/overrides/partials/header.html
+docs/src/overrides/partials/footer.html
+docs/src/overrides/partials/toc.html
+docs/src/assets/stylesheets/extra.css
+docs/src/assets/images/argentina.png
+docs/src/assets/images/productive-k3s-icon-square-0.3x.png
+docs/src/assets/images/favicon.ico
