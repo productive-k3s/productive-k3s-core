@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "docs/**"
+      - ".gitmodules"
+      - ".shared/productive-k3s-docs-theme"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -23,6 +25,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up Python
         uses: actions/setup-python@v5

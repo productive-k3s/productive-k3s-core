@@ -6,6 +6,8 @@ VENV_DIR="${ROOT_DIR}/.venv"
 PID_FILE="${ROOT_DIR}/.mkdocs.pid"
 LOG_FILE="${ROOT_DIR}/.mkdocs.log"
 
+bash "${ROOT_DIR}/sync-shared-theme.sh"
+
 python3 -m venv "${VENV_DIR}"
 # shellcheck disable=SC1091
 source "${VENV_DIR}/bin/activate"

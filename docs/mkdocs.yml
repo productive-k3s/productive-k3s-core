@@ -12,6 +12,7 @@ theme:
   name: material
   custom_dir: src/overrides
   language: en
+  favicon: assets/images/favicon.ico
   features:
     - navigation.tabs
     - navigation.indexes
@@ -135,6 +136,16 @@ nav:
               - Debian 13: es/developer-docs/debian-13-supported.md
 
 extra:
+  pk3s:
+    footer_slogan_en: "Productive K3S: a simple way to run Kubernetes on a single VM, without the overhead of a full cluster."
+    footer_slogan_es: "Productive K3S: una forma simple de ejecutar Kubernetes en una sola VM, sin la sobrecarga de un cluster completo."
+    contact_label_en: "Contact"
+    contact_label_es: "Contacto"
+    contact_value: "contact@productive-k3s.io"
+    newsletter_label_en: "Newsletter"
+    newsletter_label_es: "Newsletter"
+    newsletter_placeholder_en: "E-mail"
+    newsletter_placeholder_es: "E-mail"
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/jemacchi/productive-k3s-core
