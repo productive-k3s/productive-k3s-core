@@ -49,6 +49,14 @@ jobs:
           set -euo pipefail
           docker version
 
+      - name: Run telemetry regressions
+        shell: bash
+        env:
+          TELEMETRY_ENABLED: "false"
+        run: |
+          set -euo pipefail
+          make test-telemetry
+
       - name: Run containerized smoke for ${{ matrix.label }}
         shell: bash
         run: |
@@ -81,6 +89,14 @@ jobs:
         run: |
           set -euo pipefail
           jq --version
+
+      - name: Run telemetry regressions
+        shell: bash
+        env:
+          TELEMETRY_ENABLED: "false"
+        run: |
+          set -euo pipefail
+          make test-telemetry
 
       - name: Run hosted validation
         shell: bash

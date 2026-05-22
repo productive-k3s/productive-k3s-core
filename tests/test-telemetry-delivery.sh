@@ -111,6 +111,9 @@ export TELEMETRY_SOURCE_REPOSITORY="productive-k3s"
 export TELEMETRY_SOURCE_SCRIPT="scripts/bootstrap-k3s-stack.sh"
 export TELEMETRY_EXIT_CODE="0"
 export TELEMETRY_ENABLED="true"
+export TELEMETRY_SESSION_ID="session-123"
+export TELEMETRY_PARENT_RUN_ID="parent-456"
+export TELEMETRY_COMPONENT="infra"
 export TELEMETRY_CONNECT_TIMEOUT_SECONDS="1"
 export TELEMETRY_REQUEST_TIMEOUT_SECONDS="1"
 
@@ -128,6 +131,9 @@ assert_file_contains "${TMP_DIR}/requests/request-2.json" '"is_retry": true'
 assert_file_contains "${TMP_DIR}/requests/request-3.json" '"delivery_attempt": 3'
 assert_file_contains "${TMP_DIR}/requests/request-3.json" '"retry_attempt": 2'
 assert_file_contains "${TMP_DIR}/requests/request-3.json" '"event_name": "bootstrap.completed"'
+assert_file_contains "${TMP_DIR}/requests/request-3.json" '"session_id": "session-123"'
+assert_file_contains "${TMP_DIR}/requests/request-3.json" '"parent_run_id": "parent-456"'
+assert_file_contains "${TMP_DIR}/requests/request-3.json" '"component": "infra"'
 assert_file_not_exists "${TELEMETRY_OUTBOX_DIR}/bootstrap-${RUN_ID}-attempt-1.json"
 
 printf '0' > "${FAKE_CURL_COUNT_FILE}"
@@ -158,5 +164,16 @@ if ! maybe_send_telemetry 0; then
   exit 1
 fi
 assert_file_not_exists "${TMP_DIR}/unexpected-send"
+
+TELEMETRY_ENDPOINT="https://telemetry.example.invalid/ingest"
+TELEMETRY_COMPONENT="infra"
+printf '0' > "${FAKE_CURL_COUNT_FILE}"
+rm -f "${TMP_DIR}/requests"/request-*.json
+fake_curl_script "always-pass"
+if ! maybe_send_telemetry 0; then
+  printf '[FAIL] bootstrap telemetry wrapper should succeed when sender succeeds\n' >&2
+  exit 1
+fi
+assert_file_contains "${TMP_DIR}/requests/request-1.json" '"component": "core"'
 
 printf '[PASS] telemetry delivery retries and bootstrap wrapper behavior are correct\n'

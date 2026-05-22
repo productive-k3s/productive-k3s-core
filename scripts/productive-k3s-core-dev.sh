@@ -19,6 +19,7 @@ Development commands:
   test-preflight-host
   test-bootstrap-modes
   test-artifact-tools
+  test-telemetry
   test-productive-k3s-core-cli
   test-in-vm-engine-propagation
   test-agent-smoke
@@ -82,6 +83,13 @@ main() {
     test-artifact-tools)
       shift
       exec bash "${REPO_DIR}/tests/test-artifact-tools.sh" "$@"
+      ;;
+    test-telemetry)
+      shift
+      bash "${REPO_DIR}/tests/test-telemetry-consent.sh" "$@"
+      bash "${REPO_DIR}/tests/test-telemetry-delivery.sh" "$@"
+      bash "${REPO_DIR}/tests/test-telemetry-default-endpoint.sh" "$@"
+      exec bash "${REPO_DIR}/tests/test-bootstrap-telemetry-events.sh" "$@"
       ;;
     test-productive-k3s-core-cli)
       shift
