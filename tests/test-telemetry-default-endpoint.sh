@@ -11,6 +11,16 @@ trap 'rm -rf "${TMP_DIR}"' EXIT
 CANONICAL_ENDPOINT="https://telemetry.productive-k3s.io/telemetry"
 DEFAULT_MARKER="pk3s-public-v1"
 
+search_file() {
+  local pattern="$1"
+  local file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -q -- "${pattern}" "${file}"
+  else
+    grep -Eq -- "${pattern}" "${file}"
+  fi
+}
+
 assert_equals() {
   local actual="$1"
   local expected="$2"
@@ -24,7 +34,7 @@ assert_equals() {
 assert_file_contains() {
   local file="$1"
   local pattern="$2"
-  if ! rg -q "${pattern}" "${file}"; then
+  if ! search_file "${pattern}" "${file}"; then
     printf '[FAIL] expected %s to contain %s\n' "${file}" "${pattern}" >&2
     exit 1
   fi

@@ -22,6 +22,16 @@ need_cmd() {
   }
 }
 
+search_file() {
+  local pattern="$1"
+  local file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n -- "${pattern}" "${file}" >/dev/null
+  else
+    grep -En -- "${pattern}" "${file}" >/dev/null
+  fi
+}
+
 parse_args() {
   while (($# > 0)); do
     case "$1" in
@@ -81,7 +91,7 @@ assert_public_privacy() {
     exit 1
   fi
 
-  if rg -n '/home/|/tmp/|/var/|/srv/|productive-k3s-core-test-|bootstrap-[0-9]{8}-[0-9]{6}.*\.json|jmacchi|ubuntu@|debian@' "$artifact" >/dev/null; then
+  if search_file '/home/|/tmp/|/var/|/srv/|productive-k3s-core-test-|bootstrap-[0-9]{8}-[0-9]{6}.*\.json|jmacchi|ubuntu@|debian@' "$artifact"; then
     echo "[ERROR] Public artifact contains path-like or host-specific content: $artifact" >&2
     cat "$artifact" >&2
     exit 1
@@ -90,7 +100,6 @@ assert_public_privacy() {
 
 main() {
   need_cmd jq
-  need_cmd rg
   parse_args "$@"
 
   mapfile -t artifacts < <(collect_public_artifacts)
