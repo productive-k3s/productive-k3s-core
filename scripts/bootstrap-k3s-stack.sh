@@ -27,6 +27,15 @@ log(){ printf "\r\n%s[INFO]%s %s\r\n" "$COLOR_GREEN" "$COLOR_RESET" "$*"; }
 warn(){ printf "\r\n%s[WARN]%s %s\r\n" "$COLOR_YELLOW" "$COLOR_RESET" "$*"; }
 err(){ printf "\r\n%s[ERROR]%s %s\r\n" "$COLOR_RED" "$COLOR_RESET" "$*"; }
 
+json_escape() {
+  printf '%s' "$1" | sed \
+    -e 's/\\/\\\\/g' \
+    -e 's/"/\\"/g' \
+    -e ':a;N;$!ba;s/\n/\\n/g' \
+    -e 's/\r/\\r/g' \
+    -e 's/\t/\\t/g'
+}
+
 DRY_RUN=0
 MODE="single-node"
 PRODUCTIVE_K3S_ENGINE="${PRODUCTIVE_K3S_ENGINE:-native}"
@@ -56,12 +65,16 @@ PLATFORM_SUPPORT="unsupported"
 AGENT_SERVER_URL=""
 AGENT_CLUSTER_TOKEN=""
 TELEMETRY_ENABLED="${TELEMETRY_ENABLED:-}"
-TELEMETRY_ENDPOINT="${TELEMETRY_ENDPOINT:-}"
+TELEMETRY_ENDPOINT="${TELEMETRY_ENDPOINT-https://telemetry.productive-k3s.io/telemetry}"
+TELEMETRY_MARKER="${TELEMETRY_MARKER:-pk3s-public-v1}"
 TELEMETRY_MAX_RETRIES="${TELEMETRY_MAX_RETRIES:-3}"
 TELEMETRY_CONNECT_TIMEOUT_SECONDS="${TELEMETRY_CONNECT_TIMEOUT_SECONDS:-5}"
 TELEMETRY_REQUEST_TIMEOUT_SECONDS="${TELEMETRY_REQUEST_TIMEOUT_SECONDS:-10}"
 TELEMETRY_OUTBOX_DIR="${TELEMETRY_OUTBOX_DIR:-${RUNS_DIR}/telemetry-outbox}"
 TELEMETRY_USER_AGENT="${TELEMETRY_USER_AGENT:-productive-k3s/dev}"
+TELEMETRY_SESSION_ID="${TELEMETRY_SESSION_ID:-}"
+TELEMETRY_PARENT_RUN_ID="${TELEMETRY_PARENT_RUN_ID:-}"
+TELEMETRY_COMPONENT="${TELEMETRY_COMPONENT:-core}"
 declare -A MANIFEST_SETTINGS=()
 declare -A MANIFEST_DETECTED=()
 declare -A MANIFEST_PLANNED=()
@@ -113,6 +126,56 @@ is_truthy() {
     1|true|yes|y|on) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+bootstrap_event_mode_name() {
+  printf '%s' "${MODE}" | tr '-' '_'
+}
+
+emit_bootstrap_lifecycle_event() {
+  local phase="$1"
+  local result="$2"
+  local sender_script="${SCRIPT_DIR}/send-telemetry-event.sh"
+  local event_file event_name
+
+  if ! is_truthy "${TELEMETRY_ENABLED:-false}"; then
+    return 0
+  fi
+  if [[ -z "${TELEMETRY_ENDPOINT:-}" || ! -f "${sender_script}" ]]; then
+    return 0
+  fi
+
+  event_name="core.bootstrap.$(bootstrap_event_mode_name).${phase}"
+  event_file="$(mktemp)"
+  {
+    printf '{\n'
+    printf '  "schema_version": "1",\n'
+    printf '  "event_family": "usage",\n'
+    printf '  "event_name": "%s",\n' "$(json_escape "${event_name}")"
+    printf '  "sent_at": "%s",\n' "$(json_escape "$(date -Iseconds)")"
+    printf '  "session_id": "%s",\n' "$(json_escape "${TELEMETRY_SESSION_ID}")"
+    printf '  "run_id": "%s",\n' "$(json_escape "${RUN_ID}")"
+    printf '  "parent_run_id": "%s",\n' "$(json_escape "${TELEMETRY_PARENT_RUN_ID:-}")"
+    printf '  "component": "core",\n'
+    printf '  "command": {\n'
+    printf '    "name": "bootstrap",\n'
+    printf '    "mode": "%s",\n' "$(json_escape "${MODE}")"
+    printf '    "result": "%s"\n' "$(json_escape "${result}")"
+    printf '  },\n'
+    printf '  "client": {\n'
+    printf '    "repository": "productive-k3s-core",\n'
+    printf '    "script": "scripts/bootstrap-k3s-stack.sh",\n'
+    printf '    "telemetry_enabled": "%s"\n' "$(json_escape "${TELEMETRY_ENABLED}")"
+    printf '  },\n'
+    printf '  "telemetry_meta": {\n'
+    printf '    "delivery_mode": "best-effort",\n'
+    printf '    "anonymous_by_contract": true\n'
+    printf '  }\n'
+    printf '}\n'
+  } > "${event_file}"
+
+  TELEMETRY_RUN_ID="${RUN_ID}" TELEMETRY_MARKER="${TELEMETRY_MARKER}" bash "${sender_script}" "${event_file}" >/dev/null 2>&1 || true
+  rm -f "${event_file}"
 }
 k3s_server_active() { service_active k3s; }
 k3s_agent_active() { service_active k3s-agent; }
@@ -352,6 +415,7 @@ cleanup_exit() {
   fi
   write_run_manifest "$exit_code"
   write_private_run_context "$exit_code"
+  emit_bootstrap_lifecycle_event "completed" "$([[ "$exit_code" -eq 0 ]] && printf 'success' || printf 'failed')"
   if ! maybe_send_telemetry "$exit_code"; then
     warn "Telemetry delivery did not complete successfully. Installation result is unchanged."
   fi
@@ -387,7 +451,11 @@ maybe_send_telemetry() {
   TELEMETRY_OUTBOX_DIR="${TELEMETRY_OUTBOX_DIR}" \
   TELEMETRY_USER_AGENT="${TELEMETRY_USER_AGENT}" \
   TELEMETRY_ENABLED="${TELEMETRY_ENABLED}" \
+  TELEMETRY_SESSION_ID="${TELEMETRY_SESSION_ID}" \
   TELEMETRY_RUN_ID="${RUN_ID}" \
+  TELEMETRY_PARENT_RUN_ID="${TELEMETRY_PARENT_RUN_ID}" \
+  TELEMETRY_COMPONENT="core" \
+  TELEMETRY_MARKER="${TELEMETRY_MARKER}" \
   TELEMETRY_SOURCE_REPOSITORY="productive-k3s" \
   TELEMETRY_SOURCE_SCRIPT="scripts/bootstrap-k3s-stack.sh" \
   TELEMETRY_EXIT_CODE="${exit_code}" \
@@ -1996,7 +2064,9 @@ main() {
   detect_host_platform
   bind_stdin_to_tty
   resolve_telemetry_enabled
+  TELEMETRY_SESSION_ID="${TELEMETRY_SESSION_ID:-${RUN_ID}}"
   sudo_keepalive
+  emit_bootstrap_lifecycle_event "started" "started"
 
   log "Detected host platform: ${OS_PRETTY_NAME}"
   case "$PLATFORM_SUPPORT" in

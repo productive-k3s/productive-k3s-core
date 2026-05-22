@@ -2,7 +2,7 @@ runs/
 .codex
 docs/superpowers/
 superpowers/
-test-artifacts/*.json
+test-artifacts/
 docs/.venv/
 docs/site/
 docs/.mkdocs.pid
@@ -16,3 +16,4 @@ docs/src/assets/stylesheets/extra.css
 docs/src/assets/images/argentina.png
 docs/src/assets/images/productive-k3s-icon-square-0.3x.png
 docs/src/assets/images/favicon.ico
+.wrangler/

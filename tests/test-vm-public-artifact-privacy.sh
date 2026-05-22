@@ -6,10 +6,20 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
+search_file() {
+  local pattern="$1"
+  local file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -q -- "${pattern}" "${file}"
+  else
+    grep -Eq -- "${pattern}" "${file}"
+  fi
+}
+
 assert_file_contains() {
   local file="$1"
   local pattern="$2"
-  if ! rg -q "${pattern}" "${file}"; then
+  if ! search_file "${pattern}" "${file}"; then
     printf '[FAIL] expected %s to contain %s\n' "${file}" "${pattern}" >&2
     exit 1
   fi
@@ -18,7 +28,7 @@ assert_file_contains() {
 assert_file_not_contains() {
   local file="$1"
   local pattern="$2"
-  if rg -q "${pattern}" "${file}"; then
+  if search_file "${pattern}" "${file}"; then
     printf '[FAIL] expected %s to omit %s\n' "${file}" "${pattern}" >&2
     exit 1
   fi

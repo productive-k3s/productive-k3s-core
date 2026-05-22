@@ -2,7 +2,9 @@
 set -euo pipefail
 
 MANIFEST_PATH="${1:-}"
-TELEMETRY_ENDPOINT="${TELEMETRY_ENDPOINT:-}"
+TELEMETRY_ENDPOINT="${TELEMETRY_ENDPOINT-https://telemetry.productive-k3s.io/telemetry}"
+TELEMETRY_MARKER="${TELEMETRY_MARKER:-pk3s-public-v1}"
+TELEMETRY_BEARER_TOKEN="${TELEMETRY_BEARER_TOKEN:-}"
 TELEMETRY_MAX_RETRIES="${TELEMETRY_MAX_RETRIES:-3}"
 TELEMETRY_CONNECT_TIMEOUT_SECONDS="${TELEMETRY_CONNECT_TIMEOUT_SECONDS:-5}"
 TELEMETRY_REQUEST_TIMEOUT_SECONDS="${TELEMETRY_REQUEST_TIMEOUT_SECONDS:-10}"
@@ -13,6 +15,9 @@ TELEMETRY_RUN_ID="${TELEMETRY_RUN_ID:-unknown-run}"
 TELEMETRY_SOURCE_REPOSITORY="${TELEMETRY_SOURCE_REPOSITORY:-productive-k3s}"
 TELEMETRY_SOURCE_SCRIPT="${TELEMETRY_SOURCE_SCRIPT:-scripts/bootstrap-k3s-stack.sh}"
 TELEMETRY_EXIT_CODE="${TELEMETRY_EXIT_CODE:-0}"
+TELEMETRY_SESSION_ID="${TELEMETRY_SESSION_ID:-}"
+TELEMETRY_PARENT_RUN_ID="${TELEMETRY_PARENT_RUN_ID:-}"
+TELEMETRY_COMPONENT="${TELEMETRY_COMPONENT:-core}"
 
 log() {
   printf '[INFO] %s\n' "$1"
@@ -54,6 +59,10 @@ write_payload() {
     printf '  "retry_attempt": %s,\n' "${retry_attempt}"
     printf '  "is_retry": %s,\n' "${is_retry}"
     printf '  "retry_of_run_id": "%s",\n' "$(json_escape "${TELEMETRY_RUN_ID}")"
+    printf '  "session_id": %s,\n' "$(jq -Rn --arg v "${TELEMETRY_SESSION_ID}" '$v')"
+    printf '  "run_id": %s,\n' "$(jq -Rn --arg v "${TELEMETRY_RUN_ID}" '$v')"
+    printf '  "parent_run_id": %s,\n' "$(jq -Rn --arg v "${TELEMETRY_PARENT_RUN_ID}" '$v')"
+    printf '  "component": %s,\n' "$(jq -Rn --arg v "${TELEMETRY_COMPONENT}" '$v')"
     printf '  "client": {\n'
     printf '    "repository": "%s",\n' "$(json_escape "${TELEMETRY_SOURCE_REPOSITORY}")"
     printf '    "script": "%s",\n' "$(json_escape "${TELEMETRY_SOURCE_SCRIPT}")"
@@ -122,18 +131,23 @@ main() {
     payload_file="$(mktemp)"
     write_payload "${payload_file}" "${attempt}" "${retry_attempt}" "${is_retry}"
 
+    local curl_args=(
+      --silent
+      --show-error
+      --fail
+      --connect-timeout "${TELEMETRY_CONNECT_TIMEOUT_SECONDS}"
+      --max-time "${TELEMETRY_REQUEST_TIMEOUT_SECONDS}"
+      --retry 0
+      --header 'Content-Type: application/json'
+      --header "User-Agent: ${TELEMETRY_USER_AGENT}"
+      --header "X-Productive-K3S-Telemetry: ${TELEMETRY_MARKER}"
+      --data-binary "@${payload_file}"
+    )
+    if [[ -n "${TELEMETRY_BEARER_TOKEN}" ]]; then
+      curl_args+=(--header "Authorization: Bearer ${TELEMETRY_BEARER_TOKEN}")
+    fi
     set +e
-    curl \
-      --silent \
-      --show-error \
-      --fail \
-      --connect-timeout "${TELEMETRY_CONNECT_TIMEOUT_SECONDS}" \
-      --max-time "${TELEMETRY_REQUEST_TIMEOUT_SECONDS}" \
-      --retry 0 \
-      --header 'Content-Type: application/json' \
-      --header "User-Agent: ${TELEMETRY_USER_AGENT}" \
-      --data-binary "@${payload_file}" \
-      "${TELEMETRY_ENDPOINT}" >/dev/null
+    curl "${curl_args[@]}" "${TELEMETRY_ENDPOINT}" >/dev/null
     curl_rc=$?
     set -e
 

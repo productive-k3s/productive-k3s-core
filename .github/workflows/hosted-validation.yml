@@ -22,6 +22,8 @@ jobs:
   smoke-matrix:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-24.04
+    env:
+      TELEMETRY_ENABLED: "false"
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +51,12 @@ jobs:
           set -euo pipefail
           docker version
 
+      - name: Run telemetry regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          make test-telemetry
+
       - name: Run containerized smoke for ${{ matrix.label }}
         shell: bash
         run: |
@@ -71,6 +79,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
     needs: smoke-matrix
     runs-on: ubuntu-24.04
+    env:
+      TELEMETRY_ENABLED: "false"
 
     steps:
       - name: Check out repository
@@ -81,6 +91,12 @@ jobs:
         run: |
           set -euo pipefail
           jq --version
+
+      - name: Run telemetry regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          make test-telemetry
 
       - name: Run hosted validation
         shell: bash
