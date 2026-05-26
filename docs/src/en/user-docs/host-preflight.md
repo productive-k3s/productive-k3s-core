@@ -80,9 +80,7 @@ The preflight currently validates:
 - sudo posture
 - practical hardware guidance for `single-node` and `stack`
 
-Today, the public support baseline is `amd64`/`x86_64`.
-
-Architectures such as `arm64`/`aarch64` are intentionally reported as unsupported for now, even on otherwise valid Ubuntu or Debian targets.
+Today, the public support baseline includes `amd64`/`x86_64` and Ubuntu `24.04` on `arm64`/`aarch64`.
 
 The hardware guidance follows the published platform baseline:
 

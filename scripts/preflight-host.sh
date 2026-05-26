@@ -117,7 +117,7 @@ detect_architecture_support() {
   ARCHITECTURE="$(read_architecture)"
 
   case "$ARCHITECTURE" in
-    x86_64|amd64)
+    x86_64|amd64|aarch64|arm64)
       ARCHITECTURE_SUPPORT="supported"
       ;;
     *)
@@ -229,7 +229,7 @@ check_architecture() {
   if [[ "$ARCHITECTURE_SUPPORT" == "supported" ]]; then
     record_ok "architecture" "supported architecture detected: ${ARCHITECTURE}"
   else
-    record_fail "architecture" "unsupported architecture detected: ${ARCHITECTURE}. The current public support baseline is amd64/x86_64"
+    record_fail "architecture" "unsupported architecture detected: ${ARCHITECTURE}. The current public support baseline is amd64/x86_64 plus Ubuntu 24.04 on arm64/aarch64"
   fi
 }
 

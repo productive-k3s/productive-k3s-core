@@ -73,6 +73,7 @@ nav:
       - User docs:
           - en/user-docs/index.md
           - Host preflight: en/user-docs/host-preflight.md
+          - ARM Support: en/user-docs/arm-support.md
           - Checks:
               - K3s: en/user-docs/k3s-checks.md
               - Ingress: en/user-docs/ingress-checks.md
@@ -109,6 +110,7 @@ nav:
       - Documentación para usuarios:
           - es/user-docs/index.md
           - Preflight del host: es/user-docs/host-preflight.md
+          - ARM Support: es/user-docs/arm-support.md
           - Verificaciones:
               - K3s: es/user-docs/k3s-checks.md
               - Ingress: es/user-docs/ingress-checks.md

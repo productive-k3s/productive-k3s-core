@@ -1,4 +1,4 @@
-.PHONY: preflight preflight-strict bootstrap dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test-clean test-checkstatus test-preflight-host test-bootstrap-modes test-artifact-tools test-telemetry test-productive-k3s-core-cli test-in-vm-engine-propagation test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all
+.PHONY: preflight preflight-strict bootstrap dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test-clean test-checkstatus test-preflight-host test-arm-support-docs test-bootstrap-modes test-artifact-tools test-telemetry test-productive-k3s-core-cli test-in-vm-engine-propagation test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all
 
 preflight:
 	./productive-k3s-core.sh preflight
@@ -44,6 +44,9 @@ test-checkstatus:
 
 test-preflight-host:
 	./scripts/productive-k3s-core-dev.sh test-preflight-host
+
+test-arm-support-docs:
+	./scripts/productive-k3s-core-dev.sh test-arm-support-docs
 
 test-bootstrap-modes:
 	./scripts/productive-k3s-core-dev.sh test-bootstrap-modes

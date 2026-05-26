@@ -17,6 +17,7 @@ Development commands:
   test-clean
   test-checkstatus
   test-preflight-host
+  test-arm-support-docs
   test-bootstrap-modes
   test-artifact-tools
   test-telemetry
@@ -75,6 +76,10 @@ main() {
     test-preflight-host)
       shift
       exec bash "${REPO_DIR}/tests/test-preflight-host.sh" "$@"
+      ;;
+    test-arm-support-docs)
+      shift
+      exec bash "${REPO_DIR}/tests/test-arm-support-docs.sh" "$@"
       ;;
     test-bootstrap-modes)
       shift

@@ -11,6 +11,7 @@ Al mismo tiempo, el flujo de desarrollo da una forma práctica para que contribu
 El repositorio está validado y soportado sobre:
 
 - Ubuntu `24.04` LTS sobre `amd64`
+- Ubuntu `24.04` LTS sobre `arm64`
 - Ubuntu `22.04` LTS sobre `amd64`
 - Debian `13` `trixie` sobre `amd64`
 - Debian `12` `bookworm` sobre `amd64`
@@ -25,10 +26,11 @@ El soporte significa que la evidencia de validación retenida incluye estos fluj
 
 ## Modelo de validación
 
-- Ubuntu `24.04` tiene validación directa en runners hosteados y validación basada en VM
+- Ubuntu `24.04` sobre `amd64` tiene validación directa en runners hosteados y validación basada en VM
+- Ubuntu `24.04` sobre `arm64` tiene validación pública retenida a través del camino on-prem ARM
 - Ubuntu `22.04`, Debian `12` y Debian `13` se validan mediante el harness de VM
 - El soporte para Debian se refiere al runtime dentro de la VM validada, no a CI hosteado directo de GitHub
-- Los targets `arm64` todavía no forman parte de la matriz de validación soportada
+- La validación pública retenida para ARM hoy es específica de Ubuntu `24.04`
 
 ## Supuestos de plataforma
 

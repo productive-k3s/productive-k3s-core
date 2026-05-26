@@ -125,8 +125,14 @@ VERSION_CODENAME=noble
 PRETTY_NAME="Ubuntu 24.04 LTS"
 EOF
 PRODUCTIVE_K3S_PREFLIGHT_ARCH=aarch64
-if run_preflight >/tmp/productive-k3s-preflight-unsupported-arch.out 2>&1; then
-  fail "unsupported architecture unexpectedly passed preflight"
-fi
-grep -q "unsupported architecture" /tmp/productive-k3s-preflight-unsupported-arch.out || fail "unsupported architecture message missing"
-pass "unsupported architecture is rejected"
+aarch64_json="$(run_preflight --json-output)"
+python3 - "${aarch64_json}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+assert payload["summary"]["fail_count"] == 0
+assert payload["platform"]["architecture"] == "aarch64"
+assert payload["platform"]["architecture_support"] == "supported"
+PY
+pass "aarch64 architecture is accepted"
