@@ -11,6 +11,7 @@ Estado: soportado
 Release objetivo:
 
 - Ubuntu `24.04` LTS
+- Ubuntu `24.04` Desktop sobre `arm64`
 
 Evidencia de validación retenida:
 
@@ -24,6 +25,7 @@ Interpretación:
 
 - Ubuntu 24.04 está validado para bootstrap, convergencia de validación estricta, rollback, limpieza destructiva y el camino de validación hosteada directa
 - Ubuntu 24.04 debe tratarse como una plataforma soportada, no como candidata
+- Ubuntu `24.04` sobre `arm64` queda validado por la evidencia pública retenida del camino on-prem ARM
 
 ## Alcance
 
@@ -33,6 +35,7 @@ El modelo validado es:
 - guest VM: imagen Ubuntu 24.04
 - scripts: ejecutados dentro de la VM Ubuntu 24.04
 - CI hosteado: validación directa sobre `ubuntu-24.04`
+- host ARM retenido: Raspberry Pi 5 Model B Rev `1.1` sobre Ubuntu `24.04` Desktop, `4` CPU cores, alrededor de `7.7 GiB` de RAM
 
 ## Defaults del harness
 

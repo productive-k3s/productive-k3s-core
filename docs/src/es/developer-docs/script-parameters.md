@@ -26,7 +26,7 @@ El preflight del host valida:
 
 Para `server` y `agent`, igual captura el snapshot de recursos del host, pero no aplica la misma guía de dimensionamiento del stack completo.
 
-Por ahora, la baseline pública soportada es `amd64`/`x86_64`. El preflight reporta `arm64`/`aarch64` como no soportadas hasta que esos targets entren explícitamente en la matriz soportada.
+Por ahora, la baseline pública soportada incluye `amd64`/`x86_64` y Ubuntu `24.04` sobre `arm64`/`aarch64`. El preflight acepta ambas familias para los targets Ubuntu y Debian actualmente soportados, mientras que la evidencia ARM retenida hoy es específica de Ubuntu `24.04`.
 
 ## `scripts/bootstrap-k3s-stack.sh`
 

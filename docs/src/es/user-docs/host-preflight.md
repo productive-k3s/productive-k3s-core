@@ -80,9 +80,7 @@ Hoy el preflight valida:
 - postura de `sudo`
 - guía práctica de hardware para `single-node` y `stack`
 
-Hoy la baseline pública soportada es `amd64`/`x86_64`.
-
-Arquitecturas como `arm64`/`aarch64` se reportan intencionalmente como no soportadas por ahora, incluso sobre targets Ubuntu o Debian que por lo demás serían válidos.
+Hoy la baseline pública soportada incluye `amd64`/`x86_64` y Ubuntu `24.04` sobre `arm64`/`aarch64`.
 
 La guía de hardware sigue la baseline publicada de plataforma:
 

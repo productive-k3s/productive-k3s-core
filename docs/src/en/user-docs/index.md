@@ -7,6 +7,7 @@ This section groups operational checks and user-facing reference pages for the i
 ### Checks
 
 - [Host preflight](host-preflight.md)
+- [ARM Support](arm-support.md)
 - [k3s checks](k3s-checks.md)
 - [Ingress checks](ingress-checks.md)
 - [Rancher checks](rancher-checks.md)

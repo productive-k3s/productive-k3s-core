@@ -8,9 +8,10 @@ Ubuntu 24.04 is supported for this repository alongside Ubuntu 22.04, Debian 12,
 
 Status: supported
 
-Target release:
+Target releases:
 
-- Ubuntu `24.04` LTS
+- Ubuntu `24.04` LTS on `amd64`
+- Ubuntu `24.04` Desktop on `arm64`
 
 Validation evidence retained:
 
@@ -23,16 +24,18 @@ Validation evidence retained:
 Interpretation:
 
 - Ubuntu 24.04 is validated for bootstrap, strict validation convergence, rollback, destructive cleanup, and the direct hosted validation path
+- Ubuntu 24.04 `arm64` is validated through the retained public on-prem ARM bootstrap evidence
 - Ubuntu 24.04 should be treated as a supported platform, not as a candidate
 
 ## Scope
 
-The validated model is:
+The validated models are:
 
 - host: any machine capable of running Multipass
 - VM guest: Ubuntu 24.04 image
 - scripts: executed inside the Ubuntu 24.04 VM
 - hosted CI: direct validation on `ubuntu-24.04`
+- retained ARM host: Raspberry Pi 5 Model B Rev `1.1` on Ubuntu `24.04` Desktop, `4` CPU cores, about `7.7 GiB` RAM
 
 ## Harness Defaults
 
