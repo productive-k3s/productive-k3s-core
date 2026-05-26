@@ -201,7 +201,7 @@ mode_runs_host_local() {
 }
 
 mode_uses_single_node_defaults() {
-  [[ "$MODE" == "single-node" ]]
+  [[ "$MODE" == "single-node" || "$MODE" == "stack" ]]
 }
 
 mode_description() {
