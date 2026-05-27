@@ -3,6 +3,8 @@ runs/
 docs/superpowers/
 superpowers/
 test-artifacts/
+tests/artifacts/*
+tests/coverage/*
 docs/.venv/
 docs/site/
 docs/.mkdocs.pid

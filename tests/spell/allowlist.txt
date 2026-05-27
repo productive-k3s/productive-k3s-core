@@ -1,0 +1,12 @@
+productive
+k3s
+longhorn
+rancher
+telemetry
+amd64
+arm64
+aarch64
+debian
+ubuntu
+mktemp
+sha256sum
