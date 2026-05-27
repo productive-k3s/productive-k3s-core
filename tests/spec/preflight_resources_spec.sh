@@ -20,18 +20,25 @@ Describe 'preflight resource guidance'
   It 'warns in strict mode when full-stack guidance is low'
     os_release="$(mktemp)"
     pid1="$(mktemp)"
+    mock_bin="$(mktemp -d)"
     cat >"${os_release}" <<'EOF'
 ID=ubuntu
 VERSION_ID="24.04"
 PRETTY_NAME="Ubuntu 24.04 LTS"
 EOF
     printf 'systemd\n' >"${pid1}"
+    cat >"${mock_bin}/sudo" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "${mock_bin}/sudo"
     setup_env "${os_release}" "${pid1}" '2' '4194304' '21474836480'
 
-    When run /usr/bin/bash "$SCRIPT" --strict --json-output
+    When run bash -lc 'PATH="$1:$PATH" "$2" --strict --json-output' bash "$mock_bin" "$SCRIPT"
     The status should equal 1
     The output should include '"warn_count":4'
 
+    rm -rf "${mock_bin}"
     rm -f "${os_release}" "${pid1}"
     cleanup_env
   End
