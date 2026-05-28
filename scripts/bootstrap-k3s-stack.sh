@@ -201,7 +201,7 @@ mode_runs_host_local() {
 }
 
 mode_uses_single_node_defaults() {
-  [[ "$MODE" == "single-node" ]]
+  [[ "$MODE" == "single-node" || "$MODE" == "stack" ]]
 }
 
 mode_description() {
@@ -830,6 +830,15 @@ ensure_user_kubeconfig() {
   local target_dir="${HOME}/.kube"
   local target_kubeconfig="${target_dir}/k3s.yaml"
 
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "[dry-run] Preparing user kubeconfig at ${target_kubeconfig}"
+    echo "  sudo cp ${source_kubeconfig} ${target_kubeconfig}"
+    echo "  sudo chown $(id -u):$(id -g) ${target_kubeconfig}"
+    echo "  chmod 600 ${target_kubeconfig}"
+    export KUBECONFIG="$target_kubeconfig"
+    return 0
+  fi
+
   if [[ ! -f "$source_kubeconfig" ]]; then
     err "k3s kubeconfig was not found at ${source_kubeconfig}."
     exit 1
@@ -839,16 +848,9 @@ ensure_user_kubeconfig() {
     run_cmd "Creating ${target_dir}" mkdir -p "$target_dir"
   fi
 
-  if [[ "$DRY_RUN" == "1" ]]; then
-    log "[dry-run] Preparing user kubeconfig at ${target_kubeconfig}"
-    echo "  sudo cp ${source_kubeconfig} ${target_kubeconfig}"
-    echo "  sudo chown $(id -u):$(id -g) ${target_kubeconfig}"
-    echo "  chmod 600 ${target_kubeconfig}"
-  else
-    sudo cp "$source_kubeconfig" "$target_kubeconfig"
-    sudo chown "$(id -u):$(id -g)" "$target_kubeconfig"
-    chmod 600 "$target_kubeconfig"
-  fi
+  sudo cp "$source_kubeconfig" "$target_kubeconfig"
+  sudo chown "$(id -u):$(id -g)" "$target_kubeconfig"
+  chmod 600 "$target_kubeconfig"
 
   export KUBECONFIG="$target_kubeconfig"
 }

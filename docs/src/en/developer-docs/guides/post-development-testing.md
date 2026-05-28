@@ -18,6 +18,67 @@ make <test-target>
 make test-checkstatus
 ```
 
+## Local test tooling
+
+The repository now also exposes a fast local-maintainer layer:
+
+```bash
+make test
+make test-unit
+make test-lint
+make test-format
+make test-spell
+make test-coverage
+```
+
+Those targets use:
+
+- `ShellSpec` for unit-style shell tests under `tests/spec/`
+- `ShellCheck` for shell linting
+- `shfmt` for formatting checks
+- `codespell` for lightweight spell checks
+- `kcov` for shell coverage reports
+
+If you install tools without root, keep `~/.local/bin` in `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+User-local install commands used during development on Ubuntu:
+
+```bash
+mkdir -p "$HOME/.local/bin" "$HOME/.local/share"
+curl -fsSLO https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+tar -xJf shellcheck-v0.11.0.linux.x86_64.tar.xz
+install shellcheck-v0.11.0/shellcheck "$HOME/.local/bin/shellcheck"
+
+curl -fsSLo "$HOME/.local/bin/shfmt" https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64
+chmod +x "$HOME/.local/bin/shfmt"
+
+curl -fsSLO https://github.com/shellspec/shellspec/releases/download/0.28.1/shellspec-dist.tar.gz
+mkdir -p "$HOME/.local/share/shellspec"
+tar -xzf shellspec-dist.tar.gz -C "$HOME/.local/share/shellspec"
+cat > "$HOME/.local/bin/shellspec" <<'EOF'
+#!/usr/bin/env bash
+exec "$HOME/.local/share/shellspec/shellspec/shellspec" "$@"
+EOF
+chmod +x "$HOME/.local/bin/shellspec"
+```
+
+`codespell` can be installed with:
+
+```bash
+python3 -m pip install --user codespell
+```
+
+`kcov` is the one exception on this machine: building it locally failed because Ubuntu `22.04` is missing `libelf` and `elfutils` development headers. On Ubuntu, install it with root privileges when you want shell coverage:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y kcov libelf-dev libdw-dev
+```
+
 Example:
 
 ```bash
@@ -25,6 +86,19 @@ make test-clean
 make test-matrix-all
 make test-checkstatus
 ```
+
+## Current local coverage baseline
+
+The current maintainer baseline from the latest local `make test-coverage` run is:
+
+- total ShellSpec coverage: `75.06%`
+- `scripts/bootstrap-k3s-stack.sh`: `78.17%`
+- `scripts/preflight-host.sh`: `89.02%`
+- `scripts/validate-k3s-stack.sh`: `59.52%`
+- `scripts/send-telemetry.sh`: `83.48%`
+- `scripts/send-telemetry-event.sh`: `60.94%`
+
+This baseline is intended to guide future additions and refactors. It is not yet enforced as a CI threshold.
 
 ## What these targets do
 
