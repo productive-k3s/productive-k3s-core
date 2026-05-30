@@ -142,6 +142,9 @@ assert_contains "$root_clean_recipe" "./scripts/productive-k3s-core-dev.sh test-
 root_checkstatus_recipe="$(make -C "${REPO_DIR}" -n test-checkstatus)"
 assert_contains "$root_checkstatus_recipe" "./scripts/productive-k3s-core-dev.sh test-checkstatus"
 
+root_tag_release_recipe="$(make -C "${REPO_DIR}" -n tag-release VERSION=1.2.3)"
+assert_contains "$root_tag_release_recipe" "./scripts/create-release-tag.sh 1.2.3"
+
 matrix_all_recipe="$(make -C "${REPO_DIR}/tests" -n run-all-tests)"
 assert_count "$matrix_all_recipe" "bash ./clean-test-state.sh" "1"
 
