@@ -5,6 +5,7 @@ PREFIX="productive-k3s-core-test-"
 PURGE="n"
 TARGET=""
 ALL="n"
+VM_CLEANUP_TIMEOUT_SECONDS="${VM_CLEANUP_TIMEOUT_SECONDS:-120}"
 
 usage() {
   cat <<'EOU'
@@ -26,8 +27,27 @@ log() {
   printf '[INFO] %s\n' "$1"
 }
 
+warn() {
+  printf '[WARN] %s\n' "$1"
+}
+
 err() {
   printf '[ERROR] %s\n' "$1" >&2
+}
+
+run_multipass_cleanup() {
+  local subcommand="$1"
+  shift || true
+
+  if command -v timeout >/dev/null 2>&1; then
+    if timeout --kill-after=5s "${VM_CLEANUP_TIMEOUT_SECONDS}s" multipass "${subcommand}" "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+    warn "multipass ${subcommand} timed out after ${VM_CLEANUP_TIMEOUT_SECONDS}s; continuing"
+    return 0
+  fi
+
+  multipass "${subcommand}" "$@" >/dev/null 2>&1 || true
 }
 
 parse_args() {
@@ -66,7 +86,7 @@ parse_args() {
 cleanup_one() {
   local name="$1"
   log "Deleting VM: $name"
-  multipass delete "$name"
+  run_multipass_cleanup delete "$name"
 }
 
 main() {
@@ -74,7 +94,13 @@ main() {
   need_cmd multipass || { err "multipass is required"; exit 1; }
 
   if [[ "$ALL" == "y" ]]; then
-    mapfile -t targets < <(multipass list --format csv | awk -F, -v p="$PREFIX" 'NR>1 && index($1,p)==1 {print $1}')
+    mapfile -t targets < <(
+      if command -v timeout >/dev/null 2>&1; then
+        timeout --kill-after=5s "${VM_CLEANUP_TIMEOUT_SECONDS}s" multipass list --format csv 2>/dev/null || true
+      else
+        multipass list --format csv 2>/dev/null || true
+      fi | awk -F, -v p="$PREFIX" 'NR>1 && index($1,p)==1 {print $1}'
+    )
     if [[ ${#targets[@]} -eq 0 ]]; then
       log "No test VMs found with prefix $PREFIX"
       exit 0
@@ -88,7 +114,7 @@ main() {
 
   if [[ "$PURGE" == "y" ]]; then
     log "Purging deleted Multipass instances"
-    multipass purge
+    run_multipass_cleanup purge
   fi
 }
 

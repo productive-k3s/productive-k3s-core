@@ -87,7 +87,8 @@ main() {
       ;;
     test-artifact-tools)
       shift
-      exec bash "${REPO_DIR}/tests/test-artifact-tools.sh" "$@"
+      bash "${REPO_DIR}/tests/test-artifact-tools.sh" "$@"
+      exec bash "${REPO_DIR}/tests/test-in-vm-cleanup-timeout.sh" "$@"
       ;;
     test-telemetry)
       shift

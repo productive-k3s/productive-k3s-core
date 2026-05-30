@@ -9,6 +9,7 @@ VM_MEMORY="8G"
 VM_DISK="40G"
 KEEP_VM="n"
 PURGE_ON_CLEANUP="n"
+VM_CLEANUP_TIMEOUT_SECONDS="${VM_CLEANUP_TIMEOUT_SECONDS:-120}"
 VM_NAME=""
 REMOTE_USER=""
 REMOTE_DIR=""
@@ -133,10 +134,25 @@ cleanup() {
     return
   fi
   log "Cleaning up VM: $VM_NAME"
-  multipass delete "$VM_NAME" >/dev/null 2>&1 || true
+  run_multipass_cleanup delete "$VM_NAME"
   if [[ "$PURGE_ON_CLEANUP" == "y" ]]; then
-    multipass purge >/dev/null 2>&1 || true
+    run_multipass_cleanup purge
   fi
+}
+
+run_multipass_cleanup() {
+  local subcommand="$1"
+  shift || true
+
+  if command -v timeout >/dev/null 2>&1; then
+    if timeout --kill-after=5s "${VM_CLEANUP_TIMEOUT_SECONDS}s" multipass "${subcommand}" "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+    warn "multipass ${subcommand} timed out after ${VM_CLEANUP_TIMEOUT_SECONDS}s; continuing"
+    return 0
+  fi
+
+  multipass "${subcommand}" "$@" >/dev/null 2>&1 || true
 }
 
 parse_args() {
@@ -339,6 +355,7 @@ prepare_repo_transfer_dir() {
     --exclude=docs/.venv \
     --exclude=docs/site \
     --exclude=runs \
+    --exclude=tests/coverage \
     --exclude=test-artifacts \
     -cf - . | tar -xf - -C "$TRANSFER_STAGED_REPO"
 }
