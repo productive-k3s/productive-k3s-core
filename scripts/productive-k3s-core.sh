@@ -10,6 +10,8 @@ usage() {
   cat <<'EOF'
 Usage:
   ./productive-k3s-core.sh <command> [args...]
+  ./productive-k3s-core.sh addon <validate|install> --tgz <file>
+  ./productive-k3s-core.sh dev addon validate --source <dir>
   ./productive-k3s-core.sh [bootstrap args...]
 
 Operational commands:
@@ -18,6 +20,8 @@ Operational commands:
   bootstrap   Run the interactive bootstrap flow
   backup      Capture a host and cluster backup snapshot
   validate    Run the post-bootstrap validator
+  addon       Validate or install packaged add-ons
+  dev         Development-oriented source-based addon workflows
   help        Show this help
 
 Examples:
@@ -26,6 +30,7 @@ Examples:
   ./productive-k3s-core.sh preflight --strict
   ./productive-k3s-core.sh bootstrap --dry-run
   ./productive-k3s-core.sh validate --strict
+  ./productive-k3s-core.sh addon validate --tgz ./longhorn-addon.tgz
 
 If no command is provided, or the first argument is an option, the wrapper
 defaults to `bootstrap` for release-installer compatibility.
@@ -190,6 +195,231 @@ print_bundle_info_json() {
 EOF
 }
 
+trim_yaml_value() {
+  local value="$1"
+  value="${value#*:}"
+  value="${value# }"
+  value="${value%\"}"
+  value="${value#\"}"
+  printf '%s' "${value}"
+}
+
+addon_yaml_get() {
+  local file="$1"
+  local key="$2"
+  awk -v key="${key}" '
+    /^metadata:/ { section="metadata"; subsection=""; next }
+    /^spec:/ { section="spec"; subsection=""; next }
+    section == "spec" && /^  install:/ { subsection="install"; next }
+    section == "metadata" && key == "metadata.name" && /^  name:/ { print; exit }
+    section == "metadata" && key == "metadata.version" && /^  version:/ { print; exit }
+    section == "spec" && key == "spec.type" && /^  type:/ { print; exit }
+    section == "spec" && subsection == "install" && key == "spec.install.script" && /^    script:/ { print; exit }
+  ' "${file}"
+}
+
+extract_tgz_to_temp() {
+  local archive="$1"
+  [[ -f "${archive}" ]] || {
+    printf 'tgz package not found: %s\n' "${archive}" >&2
+    return 3
+  }
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  tar -xzf "${archive}" -C "${tmp_dir}" || {
+    rm -rf "${tmp_dir}"
+    printf 'could not extract tgz package: %s\n' "${archive}" >&2
+    return 4
+  }
+  printf '%s\n' "${tmp_dir}"
+}
+
+resolve_addon_manifest() {
+  local package_root="$1"
+  local manifest
+  manifest="$(find "${package_root}" -type f -name 'addon.yaml' | head -n1)"
+  [[ -n "${manifest}" ]] || {
+    printf 'addon package is missing addon.yaml\n' >&2
+    return 4
+  }
+  printf '%s\n' "${manifest}"
+}
+
+validate_addon_manifest() {
+  local manifest="$1"
+  local addon_name addon_type install_script
+  addon_name="$(trim_yaml_value "$(addon_yaml_get "${manifest}" "metadata.name")")"
+  addon_type="$(trim_yaml_value "$(addon_yaml_get "${manifest}" "spec.type")")"
+  install_script="$(trim_yaml_value "$(addon_yaml_get "${manifest}" "spec.install.script")")"
+
+  [[ -n "${addon_name}" ]] || {
+    printf 'addon package metadata.name is required\n' >&2
+    return 4
+  }
+  [[ -n "${addon_type}" ]] || {
+    printf 'addon package spec.type is required\n' >&2
+    return 4
+  }
+  [[ -n "${install_script}" ]] || {
+    printf 'addon package spec.install.script is required\n' >&2
+    return 4
+  }
+
+  printf '%s\n%s\n%s\n' "${addon_name}" "${addon_type}" "${install_script}"
+}
+
+run_addon_validate() {
+  local tgz_path=""
+  while (($# > 0)); do
+    case "$1" in
+      --tgz)
+        tgz_path="${2:-}"
+        shift 2
+        ;;
+      *)
+        printf 'Usage: ./productive-k3s-core.sh addon validate --tgz <file>\n' >&2
+        return 2
+        ;;
+    esac
+  done
+  [[ -n "${tgz_path}" ]] || {
+    printf 'Usage: ./productive-k3s-core.sh addon validate --tgz <file>\n' >&2
+    return 2
+  }
+
+  local tmp_dir manifest metadata addon_name addon_type install_script
+  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
+  manifest="$(resolve_addon_manifest "${tmp_dir}")" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  metadata="$(validate_addon_manifest "${manifest}")" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  addon_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
+  addon_type="$(printf '%s\n' "${metadata}" | sed -n '2p')"
+  install_script="$(printf '%s\n' "${metadata}" | sed -n '3p')"
+
+  printf 'Addon package: %s\n' "${addon_name}"
+  printf 'Addon type: %s\n' "${addon_type}"
+  printf 'Install script: %s\n' "${install_script}"
+  printf 'Addon package validation passed\n'
+  rm -rf "${tmp_dir}"
+}
+
+run_addon_install() {
+  local tgz_path=""
+  while (($# > 0)); do
+    case "$1" in
+      --tgz)
+        tgz_path="${2:-}"
+        shift 2
+        ;;
+      *)
+        printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file>\n' >&2
+        return 2
+        ;;
+    esac
+  done
+  [[ -n "${tgz_path}" ]] || {
+    printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file>\n' >&2
+    return 2
+  }
+
+  local tmp_dir manifest metadata install_script manifest_dir install_path
+  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
+  manifest="$(resolve_addon_manifest "${tmp_dir}")" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  metadata="$(validate_addon_manifest "${manifest}")" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  install_script="$(printf '%s\n' "${metadata}" | sed -n '3p')"
+  manifest_dir="$(dirname "${manifest}")"
+  install_path="${manifest_dir}/${install_script}"
+  [[ -f "${install_path}" ]] || {
+    rm -rf "${tmp_dir}"
+    printf 'addon package install script not found: %s\n' "${install_script}" >&2
+    return 4
+  }
+
+  printf 'Executing packaged addon installer: %s\n' "${install_script}"
+  (
+    cd "${manifest_dir}"
+    bash "${install_path}"
+  )
+  local rc=$?
+  rm -rf "${tmp_dir}"
+  return "${rc}"
+}
+
+run_dev_addon_validate() {
+  local source_dir=""
+  while (($# > 0)); do
+    case "$1" in
+      --source)
+        source_dir="${2:-}"
+        shift 2
+        ;;
+      *)
+        printf 'Usage: ./productive-k3s-core.sh dev addon validate --source <dir>\n' >&2
+        return 2
+        ;;
+    esac
+  done
+  [[ -n "${source_dir}" ]] || {
+    printf 'Usage: ./productive-k3s-core.sh dev addon validate --source <dir>\n' >&2
+    return 2
+  }
+  local manifest metadata
+  manifest="${source_dir}/addon.yaml"
+  [[ -f "${manifest}" ]] || {
+    printf 'addon source is missing addon.yaml\n' >&2
+    return 4
+  }
+  metadata="$(validate_addon_manifest "${manifest}")" || return $?
+  printf 'Addon source validation passed\n'
+}
+
+run_addon() {
+  local action="${1:-}"
+  shift || true
+  case "${action}" in
+    validate)
+      run_addon_validate "$@"
+      ;;
+    install)
+      run_addon_install "$@"
+      ;;
+    *)
+      printf 'Usage: ./productive-k3s-core.sh addon <validate|install> --tgz <file>\n' >&2
+      return 2
+      ;;
+  esac
+}
+
+run_dev() {
+  local area="${1:-}"
+  local action="${2:-}"
+  shift 2 || true
+  case "${area}:${action}" in
+    addon:validate)
+      run_dev_addon_validate "$@"
+      ;;
+    *)
+      printf 'Usage: ./productive-k3s-core.sh dev addon validate --source <dir>\n' >&2
+      return 2
+      ;;
+  esac
+}
+
 run_bundle() {
   if (($# != 2)) || [[ "$1" != "info" || "$2" != "--json" ]]; then
     printf 'Usage: ./productive-k3s-core.sh bundle info --json\n' >&2
@@ -253,6 +483,14 @@ main() {
     validate)
       shift
       run_validate "$@" || rc=$?
+      ;;
+    addon)
+      shift
+      run_addon "$@" || rc=$?
+      ;;
+    dev)
+      shift
+      run_dev "$@" || rc=$?
       ;;
     -*)
       command="bootstrap"

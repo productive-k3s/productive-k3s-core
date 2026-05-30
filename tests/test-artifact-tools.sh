@@ -34,7 +34,9 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 ARTIFACTS_DIR="${TMP_DIR}/test-artifacts"
 RUNS_DIR="${TMP_DIR}/runs"
-mkdir -p "${ARTIFACTS_DIR}" "${RUNS_DIR}/telemetry-outbox"
+FAKE_BIN_DIR="${TMP_DIR}/bin"
+MULTIPASS_LOG="${TMP_DIR}/multipass.log"
+mkdir -p "${ARTIFACTS_DIR}" "${RUNS_DIR}/telemetry-outbox" "${FAKE_BIN_DIR}"
 
 cat > "${ARTIFACTS_DIR}/test-in-vm-20260508-000001-core-ubuntu.json" <<'EOF'
 {
@@ -84,6 +86,27 @@ printf '{}\n' > "${RUNS_DIR}/bootstrap-20260508-000001.json"
 printf '{}\n' > "${RUNS_DIR}/telemetry-outbox/bootstrap-20260508-000001-attempt-1.json"
 printf 'delivered\n' > "${RUNS_DIR}/telemetry-outbox/bootstrap-20260508-000001-attempt-1.status"
 
+cat > "${FAKE_BIN_DIR}/multipass" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$*" >> "${MULTIPASS_LOG}"
+case "\${1:-}" in
+  list)
+    cat <<'EOCSV'
+Name,State,IPv4,Image
+productive-k3s-core-test-smoke-1,Running,10.0.0.10,Ubuntu 24.04 LTS
+unrelated-vm,Running,10.0.0.11,Ubuntu 24.04 LTS
+EOCSV
+    ;;
+  delete|purge)
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+EOF
+chmod +x "${FAKE_BIN_DIR}/multipass"
+
 set +e
 status_output="$(
   TEST_ARTIFACTS_DIR="${ARTIFACTS_DIR}" \
@@ -101,6 +124,7 @@ assert_contains "$status_output" "Summary: 2 success, 1 failed, 0 unknown"
 
 TEST_ARTIFACTS_DIR="${ARTIFACTS_DIR}" \
 TEST_RUNS_DIR="${RUNS_DIR}" \
+PATH="${FAKE_BIN_DIR}:$PATH" \
 bash "${REPO_DIR}/tests/clean-test-state.sh"
 
 assert_not_exists "${ARTIFACTS_DIR}/test-in-vm-20260508-000001-core-ubuntu.json"
@@ -108,6 +132,9 @@ assert_not_exists "${ARTIFACTS_DIR}/hosted-validation-summary.json"
 assert_not_exists "${RUNS_DIR}/bootstrap-20260508-000001.json"
 assert_not_exists "${RUNS_DIR}/telemetry-outbox/bootstrap-20260508-000001-attempt-1.json"
 assert_not_exists "${RUNS_DIR}/telemetry-outbox/bootstrap-20260508-000001-attempt-1.status"
+assert_contains "$(cat "${MULTIPASS_LOG}")" "list --format csv"
+assert_contains "$(cat "${MULTIPASS_LOG}")" "delete productive-k3s-core-test-smoke-1"
+assert_contains "$(cat "${MULTIPASS_LOG}")" "purge"
 
 root_clean_recipe="$(make -C "${REPO_DIR}" -n test-clean)"
 assert_contains "$root_clean_recipe" "./scripts/productive-k3s-core-dev.sh test-clean"

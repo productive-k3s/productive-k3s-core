@@ -34,6 +34,9 @@ validate_help="$(cd "$REPO_DIR" && ./productive-k3s-core.sh validate --help)"
 printf '%s\n' "$validate_help" | grep -q -- '--strict' || fail "validate help was not forwarded"
 pass "validate subcommand forwards CLI help"
 
+printf '%s\n' "$cli_help" | grep -q "addon" || fail "public CLI help does not list addon"
+pass "public CLI help lists addon commands"
+
 local_bundle_info="$(cd "$REPO_DIR" && ./productive-k3s-core.sh bundle info --json)"
 printf '%s\n' "$local_bundle_info" | jq -e '
   .schema_version == "1" and
@@ -82,6 +85,38 @@ printf '%s\n' "$bundle_info" | jq -e '
   .api_compatibility.contract == "productive-k3s-cli-bundle-info/v1"
 ' >/dev/null || fail "bundle info JSON contract did not match expected values"
 pass "bundle info JSON contract is exposed from the built artifact"
+
+ADDON_TMP_DIR="$(mktemp -d)"
+ADDON_PKG_DIR="${ADDON_TMP_DIR}/pkg"
+ADDON_ARCHIVE="${ADDON_TMP_DIR}/demo-addon.tgz"
+ADDON_MARKER="${ADDON_TMP_DIR}/installed.txt"
+mkdir -p "${ADDON_PKG_DIR}/scripts"
+cat >"${ADDON_PKG_DIR}/addon.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Addon
+metadata:
+  name: demo-addon
+  version: 0.1.0
+spec:
+  type: shell
+  install:
+    script: scripts/install.sh
+EOF
+cat >"${ADDON_PKG_DIR}/scripts/install.sh" <<EOF
+#!/usr/bin/env bash
+printf 'installed\n' >"${ADDON_MARKER}"
+EOF
+chmod +x "${ADDON_PKG_DIR}/scripts/install.sh"
+tar -czf "${ADDON_ARCHIVE}" -C "${ADDON_PKG_DIR}" .
+
+addon_validate_output="$(cd "$REPO_DIR" && ./productive-k3s-core.sh addon validate --tgz "${ADDON_ARCHIVE}")"
+printf '%s\n' "$addon_validate_output" | grep -q "Addon package validation passed" || fail "addon package validation did not pass"
+printf '%s\n' "$addon_validate_output" | grep -q "demo-addon" || fail "addon validation did not report addon metadata"
+pass "addon tgz validation works"
+
+(cd "$REPO_DIR" && ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}")
+[[ -f "${ADDON_MARKER}" ]] || fail "addon install did not execute the packaged installer"
+pass "addon tgz install executes packaged installer"
 
 if (cd "$REPO_DIR" && ./productive-k3s-core.sh unsupported >/tmp/productive-k3s-core-cli-unsupported.out 2>&1); then
   fail "unsupported public CLI command unexpectedly succeeded"

@@ -6,6 +6,12 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ARTIFACTS_DIR="${TEST_ARTIFACTS_DIR:-${REPO_DIR}/test-artifacts}"
 RUNS_DIR="${TEST_RUNS_DIR:-${REPO_DIR}/runs}"
 
+if command -v multipass >/dev/null 2>&1; then
+  bash "${REPO_DIR}/tests/test-in-vm-cleanup.sh" --all --purge
+else
+  printf '[INFO] multipass not found; skipping VM cleanup\n'
+fi
+
 rm -rf "${ARTIFACTS_DIR}"
 rm -f "${RUNS_DIR}"/bootstrap-*.json
 rm -f "${RUNS_DIR}"/telemetry-outbox/bootstrap-*.json
