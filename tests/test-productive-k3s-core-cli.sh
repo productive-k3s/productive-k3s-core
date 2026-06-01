@@ -50,6 +50,40 @@ printf '%s\n' "$local_bundle_info" | jq -e '
 ' >/dev/null || fail "local bundle info JSON contract did not match expected values"
 pass "local bundle info JSON contract is exposed"
 
+local_bom="$(cd "$REPO_DIR" && ./productive-k3s-core.sh bom --json)"
+printf '%s\n' "$local_bom" | jq -e '
+  .schema_version == "1" and
+  .bom_type == "productive-k3s-cli-bom/v1" and
+  .cli.name == "productive-k3s-core" and
+  (.cli.version | type) == "string" and
+  (.cli.version | length) > 0 and
+  .cli.entrypoint == "productive-k3s-core.sh" and
+  .implementation.language == "bash" and
+  .bundle.bundle_name == "productive-k3s-core" and
+  .bundle.api_compatibility.contract == "productive-k3s-cli-bundle-info/v1" and
+  (.platform_support.supported_matrix | any(.os == "ubuntu-24.04" and (.architectures | index("arm64") != null))) and
+  (.platform_support.retained_validation_evidence.arm64 | index("ubuntu-24.04")) != null and
+  (.requirements.required_commands | any(.name == "bash" and .min_version == "5.1")) and
+  (.requirements.required_commands | any(.name == "curl" and .min_version == "7.81")) and
+  (.requirements.required_commands | any(.name == "tar" and .min_version == "1.34")) and
+  (.requirements.required_commands | any(.name == "sha256sum" and .min_version == "8.32")) and
+  (.requirements.optional_commands | any(.name == "helm" and .min_version == "3.21.0")) and
+  .components.versions.k3s == "v1.35.5+k3s1" and
+  .components.versions.helm == "v3.21.0" and
+  .components.versions["cert-manager"] == "v1.19.4" and
+  .components.versions.longhorn == "v1.11.1" and
+  .components.versions.rancher == "v2.14.2" and
+  .components.versions.registry_image == "registry:2.8.3" and
+  (.components.managed | index("k3s")) != null and
+  (.components.managed | index("helm")) != null and
+  (.components.managed | index("cert-manager")) != null and
+  (.components.managed | index("longhorn")) != null and
+  (.components.managed | index("rancher")) != null and
+  (.components.managed | index("registry")) != null and
+  (.components.managed | index("nfs")) != null
+' >/dev/null || fail "local bom JSON contract did not match expected values"
+pass "local bom JSON contract is exposed"
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -63,16 +97,31 @@ bundle_root="${extract_dir}/productive-k3s-core-HEAD"
 [[ -x "${bundle_root}/productive-k3s-core.sh" ]] || fail "bundle root entrypoint is missing"
 for required_path in \
   "productive-k3s-core-HEAD/bundle-info.json" \
+  "productive-k3s-core-HEAD/README.md" \
+  "productive-k3s-core-HEAD/LICENSE" \
   "productive-k3s-core-HEAD/scripts/productive-k3s-core.sh" \
+  "productive-k3s-core-HEAD/scripts/component-versions.sh" \
   "productive-k3s-core-HEAD/scripts/preflight-host.sh" \
   "productive-k3s-core-HEAD/scripts/bootstrap-k3s-stack.sh" \
   "productive-k3s-core-HEAD/scripts/backup-k3s-stack.sh" \
   "productive-k3s-core-HEAD/scripts/validate-k3s-stack.sh" \
-  "productive-k3s-core-HEAD/scripts/send-telemetry.sh"
+  "productive-k3s-core-HEAD/scripts/send-telemetry.sh" \
+  "productive-k3s-core-HEAD/scripts/send-telemetry-event.sh"
 do
   printf '%s\n' "$bundle_listing" | grep -q "^${required_path}$" || fail "bundle release is missing required runtime file: ${required_path}"
 done
 pass "release bundle includes required runtime files"
+
+for omitted_path in \
+  "productive-k3s-core-HEAD/docs/" \
+  "productive-k3s-core-HEAD/tests/" \
+  "productive-k3s-core-HEAD/scripts/productive-k3s-core-dev.sh" \
+  "productive-k3s-core-HEAD/scripts/build-release-bundle.sh" \
+  "productive-k3s-core-HEAD/CHANGELOG.md"
+do
+  printf '%s\n' "$bundle_listing" | grep -q "^${omitted_path}" && fail "bundle release should omit non-runtime path: ${omitted_path}"
+done
+pass "release bundle omits docs, tests, and dev-only files"
 
 bundle_info="$(cd "$bundle_root" && ./productive-k3s-core.sh bundle info --json)"
 printf '%s\n' "$bundle_info" | jq -e '
@@ -86,11 +135,20 @@ printf '%s\n' "$bundle_info" | jq -e '
 ' >/dev/null || fail "bundle info JSON contract did not match expected values"
 pass "bundle info JSON contract is exposed from the built artifact"
 
+bundle_bom="$(cd "$bundle_root" && ./productive-k3s-core.sh bom --json)"
+printf '%s\n' "$bundle_bom" | jq -e '
+  .cli.name == "productive-k3s-core" and
+  .bundle.bundle_version == "HEAD"
+' >/dev/null || fail "bundle bom JSON contract did not match expected values"
+pass "bom JSON contract is exposed from the built artifact"
+
 ADDON_TMP_DIR="$(mktemp -d)"
 ADDON_PKG_DIR="${ADDON_TMP_DIR}/pkg"
 ADDON_ARCHIVE="${ADDON_TMP_DIR}/demo-addon.tgz"
 ADDON_MARKER="${ADDON_TMP_DIR}/installed.txt"
+ADDON_KUBECONFIG="${ADDON_TMP_DIR}/kubeconfig"
 mkdir -p "${ADDON_PKG_DIR}/scripts"
+printf 'apiVersion: v1\nkind: Config\ncurrent-context: default\n' > "${ADDON_KUBECONFIG}"
 cat >"${ADDON_PKG_DIR}/addon.yaml" <<'EOF'
 apiVersion: addons.productive-k3s.io/v1
 kind: Addon
@@ -114,9 +172,15 @@ printf '%s\n' "$addon_validate_output" | grep -q "Addon package validation passe
 printf '%s\n' "$addon_validate_output" | grep -q "demo-addon" || fail "addon validation did not report addon metadata"
 pass "addon tgz validation works"
 
-(cd "$REPO_DIR" && ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}")
+(cd "$REPO_DIR" && ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" --kubeconfig "${ADDON_KUBECONFIG}")
 [[ -f "${ADDON_MARKER}" ]] || fail "addon install did not execute the packaged installer"
 pass "addon tgz install executes packaged installer"
+
+if (cd "$REPO_DIR" && ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" >/tmp/productive-k3s-core-addon-target.out 2>&1); then
+  fail "addon install without explicit target unexpectedly succeeded"
+fi
+grep -q "explicit target" /tmp/productive-k3s-core-addon-target.out || fail "addon install target validation message missing"
+pass "addon tgz install requires an explicit target"
 
 if (cd "$REPO_DIR" && ./productive-k3s-core.sh unsupported >/tmp/productive-k3s-core-cli-unsupported.out 2>&1); then
   fail "unsupported public CLI command unexpectedly succeeded"

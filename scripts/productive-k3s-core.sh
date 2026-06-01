@@ -2,6 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/component-versions.sh"
 BUNDLE_INFO_PATH="${SCRIPT_DIR}/../bundle-info.json"
 TELEMETRY_EVENT_SENDER="${SCRIPT_DIR}/send-telemetry-event.sh"
 TELEMETRY_MARKER="${TELEMETRY_MARKER:-pk3s-public-v1}"
@@ -11,11 +13,13 @@ usage() {
 Usage:
   ./productive-k3s-core.sh <command> [args...]
   ./productive-k3s-core.sh addon <validate|install> --tgz <file>
+  ./productive-k3s-core.sh addon install --tgz <file> (--kubeconfig <file> | --cluster-context <name>)
   ./productive-k3s-core.sh dev addon validate --source <dir>
   ./productive-k3s-core.sh [bootstrap args...]
 
 Operational commands:
   bundle      Show bundle metadata for automation
+  bom         Show a JSON bill of materials for this CLI/runtime
   preflight   Run host compatibility checks before bootstrap
   bootstrap   Run the interactive bootstrap flow
   backup      Capture a host and cluster backup snapshot
@@ -26,11 +30,13 @@ Operational commands:
 
 Examples:
   ./productive-k3s-core.sh bundle info --json
+  ./productive-k3s-core.sh bom --json
   ./productive-k3s-core.sh preflight
   ./productive-k3s-core.sh preflight --strict
   ./productive-k3s-core.sh bootstrap --dry-run
   ./productive-k3s-core.sh validate --strict
   ./productive-k3s-core.sh addon validate --tgz ./longhorn-addon.tgz
+  ./productive-k3s-core.sh addon install --tgz ./longhorn-addon.tgz --cluster-context default
 
 If no command is provided, or the first argument is an option, the wrapper
 defaults to `bootstrap` for release-installer compatibility.
@@ -139,6 +145,26 @@ prepare_telemetry_context() {
   export TELEMETRY_COMPONENT="core"
 }
 
+core_command_emits_telemetry() {
+  local command="${1:-}"
+  shift || true
+  case "${command}" in
+    bootstrap)
+      return 0
+      ;;
+    addon)
+      [[ "${1:-}" == "install" ]]
+      return
+      ;;
+    -*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 run_preflight() {
   "${SCRIPT_DIR}/preflight-host.sh" "$@"
 }
@@ -190,6 +216,81 @@ print_bundle_info_json() {
   "platform": "any",
   "api_compatibility": {
     "contract": "productive-k3s-cli-bundle-info/v1"
+  }
+}
+EOF
+}
+
+print_bom_json() {
+  local bundle_json version
+  bundle_json="$(print_bundle_info_json)"
+  version="$(printf '%s\n' "${bundle_json}" | sed -n 's/.*"bundle_version": "\(.*\)".*/\1/p' | head -n1)"
+  cat <<EOF
+{
+  "schema_version": "1",
+  "bom_type": "productive-k3s-cli-bom/v1",
+  "cli": {
+    "name": "productive-k3s-core",
+    "version": "${version}",
+    "entrypoint": "productive-k3s-core.sh"
+  },
+  "implementation": {
+    "language": "bash",
+    "bash_version": "$(json_escape "${BASH_VERSION:-unknown}")"
+  },
+  "bundle": ${bundle_json},
+  "platform_support": {
+    "host_os": ["ubuntu-24.04", "ubuntu-22.04", "debian-13", "debian-12"],
+    "architectures": ["amd64", "arm64"],
+    "supported_matrix": [
+      {"os": "ubuntu-24.04", "architectures": ["amd64", "arm64"]},
+      {"os": "ubuntu-22.04", "architectures": ["amd64"]},
+      {"os": "debian-13", "architectures": ["amd64"]},
+      {"os": "debian-12", "architectures": ["amd64"]}
+    ],
+    "retained_validation_evidence": {
+      "amd64": ["ubuntu-24.04", "ubuntu-22.04", "debian-13", "debian-12"],
+      "arm64": ["ubuntu-24.04"]
+    }
+  },
+  "requirements": {
+    "required_commands": [
+      {"name": "bash", "min_version": "5.1", "reason": "public CLI and bootstrap runtime on supported Linux targets"},
+      {"name": "sudo", "min_version": "1.9", "reason": "host package installation, systemd control, and filesystem changes"},
+      {"name": "curl", "min_version": "7.81", "reason": "downloads k3s, Helm, release artifacts, and manifests"},
+      {"name": "getent", "min_version": "glibc-2.35", "reason": "host user and group lookups during bootstrap"},
+      {"name": "tar", "min_version": "1.34", "reason": "release bundle extraction and staging flows"},
+      {"name": "sha256sum", "min_version": "8.32", "reason": "artifact checksum verification"},
+      {"name": "mktemp", "min_version": "8.32", "reason": "safe temporary workspace creation"}
+    ],
+    "optional_commands": [
+      {"name": "docker", "min_version": "20.10", "reason": "local registry trust checks and image-push workflows"},
+      {"name": "multipass", "min_version": "1.14", "reason": "repository live validation on supported Linux VMs"},
+      {"name": "jq", "min_version": "1.6", "reason": "operator inspection and selected bootstrap checks"},
+      {"name": "kubectl", "min_version": "1.35.5", "reason": "standalone client convenience outside sudo k3s kubectl"},
+      {"name": "helm", "min_version": "${PRODUCTIVE_K3S_HELM_VERSION#v}", "reason": "preinstalled Helm convenience; managed bootstrap pins the same version"}
+    ]
+  },
+  "components": {
+    "managed": ["k3s", "helm", "cert-manager", "longhorn", "rancher", "registry", "nfs", "local-hosts", "docker-registry-trust"],
+    "bootstrap_modes": ["single-node", "server", "agent", "stack"],
+    "versions": {
+      "k3s": "$(json_escape "${PRODUCTIVE_K3S_K3S_VERSION}")",
+      "helm": "$(json_escape "${PRODUCTIVE_K3S_HELM_VERSION}")",
+      "cert-manager": "$(json_escape "${PRODUCTIVE_K3S_CERT_MANAGER_VERSION}")",
+      "longhorn": "$(json_escape "${PRODUCTIVE_K3S_LONGHORN_VERSION}")",
+      "rancher": "$(json_escape "${PRODUCTIVE_K3S_RANCHER_VERSION}")",
+      "registry_image": "$(json_escape "${PRODUCTIVE_K3S_REGISTRY_IMAGE}")"
+    },
+    "version_policy": {
+      "k3s": "pinned",
+      "helm": "pinned",
+      "cert-manager": "pinned",
+      "longhorn": "pinned",
+      "rancher": "pinned",
+      "registry": "pinned-image",
+      "nfs": "host-package-managed"
+    }
   }
 }
 EOF
@@ -312,24 +413,38 @@ run_addon_validate() {
 
 run_addon_install() {
   local tgz_path=""
+  local kubeconfig_path="${KUBECONFIG:-}"
+  local cluster_context="${PK3S_KUBE_CONTEXT:-}"
   while (($# > 0)); do
     case "$1" in
       --tgz)
         tgz_path="${2:-}"
         shift 2
         ;;
+      --kubeconfig)
+        kubeconfig_path="${2:-}"
+        shift 2
+        ;;
+      --cluster-context)
+        cluster_context="${2:-}"
+        shift 2
+        ;;
       *)
-        printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file>\n' >&2
+        printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> (--kubeconfig <file> | --cluster-context <name>)\n' >&2
         return 2
         ;;
     esac
   done
   [[ -n "${tgz_path}" ]] || {
-    printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file>\n' >&2
+    printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> (--kubeconfig <file> | --cluster-context <name>)\n' >&2
+    return 2
+  }
+  [[ -n "${kubeconfig_path}" || -n "${cluster_context}" ]] || {
+    printf 'addon install requires an explicit target; use --kubeconfig <file> or --cluster-context <name>\n' >&2
     return 2
   }
 
-  local tmp_dir manifest metadata install_script manifest_dir install_path
+  local tmp_dir manifest metadata install_script manifest_dir install_path target_kubeconfig cleanup_kubeconfig=""
   tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
   manifest="$(resolve_addon_manifest "${tmp_dir}")" || {
     local rc=$?
@@ -349,13 +464,45 @@ run_addon_install() {
     printf 'addon package install script not found: %s\n' "${install_script}" >&2
     return 4
   }
+  if [[ -n "${cluster_context}" ]]; then
+    local source_kubeconfig
+    source_kubeconfig="${kubeconfig_path:-${KUBECONFIG:-${HOME}/.kube/config}}"
+    [[ -f "${source_kubeconfig}" ]] || {
+      rm -rf "${tmp_dir}"
+      printf 'kubeconfig not found for requested cluster context: %s\n' "${source_kubeconfig}" >&2
+      return 4
+    }
+    command -v kubectl >/dev/null 2>&1 || {
+      rm -rf "${tmp_dir}"
+      printf 'kubectl is required to resolve cluster contexts for addon installs\n' >&2
+      return 4
+    }
+    cleanup_kubeconfig="$(mktemp)"
+    cp "${source_kubeconfig}" "${cleanup_kubeconfig}"
+    if ! kubectl --kubeconfig "${cleanup_kubeconfig}" config use-context "${cluster_context}" >/dev/null 2>&1; then
+      rm -rf "${tmp_dir}"
+      rm -f "${cleanup_kubeconfig}"
+      printf 'cluster context not found in kubeconfig: %s\n' "${cluster_context}" >&2
+      return 4
+    fi
+    target_kubeconfig="${cleanup_kubeconfig}"
+  else
+    [[ -f "${kubeconfig_path}" ]] || {
+      rm -rf "${tmp_dir}"
+      printf 'kubeconfig not found: %s\n' "${kubeconfig_path}" >&2
+      return 4
+    }
+    target_kubeconfig="${kubeconfig_path}"
+  fi
 
   printf 'Executing packaged addon installer: %s\n' "${install_script}"
   (
     cd "${manifest_dir}"
+    export KUBECONFIG="${target_kubeconfig}"
     bash "${install_path}"
   )
   local rc=$?
+  rm -f "${cleanup_kubeconfig}"
   rm -rf "${tmp_dir}"
   return "${rc}"
 }
@@ -399,7 +546,7 @@ run_addon() {
       run_addon_install "$@"
       ;;
     *)
-      printf 'Usage: ./productive-k3s-core.sh addon <validate|install> --tgz <file>\n' >&2
+      printf 'Usage: ./productive-k3s-core.sh addon <validate|install> [flags]\n' >&2
       return 2
       ;;
   esac
@@ -428,6 +575,14 @@ run_bundle() {
   print_bundle_info_json
 }
 
+run_bom() {
+  if (($# != 1)) || [[ "$1" != "--json" ]]; then
+    printf 'Usage: ./productive-k3s-core.sh bom --json\n' >&2
+    return 2
+  fi
+  print_bom_json
+}
+
 run_validate() {
   local translated_args=()
   while (($# > 0)); do
@@ -453,7 +608,7 @@ main() {
     command="bootstrap"
   fi
 
-  if [[ "${command}" != "bundle" && "${command}" != "help" && "${command}" != "-h" && "${command}" != "--help" ]]; then
+  if core_command_emits_telemetry "${command}" "$@"; then
     prepare_telemetry_context
     if is_truthy "${TELEMETRY_ENABLED:-false}"; then
       write_generic_telemetry_event "core.command.started" "${command}" "started"
@@ -467,6 +622,10 @@ main() {
     bundle)
       shift
       run_bundle "$@"
+      ;;
+    bom)
+      shift
+      run_bom "$@"
       ;;
     preflight)
       shift
@@ -503,7 +662,7 @@ main() {
       ;;
   esac
 
-  if [[ "${command}" != "bundle" && "${command}" != "help" && "${command}" != "-h" && "${command}" != "--help" ]] && is_truthy "${TELEMETRY_ENABLED:-false}"; then
+  if core_command_emits_telemetry "${command}" "$@" && is_truthy "${TELEMETRY_ENABLED:-false}"; then
     if (( rc == 0 )); then
       write_generic_telemetry_event "core.command.completed" "${command}" "success"
     else
