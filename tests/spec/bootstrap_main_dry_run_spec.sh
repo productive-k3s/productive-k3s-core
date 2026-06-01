@@ -44,7 +44,7 @@ Describe 'bootstrap dry-run main flows'
     The status should equal 0
     The output should include 'Mode: single-node'
     The output should include 'Planned actions'
-    The output should include '[dry-run] Installing k3s (stable channel)'
+    The output should include '[dry-run] Installing k3s (v1.36.1+k3s1)'
     The output should include '[dry-run] Installing Helm'
     The output should include '[dry-run] Creating ClusterIssuer selfsigned'
     The output should include '[dry-run] Installing the in-cluster registry'
