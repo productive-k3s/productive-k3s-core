@@ -267,7 +267,7 @@ print_bom_json() {
       {"name": "docker", "min_version": "20.10", "reason": "local registry trust checks and image-push workflows"},
       {"name": "multipass", "min_version": "1.14", "reason": "repository live validation on supported Linux VMs"},
       {"name": "jq", "min_version": "1.6", "reason": "operator inspection and selected bootstrap checks"},
-      {"name": "kubectl", "min_version": "1.36.1", "reason": "standalone client convenience outside sudo k3s kubectl"},
+      {"name": "kubectl", "min_version": "1.35.5", "reason": "standalone client convenience outside sudo k3s kubectl"},
       {"name": "helm", "min_version": "${PRODUCTIVE_K3S_HELM_VERSION#v}", "reason": "preinstalled Helm convenience; managed bootstrap pins the same version"}
     ]
   },

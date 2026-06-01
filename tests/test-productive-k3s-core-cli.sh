@@ -68,7 +68,7 @@ printf '%s\n' "$local_bom" | jq -e '
   (.requirements.required_commands | any(.name == "tar" and .min_version == "1.34")) and
   (.requirements.required_commands | any(.name == "sha256sum" and .min_version == "8.32")) and
   (.requirements.optional_commands | any(.name == "helm" and .min_version == "3.21.0")) and
-  .components.versions.k3s == "v1.36.1+k3s1" and
+  .components.versions.k3s == "v1.35.5+k3s1" and
   .components.versions.helm == "v3.21.0" and
   .components.versions["cert-manager"] == "v1.19.4" and
   .components.versions.longhorn == "v1.11.1" and

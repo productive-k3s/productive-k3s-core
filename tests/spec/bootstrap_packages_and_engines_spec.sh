@@ -68,8 +68,8 @@ Describe 'bootstrap package and engine helpers'
       MODE=single-node
       install_k3s_with_native'
     The status should equal 0
-    The output should include 'Installing k3s (v1.36.1+k3s1)'
-    The output should include 'INSTALL_K3S_VERSION=v1.36.1+k3s1'
+    The output should include 'Installing k3s (v1.35.5+k3s1)'
+    The output should include 'INSTALL_K3S_VERSION=v1.35.5+k3s1'
   End
 
   It 'installs an agent with native k3s in dry-run mode'
@@ -84,7 +84,7 @@ Describe 'bootstrap package and engine helpers'
     The output should include 'K3S_URL=https://server.example.local:6443'
     The output should include 'K3S_TOKEN=token-1'
     The output should include 'INSTALL_K3S_EXEC=agent'
-    The output should include 'INSTALL_K3S_VERSION=v1.36.1+k3s1'
+    The output should include 'INSTALL_K3S_VERSION=v1.35.5+k3s1'
   End
 
   It 'requires agent connection details for native agent installs'
@@ -128,7 +128,7 @@ Describe 'bootstrap package and engine helpers'
     The status should equal 0
     The output should include 'k3sup install --local --local-path'
     The output should include 'productive-k3s-single-node'
-    The output should include '--k3s-version v1.36.1+k3s1'
+    The output should include '--k3s-version v1.35.5+k3s1'
   End
 
   It 'joins an agent with k3sup in dry-run mode'
@@ -146,7 +146,7 @@ Describe 'bootstrap package and engine helpers'
     The output should include 'k3sup join'
     The output should include '--server-ip server.example.local'
     The output should include '--server-user ubuntu'
-    The output should include '--k3s-version v1.36.1+k3s1'
+    The output should include '--k3s-version v1.35.5+k3s1'
   End
 
   It 'installs Helm through the official script in dry-run mode'
