@@ -23,6 +23,19 @@ ARCHIVE_NAME="productive-k3s-core-${TAG}.tar.gz"
 ARCHIVE_PATH="${OUTPUT_DIR}/${ARCHIVE_NAME}"
 TMP_DIR="$(mktemp -d)"
 STAGE_DIR="${TMP_DIR}/productive-k3s-core-${TAG}"
+INCLUDE_PATHS=(
+  "LICENSE"
+  "README.md"
+  "productive-k3s-core.sh"
+  "scripts/productive-k3s-core.sh"
+  "scripts/component-versions.sh"
+  "scripts/preflight-host.sh"
+  "scripts/bootstrap-k3s-stack.sh"
+  "scripts/backup-k3s-stack.sh"
+  "scripts/validate-k3s-stack.sh"
+  "scripts/send-telemetry.sh"
+  "scripts/send-telemetry-event.sh"
+)
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -41,21 +54,13 @@ git -C "$REPO_ROOT" rev-parse --verify "${TAG}^{commit}" >/dev/null 2>&1 || {
 if [[ "$TAG" == "HEAD" ]]; then
   (
     cd "$REPO_ROOT"
-    tar \
-      --exclude=.git \
-      --exclude=.codex \
-      --exclude=dist \
-      --exclude=runs \
-      --exclude=test-artifacts \
-      --exclude=docs/.venv \
-      --exclude=docs/site \
-      -cf - .
+    tar -cf - "${INCLUDE_PATHS[@]}"
   ) | (
     cd "$STAGE_DIR"
     tar -xf -
   )
 else
-  git -C "$REPO_ROOT" archive --format=tar "$TAG" | (
+  git -C "$REPO_ROOT" archive --format=tar "$TAG" -- "${INCLUDE_PATHS[@]}" | (
     cd "$STAGE_DIR"
     tar -xf -
   )

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/component-versions.sh"
+
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_GREEN=$'\033[1;32m'
   COLOR_YELLOW=$'\033[1;33m'
@@ -411,7 +415,7 @@ print_plan() {
 }
 
 apply_kubectl_delete_cert_manager() {
-  sudo k3s kubectl delete -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml || true
+  sudo k3s kubectl delete -f "https://github.com/cert-manager/cert-manager/releases/download/${PRODUCTIVE_K3S_CERT_MANAGER_VERSION:-v1.19.4}/cert-manager.yaml" || true
   sudo k3s kubectl delete namespace cert-manager --ignore-not-found --wait=false || true
 }
 

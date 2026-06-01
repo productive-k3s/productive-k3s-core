@@ -17,7 +17,7 @@ Describe 'bootstrap component installers'
       DRY_RUN=1
       preflight_cert_manager_install() { :; }
       ensure_namespace() { printf "ns:%s|" "$1"; }
-      run_cmd() { printf "cmd:%s|" "$1"; }
+      run_cmd() { local label="$1"; shift; printf "cmd:%s|%s|" "$label" "$*"; }
       wait_pods_ready() { printf "pods:%s:%s|" "$1" "$2"; }
       wait_service_endpoints() { printf "svc:%s:%s:%s|" "$1" "$2" "$3"; }
       ensure_cert_manager n install
@@ -25,6 +25,7 @@ Describe 'bootstrap component installers'
     The status should equal 0
     The output should include 'ns:cert-manager|'
     The output should include 'cmd:Applying cert-manager manifest|'
+    The output should include 'v1.19.4/cert-manager.yaml'
     The output should include 'pods:cert-manager:420|'
     The output should include 'svc:cert-manager:cert-manager-webhook:180|'
     The output should include 'track=cert-manager'
@@ -77,8 +78,8 @@ Describe 'bootstrap component installers'
       ensure_packages() { :; }
       ensure_iscsid() { :; }
       ensure_helm_repo() { printf "repo:%s|" "$1"; }
-      run_cmd() { printf "cmd:%s|" "$1"; }
-      run_cmd_with_retries() { printf "retry:%s|" "$1"; }
+      run_cmd() { local label="$1"; shift; printf "cmd:%s|%s|" "$label" "$*"; }
+      run_cmd_with_retries() { local label="$1"; shift 3; printf "retry:%s|%s|" "$label" "$*"; }
       ensure_namespace() { printf "ns:%s|" "$1"; }
       wait_pods_ready() { printf "pods:%s:%s|" "$1" "$2"; }
       apply_manifest() { printf "manifest:%s\n%s\n" "$1" "$2"; }
@@ -92,6 +93,7 @@ Describe 'bootstrap component installers'
     The output should include 'repo:longhorn|'
     The output should include 'retry:Updating Helm repos for Longhorn|'
     The output should include 'retry:Installing Longhorn|'
+    The output should include '--version v1.11.1'
     The output should include 'manifest:Creating Longhorn single-node StorageClass'
     The output should include 'numberOfReplicas: "1"'
     The output should include 'cmd:Setting Longhorn minimal available percentage to 10|'
@@ -105,7 +107,7 @@ Describe 'bootstrap component installers'
       DRY_RUN=1
       preflight_rancher_install() { :; }
       ensure_helm_repo() { printf "repo:%s|" "$1"; }
-      run_cmd_with_retries() { printf "retry:%s|" "$1"; }
+      run_cmd_with_retries() { local label="$1"; shift 3; printf "retry:%s|%s|" "$label" "$*"; }
       ensure_namespace() { printf "ns:%s|" "$1"; }
       install_rancher_if_needed n install 1 letsencrypt-prod rancher.home.arpa admin123 ops@example.test staging
       printf "track=%s|result=%s" "${DRY_RUN_INSTALL[0]}" "${MANIFEST_RESULT[rancher]}"'
@@ -113,6 +115,7 @@ Describe 'bootstrap component installers'
     The output should include 'repo:rancher-latest|'
     The output should include 'retry:Updating Helm repos for Rancher|'
     The output should include 'retry:Installing Rancher|'
+    The output should include '--version v2.14.2'
     The output should include 'ns:cattle-system|'
     The output should include 'track=Rancher'
     The output should include 'result=dry-run'
@@ -123,7 +126,7 @@ Describe 'bootstrap component installers'
       DRY_RUN=1
       preflight_rancher_install() { :; }
       ensure_helm_repo() { :; }
-      run_cmd_with_retries() { printf "retry:%s|" "$1"; }
+      run_cmd_with_retries() { local label="$1"; shift 3; printf "retry:%s|%s|" "$label" "$*"; }
       ensure_namespace() { :; }
       secret_exists() { return 1; }
       apply_manifest() { printf "%s\n%s\n" "$1" "$2"; }
@@ -138,6 +141,7 @@ Describe 'bootstrap component installers'
     The output should include 'wait-cert:cattle-system:rancher-tls:180|'
     The output should include 'ca-secret|'
     The output should include 'retry:Installing Rancher|'
+    The output should include '--version v2.14.2'
   End
 
   It 'installs the registry with auth and certificate wiring'
@@ -160,6 +164,7 @@ Describe 'bootstrap component installers'
     The output should include '[dry-run] Creating/updating registry basic-auth secret'
     The output should include 'username: reguser'
     The output should include 'Installing the in-cluster registry'
+    The output should include 'image: registry:2.8.3'
     The output should include 'secretName: registry-auth'
     The output should include 'storageClassName: longhorn-single'
     The output should include 'registry.home.arpa'

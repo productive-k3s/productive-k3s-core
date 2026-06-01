@@ -33,7 +33,8 @@ The repository support guarantees are still the tested platform and mode matrix 
 
 Current public support baseline:
 
-- Ubuntu `24.04` and `22.04` on `amd64`
+- Ubuntu `24.04` on `amd64` and `arm64`
+- Ubuntu `22.04` on `amd64`
 - Debian `12` and `13` on `amd64`
 
 ## Documentation
@@ -106,6 +107,17 @@ Before bootstrap, you can validate the target host with [Host preflight](https:/
 ```bash
 curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight
 ```
+
+To inspect the CLI/runtime bill of materials for a local checkout or a published bundle:
+
+```bash
+./productive-k3s-core.sh bundle info --json
+./productive-k3s-core.sh bom --json
+```
+
+The versions pinned for the managed stack components live in [scripts/component-versions.sh](./scripts/component-versions.sh). The bootstrap flow and the BOM both read from that same file so the reported versions match what the installer actually selects.
+
+Telemetry consent is only relevant for mutating public CLI flows such as `bootstrap` and `addon install`. Read-only commands like `help`, `bundle info --json`, and `bom --json` do not prompt for telemetry and do not emit command-level telemetry events.
 
 If you also want full repository validation coverage, add:
 

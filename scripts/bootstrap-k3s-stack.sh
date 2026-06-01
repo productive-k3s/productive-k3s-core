@@ -7,6 +7,8 @@ set -euo pipefail
 # - Leaves existing cluster components untouched by default
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/component-versions.sh"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_GREEN=$'\033[1;32m'
@@ -1424,14 +1426,14 @@ install_k3s_with_native() {
       exit 1
     fi
     local install_cmd=""
-    printf -v install_cmd 'curl -sfL https://get.k3s.io | K3S_URL=%q K3S_TOKEN=%q INSTALL_K3S_EXEC=agent sh -' "$AGENT_SERVER_URL" "$AGENT_CLUSTER_TOKEN"
+    printf -v install_cmd 'curl -sfL https://get.k3s.io | K3S_URL=%q K3S_TOKEN=%q INSTALL_K3S_EXEC=agent INSTALL_K3S_VERSION=%q sh -' "$AGENT_SERVER_URL" "$AGENT_CLUSTER_TOKEN" "${PRODUCTIVE_K3S_K3S_VERSION}"
     log "Installing k3s agent..."
     run_shell "Installing k3s agent" "$install_cmd"
     return
   fi
 
-  log "Installing k3s (stable channel)..."
-  run_shell "Installing k3s (stable channel)" "curl -sfL https://get.k3s.io | sh -"
+  log "Installing k3s (${PRODUCTIVE_K3S_K3S_VERSION})..."
+  run_shell "Installing k3s (${PRODUCTIVE_K3S_K3S_VERSION})" "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${PRODUCTIVE_K3S_K3S_VERSION} sh -"
 }
 
 k3sup_ssh_args() {
@@ -1477,7 +1479,7 @@ install_k3s_with_k3sup() {
     single-node|server)
       log "Installing k3s with k3sup..."
       run_shell "Creating ${HOME}/.kube for k3sup kubeconfig output" "mkdir -p ${HOME}/.kube"
-      printf -v install_cmd 'k3sup install --local --local-path %q --context %q' "${HOME}/.kube/k3sup-${MODE}.yaml" "productive-k3s-${MODE}"
+      printf -v install_cmd 'k3sup install --local --local-path %q --context %q --k3s-version %q' "${HOME}/.kube/k3sup-${MODE}.yaml" "productive-k3s-${MODE}" "${PRODUCTIVE_K3S_K3S_VERSION}"
       run_shell "Installing k3s with k3sup" "$install_cmd"
       ;;
     agent)
@@ -1496,11 +1498,11 @@ install_k3s_with_k3sup() {
         exit 1
       }
 
-      printf -v install_cmd 'k3sup join %s --server-ip %q --server-user %q --k3s-channel %q' \
+      printf -v install_cmd 'k3sup join %s --server-ip %q --server-user %q --k3s-version %q' \
         "$(k3sup_remote_target_args --ip "$PRODUCTIVE_K3S_SSH_HOST" "$PRODUCTIVE_K3S_SSH_USER")" \
         "$server_host" \
         "${PRODUCTIVE_K3S_SSH_USER}" \
-        "stable"
+        "${PRODUCTIVE_K3S_K3S_VERSION}"
       log "Joining k3s agent with k3sup..."
       run_shell "Joining k3s agent with k3sup" "$install_cmd"
       ;;
@@ -1525,8 +1527,8 @@ install_helm_if_needed() {
 
   track_install "helm"
   ensure_packages "Helm installation" curl ca-certificates
-  log "Installing Helm..."
-  run_shell "Installing Helm" "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
+  log "Installing Helm (${PRODUCTIVE_K3S_HELM_VERSION})..."
+  run_shell "Installing Helm (${PRODUCTIVE_K3S_HELM_VERSION})" "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=${PRODUCTIVE_K3S_HELM_VERSION} bash"
   manifest_complete_component "helm" "$(result_for_mode installed)"
 }
 
@@ -1549,7 +1551,7 @@ ensure_cert_manager() {
   preflight_cert_manager_install || exit 1
   log "Installing cert-manager..."
   ensure_namespace cert-manager
-  run_cmd "Applying cert-manager manifest" sudo k3s kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+  run_cmd "Applying cert-manager manifest" sudo k3s kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${PRODUCTIVE_K3S_CERT_MANAGER_VERSION}/cert-manager.yaml"
   wait_pods_ready "cert-manager" 420
   wait_service_endpoints "cert-manager" "cert-manager-webhook" 180
   manifest_complete_component "cert_manager" "$(result_for_mode installed)"
@@ -1650,6 +1652,7 @@ install_longhorn_if_needed() {
   ensure_namespace longhorn-system
   run_cmd_with_retries "Installing Longhorn" 300 15 helm install longhorn longhorn/longhorn \
     --namespace longhorn-system \
+    --version "${PRODUCTIVE_K3S_LONGHORN_VERSION}" \
     --set defaultSettings.defaultReplicaCount="${replica_count}" \
     --set defaultSettings.defaultDataPath="${longhorn_data_path}"
   wait_pods_ready "longhorn-system" 600
@@ -1773,6 +1776,7 @@ EOF
   if [[ "$tls_choice" == "1" ]]; then
     run_cmd_with_retries "Installing Rancher" 300 15 helm install rancher rancher-latest/rancher \
       --namespace cattle-system \
+      --version "${PRODUCTIVE_K3S_RANCHER_VERSION}" \
       --set hostname="${rancher_host}" \
       --set bootstrapPassword="${admin_pass}" \
       --set ingress.tls.source=letsEncrypt \
@@ -1781,6 +1785,7 @@ EOF
   else
     run_cmd_with_retries "Installing Rancher" 300 15 helm install rancher rancher-latest/rancher \
       --namespace cattle-system \
+      --version "${PRODUCTIVE_K3S_RANCHER_VERSION}" \
       --set hostname="${rancher_host}" \
       --set bootstrapPassword="${admin_pass}" \
       --set ingress.tls.source=secret \
@@ -1924,7 +1929,7 @@ spec:
     spec:
       containers:
       - name: registry
-        image: registry:2
+        image: ${PRODUCTIVE_K3S_REGISTRY_IMAGE}
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5000
