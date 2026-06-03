@@ -13,7 +13,7 @@ usage() {
 Usage:
   ./productive-k3s-core.sh <command> [args...]
   ./productive-k3s-core.sh addon <validate|install> --tgz <file>
-  ./productive-k3s-core.sh addon install --tgz <file> (--kubeconfig <file> | --cluster-context <name>)
+  ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)
   ./productive-k3s-core.sh dev addon validate --source <dir>
   ./productive-k3s-core.sh [bootstrap args...]
 
@@ -37,6 +37,7 @@ Examples:
   ./productive-k3s-core.sh validate --strict
   ./productive-k3s-core.sh addon validate --tgz ./longhorn-addon.tgz
   ./productive-k3s-core.sh addon install --tgz ./longhorn-addon.tgz --cluster-context default
+  ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal --cluster-context default
 
 If no command is provided, or the first argument is an option, the wrapper
 defaults to `bootstrap` for release-installer compatibility.
@@ -106,6 +107,15 @@ write_generic_telemetry_event() {
   local command_name="$2"
   local result="$3"
   local event_file
+  local telemetry_session_id
+  local telemetry_run_id
+  local telemetry_enabled
+
+  telemetry_session_id="${TELEMETRY_SESSION_ID:-$(generate_telemetry_id)}"
+  telemetry_run_id="${TELEMETRY_RUN_ID:-$(generate_telemetry_id)}"
+  telemetry_enabled="${TELEMETRY_ENABLED:-false}"
+  export TELEMETRY_SESSION_ID="${telemetry_session_id}"
+  export TELEMETRY_RUN_ID="${telemetry_run_id}"
 
   event_file="$(mktemp)"
   {
@@ -114,8 +124,8 @@ write_generic_telemetry_event() {
     printf '  "event_family": "usage",\n'
     printf '  "event_name": "%s",\n' "$(json_escape "${event_name}")"
     printf '  "sent_at": "%s",\n' "$(json_escape "$(date -Iseconds)")"
-    printf '  "session_id": "%s",\n' "$(json_escape "${TELEMETRY_SESSION_ID}")"
-    printf '  "run_id": "%s",\n' "$(json_escape "${TELEMETRY_RUN_ID}")"
+    printf '  "session_id": "%s",\n' "$(json_escape "${telemetry_session_id}")"
+    printf '  "run_id": "%s",\n' "$(json_escape "${telemetry_run_id}")"
     printf '  "parent_run_id": "%s",\n' "$(json_escape "${TELEMETRY_PARENT_RUN_ID:-}")"
     printf '  "component": "core",\n'
     printf '  "command": {\n'
@@ -125,7 +135,7 @@ write_generic_telemetry_event() {
     printf '  "client": {\n'
     printf '    "repository": "productive-k3s-core",\n'
     printf '    "script": "scripts/productive-k3s-core.sh",\n'
-    printf '    "telemetry_enabled": "%s"\n' "$(json_escape "${TELEMETRY_ENABLED}")"
+    printf '    "telemetry_enabled": "%s"\n' "$(json_escape "${telemetry_enabled}")"
     printf '  },\n'
     printf '  "telemetry_meta": {\n'
     printf '    "delivery_mode": "best-effort",\n'
@@ -134,7 +144,7 @@ write_generic_telemetry_event() {
     printf '}\n'
   } > "${event_file}"
 
-  TELEMETRY_RUN_ID="${TELEMETRY_RUN_ID}" TELEMETRY_MARKER="${TELEMETRY_MARKER}" bash "${TELEMETRY_EVENT_SENDER}" "${event_file}" >/dev/null 2>&1 || true
+  TELEMETRY_RUN_ID="${telemetry_run_id}" TELEMETRY_MARKER="${TELEMETRY_MARKER:-}" bash "${TELEMETRY_EVENT_SENDER}" "${event_file}" >/dev/null 2>&1 || true
   rm -f "${event_file}"
 }
 
@@ -312,6 +322,14 @@ addon_yaml_get() {
     /^metadata:/ { section="metadata"; subsection=""; next }
     /^spec:/ { section="spec"; subsection=""; next }
     section == "spec" && /^  install:/ { subsection="install"; next }
+    section == "spec" && /^  productiveK3s:/ { subsection="productiveK3s"; exposure=""; service=""; next }
+    section == "spec" && subsection == "productiveK3s" && /^    exposure:/ { exposure="exposure"; service=""; next }
+    section == "spec" && subsection == "productiveK3s" && exposure == "exposure" && /^      public:/ { exposure="public"; service=""; next }
+    section == "spec" && subsection == "productiveK3s" && exposure == "public" && key == "spec.productiveK3s.exposure.public.mode" && /^        mode:/ { print; exit }
+    section == "spec" && subsection == "productiveK3s" && exposure == "public" && key == "spec.productiveK3s.exposure.public.namespace" && /^        namespace:/ { print; exit }
+    section == "spec" && subsection == "productiveK3s" && exposure == "public" && /^        service:/ { service="service"; next }
+    section == "spec" && subsection == "productiveK3s" && exposure == "public" && service == "service" && key == "spec.productiveK3s.exposure.public.service.name" && /^          name:/ { print; exit }
+    section == "spec" && subsection == "productiveK3s" && exposure == "public" && service == "service" && key == "spec.productiveK3s.exposure.public.service.port" && /^          port:/ { print; exit }
     section == "metadata" && key == "metadata.name" && /^  name:/ { print; exit }
     section == "metadata" && key == "metadata.version" && /^  version:/ { print; exit }
     section == "spec" && key == "spec.type" && /^  type:/ { print; exit }
@@ -369,6 +387,83 @@ validate_addon_manifest() {
   printf '%s\n%s\n%s\n' "${addon_name}" "${addon_type}" "${install_script}"
 }
 
+resolve_addon_public_ingress_support() {
+  local manifest="$1"
+  local mode namespace service_name service_port
+  mode="$(trim_yaml_value "$(addon_yaml_get "${manifest}" "spec.productiveK3s.exposure.public.mode")")"
+  namespace="$(trim_yaml_value "$(addon_yaml_get "${manifest}" "spec.productiveK3s.exposure.public.namespace")")"
+  service_name="$(trim_yaml_value "$(addon_yaml_get "${manifest}" "spec.productiveK3s.exposure.public.service.name")")"
+  service_port="$(trim_yaml_value "$(addon_yaml_get "${manifest}" "spec.productiveK3s.exposure.public.service.port")")"
+  printf '%s\n%s\n%s\n%s\n' "${mode}" "${namespace}" "${service_name}" "${service_port}"
+}
+
+is_valid_public_host() {
+  local host="${1:-}"
+  [[ -n "${host}" && "${host}" != *" "* && "${host}" == *.* && "${host}" =~ ^[A-Za-z0-9.-]+$ ]]
+}
+
+apply_addon_public_ingress() {
+  local manifest="$1"
+  local addon_name="$2"
+  local kubeconfig_path="$3"
+  local public_host="$4"
+  local ingress_metadata mode namespace service_name service_port ingress_name existing
+
+  is_valid_public_host "${public_host}" || {
+    printf 'invalid public host: %s\n' "${public_host}" >&2
+    return 4
+  }
+  ingress_metadata="$(resolve_addon_public_ingress_support "${manifest}")"
+  mode="$(printf '%s\n' "${ingress_metadata}" | sed -n '1p')"
+  namespace="$(printf '%s\n' "${ingress_metadata}" | sed -n '2p')"
+  service_name="$(printf '%s\n' "${ingress_metadata}" | sed -n '3p')"
+  service_port="$(printf '%s\n' "${ingress_metadata}" | sed -n '4p')"
+  [[ "${mode}" == "ingress" && -n "${namespace}" && -n "${service_name}" && -n "${service_port}" ]] || {
+    printf 'addon package does not declare basic public ingress exposure support\n' >&2
+    return 4
+  }
+  command -v kubectl >/dev/null 2>&1 || {
+    printf 'kubectl is required to publish addon ingresses\n' >&2
+    return 4
+  }
+
+  ingress_name="${addon_name}-public"
+  existing="$(
+    kubectl --kubeconfig "${kubeconfig_path}" get ingress -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"|"}{.metadata.name}{"|"}{range .spec.rules[*]}{.host}{"\n"}{end}{end}' 2>/dev/null || true
+  )"
+  while IFS='|' read -r existing_namespace existing_name existing_host; do
+    [[ -n "${existing_host}" ]] || continue
+    if [[ "${existing_host}" == "${public_host}" && ! ( "${existing_namespace}" == "${namespace}" && "${existing_name}" == "${ingress_name}" ) ]]; then
+      printf 'public host is already in use by another ingress: %s\n' "${public_host}" >&2
+      return 4
+    fi
+  done <<< "${existing}"
+
+  kubectl --kubeconfig "${kubeconfig_path}" apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${ingress_name}
+  namespace: ${namespace}
+  labels:
+    app.kubernetes.io/managed-by: productive-k3s-core
+    addons.productive-k3s.io/name: ${addon_name}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: ${public_host}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ${service_name}
+                port:
+                  number: ${service_port}
+EOF
+}
+
 run_addon_validate() {
   local tgz_path=""
   while (($# > 0)); do
@@ -415,6 +510,7 @@ run_addon_install() {
   local tgz_path=""
   local kubeconfig_path="${KUBECONFIG:-}"
   local cluster_context="${PK3S_KUBE_CONTEXT:-}"
+  local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
   while (($# > 0)); do
     case "$1" in
       --tgz)
@@ -429,14 +525,18 @@ run_addon_install() {
         cluster_context="${2:-}"
         shift 2
         ;;
+      --public-host)
+        public_host="${2:-}"
+        shift 2
+        ;;
       *)
-        printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> (--kubeconfig <file> | --cluster-context <name>)\n' >&2
+        printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)\n' >&2
         return 2
         ;;
     esac
   done
   [[ -n "${tgz_path}" ]] || {
-    printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> (--kubeconfig <file> | --cluster-context <name>)\n' >&2
+    printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)\n' >&2
     return 2
   }
   [[ -n "${kubeconfig_path}" || -n "${cluster_context}" ]] || {
@@ -502,6 +602,9 @@ run_addon_install() {
     bash "${install_path}"
   )
   local rc=$?
+  if (( rc == 0 )) && [[ -n "${public_host}" ]]; then
+    apply_addon_public_ingress "${manifest}" "$(printf '%s\n' "${metadata}" | sed -n '1p')" "${target_kubeconfig}" "${public_host}" || rc=$?
+  fi
   rm -f "${cleanup_kubeconfig}"
   rm -rf "${tmp_dir}"
   return "${rc}"

@@ -119,6 +119,20 @@ The versions pinned for the managed stack components live in [scripts/component-
 
 Telemetry consent is only relevant for mutating public CLI flows such as `bootstrap` and `addon install`. Read-only commands like `help`, `bundle info --json`, and `bom --json` do not prompt for telemetry and do not emit command-level telemetry events.
 
+`addon install` also supports an optional basic public exposure contract:
+
+```bash
+./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal --cluster-context default
+```
+
+Core's responsibility is intentionally narrow here:
+
+- validate that the add-on declares basic public ingress support
+- create a standard Traefik ingress for one host routed to one service and port
+- reject obvious host collisions
+
+Core is not the generic ingress feature engine for every add-on. Advanced behavior such as custom paths, custom TLS material, multiple hosts, or arbitrary ingress annotations remains an add-on responsibility.
+
 If you also want full repository validation coverage, add:
 
 - `docker`
