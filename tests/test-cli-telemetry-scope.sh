@@ -80,3 +80,8 @@ rm -f "${SENDER_MARKER}"
 TELEMETRY_ENABLED=true TELEMETRY_SESSION_ID=test-session TELEMETRY_RUN_ID=test-run bash "${WORK_DIR}/scripts/productive-k3s-core.sh" addon install --tgz "${ADDON_TGZ}" --kubeconfig "${KUBECONFIG_PATH}" >/dev/null
 [[ -e "${SENDER_MARKER}" ]] || fail "telemetry sender was not called for addon install"
 pass "mutating core addon install emits telemetry"
+
+rm -f "${SENDER_MARKER}"
+TELEMETRY_ENABLED=true TELEMETRY_SESSION_ID=test-session bash "${WORK_DIR}/scripts/productive-k3s-core.sh" addon install --tgz "${ADDON_TGZ}" --kubeconfig "${KUBECONFIG_PATH}" >/dev/null
+[[ -e "${SENDER_MARKER}" ]] || fail "telemetry sender was not called for addon install without run id"
+pass "mutating core addon install tolerates missing telemetry run id"

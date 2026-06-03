@@ -147,7 +147,10 @@ ADDON_PKG_DIR="${ADDON_TMP_DIR}/pkg"
 ADDON_ARCHIVE="${ADDON_TMP_DIR}/demo-addon.tgz"
 ADDON_MARKER="${ADDON_TMP_DIR}/installed.txt"
 ADDON_KUBECONFIG="${ADDON_TMP_DIR}/kubeconfig"
+ADDON_INGRESS_CAPTURE="${ADDON_TMP_DIR}/ingress.yaml"
+ADDON_BIN_DIR="${ADDON_TMP_DIR}/bin"
 mkdir -p "${ADDON_PKG_DIR}/scripts"
+mkdir -p "${ADDON_BIN_DIR}"
 printf 'apiVersion: v1\nkind: Config\ncurrent-context: default\n' > "${ADDON_KUBECONFIG}"
 cat >"${ADDON_PKG_DIR}/addon.yaml" <<'EOF'
 apiVersion: addons.productive-k3s.io/v1
@@ -159,12 +162,34 @@ spec:
   type: shell
   install:
     script: scripts/install.sh
+  productiveK3s:
+    exposure:
+      public:
+        mode: ingress
+        namespace: demo-addon
+        service:
+          name: demo-addon
+          port: 80
 EOF
 cat >"${ADDON_PKG_DIR}/scripts/install.sh" <<EOF
 #!/usr/bin/env bash
 printf 'installed\n' >"${ADDON_MARKER}"
 EOF
 chmod +x "${ADDON_PKG_DIR}/scripts/install.sh"
+cat >"${ADDON_BIN_DIR}/kubectl" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\$*" == *"get ingress -A -o jsonpath="* ]]; then
+  exit 0
+fi
+if [[ "\$*" == *"apply -f -"* ]]; then
+  cat >"${ADDON_INGRESS_CAPTURE}"
+  exit 0
+fi
+printf 'unexpected kubectl invocation: %s\n' "\$*" >&2
+exit 1
+EOF
+chmod +x "${ADDON_BIN_DIR}/kubectl"
 tar -czf "${ADDON_ARCHIVE}" -C "${ADDON_PKG_DIR}" .
 
 addon_validate_output="$(cd "$REPO_DIR" && ./productive-k3s-core.sh addon validate --tgz "${ADDON_ARCHIVE}")"
@@ -175,6 +200,45 @@ pass "addon tgz validation works"
 (cd "$REPO_DIR" && ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" --kubeconfig "${ADDON_KUBECONFIG}")
 [[ -f "${ADDON_MARKER}" ]] || fail "addon install did not execute the packaged installer"
 pass "addon tgz install executes packaged installer"
+
+(
+  cd "$REPO_DIR"
+  PATH="${ADDON_BIN_DIR}:$PATH" ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" --kubeconfig "${ADDON_KUBECONFIG}" --public-host demo.k3s.lab.internal
+)
+[[ -f "${ADDON_INGRESS_CAPTURE}" ]] || fail "addon public install did not apply ingress manifest"
+grep -q "host: demo.k3s.lab.internal" "${ADDON_INGRESS_CAPTURE}" || fail "public ingress host missing from applied manifest"
+grep -q "name: demo-addon" "${ADDON_INGRESS_CAPTURE}" || fail "public ingress service name missing from applied manifest"
+grep -q "number: 80" "${ADDON_INGRESS_CAPTURE}" || fail "public ingress service port missing from applied manifest"
+pass "addon tgz install can publish a basic ingress"
+
+ADDON_NO_PUBLIC_PKG_DIR="${ADDON_TMP_DIR}/pkg-no-public"
+ADDON_NO_PUBLIC_ARCHIVE="${ADDON_TMP_DIR}/demo-addon-no-public.tgz"
+mkdir -p "${ADDON_NO_PUBLIC_PKG_DIR}/scripts"
+cat >"${ADDON_NO_PUBLIC_PKG_DIR}/addon.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Addon
+metadata:
+  name: demo-addon-no-public
+  version: 0.1.0
+spec:
+  type: shell
+  install:
+    script: scripts/install.sh
+EOF
+cat >"${ADDON_NO_PUBLIC_PKG_DIR}/scripts/install.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "${ADDON_NO_PUBLIC_PKG_DIR}/scripts/install.sh"
+tar -czf "${ADDON_NO_PUBLIC_ARCHIVE}" -C "${ADDON_NO_PUBLIC_PKG_DIR}" .
+if (
+  cd "$REPO_DIR" &&
+  PATH="${ADDON_BIN_DIR}:$PATH" ./productive-k3s-core.sh addon install --tgz "${ADDON_NO_PUBLIC_ARCHIVE}" --kubeconfig "${ADDON_KUBECONFIG}" --public-host demo-no-public.k3s.lab.internal >/tmp/productive-k3s-core-addon-public.out 2>&1
+); then
+  fail "addon install with public host unexpectedly succeeded for addon without public ingress metadata"
+fi
+grep -q "does not declare basic public ingress exposure support" /tmp/productive-k3s-core-addon-public.out || fail "missing public ingress validation message"
+pass "addon tgz install rejects public host when addon lacks public ingress support"
 
 if (cd "$REPO_DIR" && ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" >/tmp/productive-k3s-core-addon-target.out 2>&1); then
   fail "addon install without explicit target unexpectedly succeeded"
