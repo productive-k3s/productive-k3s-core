@@ -54,7 +54,7 @@ need_cmd() {
 run_smoke() {
   local answers
   answers=$'y\ny\nn\nn\nn\nn\ny\nn\ny\n'
-  printf '%s' "$answers" | docker run --rm -i "$IMAGE_TAG" bash -lc 'cd /workspace && ./scripts/bootstrap-k3s-stack.sh --dry-run --mode single-node'
+  printf '%s' "$answers" | docker run --rm -i "$IMAGE_TAG" bash -lc 'cd /workspace && ./scripts/apply.sh --dry-run --mode single-node'
 }
 
 main() {

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/addons-runtime.sh"
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-base}"
+
 log(){ printf "\n\033[1;32m[+] %s\033[0m\n" "$*"; }
 warn(){ printf "\n\033[1;33m[!] %s\033[0m\n" "$*"; }
 err(){ printf "\n\033[1;31m[✗] %s\033[0m\n" "$*"; }
@@ -44,6 +48,32 @@ safe_write_cmd() {
   "$@" >"$out" 2>&1 || true
 }
 
+run_stack_addon_backup_hooks() {
+  local output_dir="$1"
+  local addon_name addon_dir backup_fn
+  if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
+    err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
+    exit 1
+  fi
+
+  while IFS= read -r addon_name; do
+    [[ -n "${addon_name}" ]] || continue
+    if ! addon_source_script_exists "${addon_name}" backup.sh; then
+      err "Addon '${addon_name}' does not provide scripts/backup.sh"
+      exit 1
+    fi
+    addon_dir="$(resolve_addon_source_dir "${addon_name}")"
+    # shellcheck source=/dev/null
+    source "${addon_dir}/scripts/backup.sh"
+    backup_fn="pk3s_addon_backup"
+    if ! declare -F "${backup_fn}" >/dev/null 2>&1; then
+      err "Addon '${addon_name}' backup hook '${backup_fn}' is missing"
+      exit 1
+    fi
+    "${backup_fn}" "${output_dir}"
+  done < <(stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}")
+}
+
 main() {
   ensure_cmds
   sudo_keepalive
@@ -78,7 +108,7 @@ main() {
   safe_write_cmd "$output_dir/cluster/events.txt" k get events -A --sort-by=.lastTimestamp
 
   local ns
-  for ns in cert-manager cattle-system longhorn-system registry kube-system; do
+  for ns in kube-system; do
     if k get namespace "$ns" >/dev/null 2>&1; then
       log "Exporting namespace ${ns}"
       safe_write_cmd "$output_dir/namespaces/${ns}-all.yaml" k get all -n "$ns" -o yaml
@@ -89,6 +119,8 @@ main() {
       safe_write_cmd "$output_dir/namespaces/${ns}-pvc.yaml" k get pvc -n "$ns" -o yaml
     fi
   done
+
+  run_stack_addon_backup_hooks "$output_dir"
 
   log "Exporting k3s host-side config"
   if [[ -f /etc/rancher/k3s/k3s.yaml ]]; then

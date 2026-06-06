@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/addons-runtime.sh"
+
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_GREEN=$'\033[1;32m'
   COLOR_YELLOW=$'\033[1;33m'
@@ -22,6 +25,7 @@ MODE="plan"
 SUDO_KA_PID=""
 AUTO_APPROVE="n"
 FORCE_CONFIRM="n"
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-base}"
 DEFAULT_NFS_EXPORT="/srv/nfs/k8s-share"
 DEFAULT_REGISTRY_HOST="registry.home.arpa"
 DEFAULT_RANCHER_HOST="rancher.home.arpa"
@@ -91,7 +95,7 @@ service_active() { systemctl is-active --quiet "$1"; }
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/clean-k3s-stack.sh [--plan|--apply] [--yes] [--confirm-clean]
+  ./scripts/cleanup.sh [--plan|--apply] [--yes] [--confirm-clean]
 
 Modes:
   --plan   Show what would be removed (default)
@@ -103,7 +107,7 @@ Options:
 
 What it removes:
   - k3s cluster components and local k3s state
-  - bootstrap-managed namespaces: cert-manager, longhorn-system, cattle-system, cattle-fleet-system, cattle-fleet-local-system, cattle-capi-system, cattle-turtles-system, registry
+  - apply-managed namespaces: cert-manager, longhorn-system, cattle-system, cattle-fleet-system, cattle-fleet-local-system, cattle-capi-system, cattle-turtles-system, registry
   - common bootstrap ClusterIssuers: selfsigned, letsencrypt-staging, letsencrypt-production
   - Rancher/Fleet/Turtles webhook configurations and cattle-related CRDs/APIService objects when present
   - Longhorn CRDs, StorageClasses, and CSIDriver objects when present
@@ -239,23 +243,29 @@ remove_nfs_export() {
   sudo exportfs -ra || true
 }
 
-delete_cluster_issuers() {
-  local issuer
-  for issuer in selfsigned letsencrypt-staging letsencrypt-production; do
-    if service_active k3s && clusterissuer_exists "$issuer"; then
-      sudo k3s kubectl delete clusterissuer "$issuer" --ignore-not-found || true
-    fi
-  done
-}
+run_stack_addon_clean_hooks() {
+  local addon_name addon_dir clean_fn
+  if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
+    err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
+    exit 1
+  fi
 
-delete_namespaces() {
-  local ns
-  for ns in registry cattle-turtles-system cattle-capi-system cattle-fleet-local-system cattle-fleet-system cattle-system longhorn-system cert-manager; do
-    if service_active k3s && namespace_exists "$ns"; then
-      log "Requesting deletion of namespace '${ns}'"
-      sudo k3s kubectl delete namespace "$ns" --ignore-not-found --wait=false || true
+  while IFS= read -r addon_name; do
+    [[ -n "${addon_name}" ]] || continue
+    if ! addon_source_script_exists "${addon_name}" clean.sh; then
+      err "Addon '${addon_name}' does not provide scripts/clean.sh"
+      exit 1
     fi
-  done
+    addon_dir="$(resolve_addon_source_dir "${addon_name}")"
+    # shellcheck source=/dev/null
+    source "${addon_dir}/scripts/clean.sh"
+    clean_fn="pk3s_addon_clean"
+    if ! declare -F "${clean_fn}" >/dev/null 2>&1; then
+      err "Addon '${addon_name}' clean hook '${clean_fn}' is missing"
+      exit 1
+    fi
+    "${clean_fn}"
+  done < <(stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}")
 }
 
 uninstall_k3s() {
@@ -295,10 +305,7 @@ apply_cleanup() {
   sudo_keepalive
 
   log "Deleting cluster-level resources"
-  delete_cluster_issuers
-  delete_rancher_cluster_artifacts
-  delete_namespaces
-  delete_longhorn_cluster_artifacts
+  run_stack_addon_clean_hooks
 
   log "Removing local host integrations"
   remove_hosts_entries

@@ -15,16 +15,16 @@ pass() {
 
 cli_help="$(cd "$REPO_DIR" && ./scripts/productive-k3s-core.sh help)"
 root_cli_help="$(cd "$REPO_DIR" && ./productive-k3s-core.sh help)"
-printf '%s\n' "$cli_help" | grep -q "bootstrap" || fail "public CLI help does not list bootstrap"
+printf '%s\n' "$cli_help" | grep -q "apply" || fail "public CLI help does not list apply"
 printf '%s\n' "$cli_help" | grep -q "preflight" || fail "public CLI help does not list preflight"
 printf '%s\n' "$cli_help" | grep -q "validate" || fail "public CLI help does not list validate"
 printf '%s\n' "$cli_help" | grep -q "bundle" || fail "public CLI help does not list bundle"
-printf '%s\n' "$root_cli_help" | grep -q "bootstrap" || fail "root public CLI help does not list bootstrap"
+printf '%s\n' "$root_cli_help" | grep -q "apply" || fail "root public CLI help does not list apply"
 pass "public CLI help lists operational commands"
 
-bootstrap_help="$(cd "$REPO_DIR" && ./scripts/productive-k3s-core.sh bootstrap --help)"
-printf '%s\n' "$bootstrap_help" | grep -q -- '--dry-run' || fail "bootstrap help was not forwarded"
-pass "bootstrap subcommand forwards CLI help"
+apply_help="$(cd "$REPO_DIR" && ./scripts/productive-k3s-core.sh apply --help)"
+printf '%s\n' "$apply_help" | grep -q -- '--dry-run' || fail "apply help was not forwarded"
+pass "apply subcommand forwards CLI help"
 
 preflight_help="$(cd "$REPO_DIR" && ./productive-k3s-core.sh preflight --help)"
 printf '%s\n' "$preflight_help" | grep -q -- '--mode <single-node|server|agent|stack>' || fail "preflight help was not forwarded"
@@ -100,11 +100,14 @@ for required_path in \
   "productive-k3s-core-HEAD/README.md" \
   "productive-k3s-core-HEAD/LICENSE" \
   "productive-k3s-core-HEAD/scripts/productive-k3s-core.sh" \
+  "productive-k3s-core-HEAD/scripts/addons-runtime.sh" \
   "productive-k3s-core-HEAD/scripts/component-versions.sh" \
   "productive-k3s-core-HEAD/scripts/preflight-host.sh" \
-  "productive-k3s-core-HEAD/scripts/bootstrap-k3s-stack.sh" \
-  "productive-k3s-core-HEAD/scripts/backup-k3s-stack.sh" \
-  "productive-k3s-core-HEAD/scripts/validate-k3s-stack.sh" \
+  "productive-k3s-core-HEAD/scripts/apply.sh" \
+  "productive-k3s-core-HEAD/scripts/backup.sh" \
+  "productive-k3s-core-HEAD/scripts/validate.sh" \
+  "productive-k3s-core-HEAD/scripts/cleanup.sh" \
+  "productive-k3s-core-HEAD/scripts/rollback.sh" \
   "productive-k3s-core-HEAD/scripts/send-telemetry.sh" \
   "productive-k3s-core-HEAD/scripts/send-telemetry-event.sh"
 do
@@ -197,6 +200,40 @@ printf '%s\n' "$addon_validate_output" | grep -q "Addon package validation passe
 printf '%s\n' "$addon_validate_output" | grep -q "demo-addon" || fail "addon validation did not report addon metadata"
 pass "addon tgz validation works"
 
+STACK_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source"
+STACK_BAD_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source-bad"
+mkdir -p "${STACK_SOURCE_DIR}" "${STACK_BAD_SOURCE_DIR}"
+cat >"${STACK_SOURCE_DIR}/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: base
+  version: 0.1.0
+spec:
+  addons:
+    - cert-manager
+    - longhorn
+EOF
+stack_validate_output="$(cd "$REPO_DIR" && ./productive-k3s-core.sh dev stack validate --source "${STACK_SOURCE_DIR}")"
+printf '%s\n' "$stack_validate_output" | grep -q "Stack source validation passed" || fail "stack source validation did not pass"
+printf '%s\n' "$stack_validate_output" | grep -q "base" || fail "stack validation did not report stack metadata"
+pass "stack source validation works"
+
+cat >"${STACK_BAD_SOURCE_DIR}/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: broken
+  version: 0.1.0
+spec:
+  addons: []
+EOF
+if (cd "$REPO_DIR" && ./productive-k3s-core.sh dev stack validate --source "${STACK_BAD_SOURCE_DIR}" >/tmp/productive-k3s-core-stack-validate.out 2>&1); then
+  fail "stack source validation unexpectedly succeeded for empty stack"
+fi
+grep -q "spec.addons must include at least one addon" /tmp/productive-k3s-core-stack-validate.out || fail "stack validation error message missing"
+pass "stack source validation rejects empty addon lists"
+
 (cd "$REPO_DIR" && ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" --kubeconfig "${ADDON_KUBECONFIG}")
 [[ -f "${ADDON_MARKER}" ]] || fail "addon install did not execute the packaged installer"
 pass "addon tgz install executes packaged installer"
@@ -261,8 +298,8 @@ printf '%s\n' "$preflight_strict_recipe" | grep -q './productive-k3s-core.sh pre
 pass "make preflight-strict maps to preflight --strict"
 
 dry_run_recipe="$(cd "$REPO_DIR" && make -n dry-run)"
-printf '%s\n' "$dry_run_recipe" | grep -q './productive-k3s-core.sh bootstrap --dry-run' || fail "make dry-run does not map to bootstrap --dry-run"
-pass "make dry-run maps to bootstrap --dry-run"
+printf '%s\n' "$dry_run_recipe" | grep -q './productive-k3s-core.sh apply --dry-run' || fail "make dry-run does not map to apply --dry-run"
+pass "make dry-run maps to apply --dry-run"
 
 validate_strict_recipe="$(cd "$REPO_DIR" && make -n validate-strict)"
 printf '%s\n' "$validate_strict_recipe" | grep -q './productive-k3s-core.sh validate --strict' || fail "make validate-strict does not map to validate --strict"

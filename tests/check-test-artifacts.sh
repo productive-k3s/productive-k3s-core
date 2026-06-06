@@ -68,15 +68,15 @@ parse_args() {
 }
 
 collect_artifacts() {
-  find "$ARTIFACTS_DIR" -maxdepth 1 -type f -name "test-in-vm-*.json" ! -name "*-bootstrap-manifest.json" ! -name "*-public.json" -print0 \
+  find "$ARTIFACTS_DIR" -maxdepth 1 -type f -name "test-in-vm-*.json" ! -name "*-apply-manifest.json" ! -name "*-public.json" -print0 \
     | xargs -0 -r jq -r --arg profile "$PROFILE" 'select(.profile == $profile) | input_filename' \
     | sort
 }
 
 collect_manifests() {
-  find "$ARTIFACTS_DIR" -maxdepth 1 -type f -name "test-in-vm-*.json" ! -name "*-bootstrap-manifest.json" ! -name "*-public.json" -print0 \
+  find "$ARTIFACTS_DIR" -maxdepth 1 -type f -name "test-in-vm-*.json" ! -name "*-apply-manifest.json" ! -name "*-public.json" -print0 \
     | xargs -0 -r jq -r --arg profile "$PROFILE" 'select(.profile == $profile) | input_filename' \
-    | sed 's/\.json$/-bootstrap-manifest.json/' \
+    | sed 's/\.json$/-apply-manifest.json/' \
     | sort
 }
 
@@ -116,7 +116,7 @@ main() {
           exit 1
         fi
         artifact_basename="${artifact%.json}"
-        manifest_path="${artifact_basename}-bootstrap-manifest.json"
+        manifest_path="${artifact_basename}-apply-manifest.json"
         if [[ ! -f "$manifest_path" ]]; then
           echo "[ERROR] Missing bootstrap manifest paired with artifact: $artifact" >&2
           exit 1

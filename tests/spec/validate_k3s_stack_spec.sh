@@ -1,6 +1,6 @@
 # shellcheck shell=bash disable=SC2016
 Describe 'validate k3s stack'
-  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/validate-k3s-stack.sh"
+  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/validate.sh"
 
   It 'produces an ok JSON summary for a healthy mocked cluster'
     When run bash -lc '

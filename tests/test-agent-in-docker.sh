@@ -23,7 +23,7 @@ main() {
 
   local answers output
   answers=$'y\nhttps://server.example.local:6443\nsuper-secret-token\ny\n'
-  output="$(printf '%s' "$answers" | docker run --rm -i "$IMAGE_TAG" bash -lc 'cd /workspace && ./scripts/bootstrap-k3s-stack.sh --dry-run --mode agent' 2>&1)" || {
+  output="$(printf '%s' "$answers" | docker run --rm -i "$IMAGE_TAG" bash -lc 'cd /workspace && ./scripts/apply.sh --dry-run --mode agent' 2>&1)" || {
     printf '%s\n' "$output"
     fail "agent dry-run command failed"
   }

@@ -39,7 +39,7 @@ See [Host preflight](../user-docs/host-preflight.md) for the detailed behavior.
 If you want to see how the installer would run before changing anything on the machine, you can first do an optional dry run:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap --dry-run
+curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply --dry-run
 ```
 
 Even in `dry-run`, the script may still show prompts based on what it detects on the host, for example whether an existing `k3s` installation should be reused. Those prompts are used to build the execution plan, but `dry-run` still does not apply changes.
@@ -89,7 +89,7 @@ That does not expand the public support matrix to arbitrary platforms or arbitra
 Replace `X.Y.Z` with the release you want to install:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap
+curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply
 ```
 
 That installer downloads the matching release bundle and runs the public `productive-k3s-core` CLI on the host.

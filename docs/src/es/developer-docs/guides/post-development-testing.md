@@ -33,7 +33,7 @@ make test-checkstatus
 Elimina los archivos locales que este repositorio usa como estado de tests:
 
 - `test-artifacts/`
-- `runs/bootstrap-*.json` locales
+- `runs/apply-*.json` locales
 - `runs/telemetry-outbox/bootstrap-*.json` locales
 - `runs/telemetry-outbox/bootstrap-*.status` locales
 
@@ -50,7 +50,7 @@ Reporta entradas como:
 
 Ignora a propósito archivos que no son el resultado top-level real del test:
 
-- manifests copiados de bootstrap como `*-bootstrap-manifest.json`
+- manifests copiados de bootstrap como `*-apply-manifest.json`
 - artifacts públicos saneados como `*-public.json`
 
 Si al menos un resultado registrado está en fallo, `make test-checkstatus` termina con exit code no cero.

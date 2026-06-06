@@ -1,5 +1,6 @@
 runs/
 .codex
+.tmp/
 docs/superpowers/
 superpowers/
 test-artifacts/

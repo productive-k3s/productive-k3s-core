@@ -1,6 +1,6 @@
 # Modos De Productive K3S Core
 
-`bootstrap-k3s-stack.sh` expone modos explícitos de ejecución mediante `--mode`.
+`apply.sh` expone modos explícitos de ejecución mediante `--mode`.
 
 ## Modos soportados
 

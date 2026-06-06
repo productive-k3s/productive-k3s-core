@@ -15,7 +15,7 @@ These are the day-to-day entry points most developers use from the repository ro
 | --- | --- |
 | `make preflight` | Run the host preflight checks with warning-level guidance |
 | `make preflight-strict` | Run the host preflight checks and fail on warnings too |
-| `make bootstrap` | Run the interactive bootstrap flow in its default `single-node` mode |
+| `make apply` | Run the interactive bootstrap flow in its default `single-node` mode |
 | `make dry-run` | Run the bootstrap flow in planning mode without applying changes |
 | `make backup` | Capture a host and cluster backup snapshot |
 | `make validate` | Run the stack validator |

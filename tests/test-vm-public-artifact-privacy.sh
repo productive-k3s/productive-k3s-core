@@ -57,15 +57,15 @@ VM_MEMORY="8G"
 VM_DISK="40G"
 REPO_DIR="/home/example/work/productive-k3s"
 ARTIFACT_STATUS="success"
-BOOTSTRAP_MANIFEST_REMOTE="/home/ubuntu/productive-k3s-core/runs/bootstrap-20260430-010203-1234.json"
-BOOTSTRAP_MANIFEST_LOCAL="/home/example/work/productive-k3s/test-artifacts/test-in-vm-fixture-bootstrap-manifest.json"
+BOOTSTRAP_MANIFEST_REMOTE="/home/ubuntu/productive-k3s-core/runs/apply-20260430-010203-1234.json"
+BOOTSTRAP_MANIFEST_LOCAL="/home/example/work/productive-k3s/test-artifacts/test-in-vm-fixture-apply-manifest.json"
 
 write_artifacts
 
 assert_file_contains "${ARTIFACT_PATH}" '"vm_name": "productive-k3s-core-test-ubuntu-full-fixture"'
 assert_file_contains "${ARTIFACT_PATH}" '"remote_dir": "/home/ubuntu/productive-k3s-core"'
 assert_file_contains "${ARTIFACT_PATH}" '"repo_dir": "/home/example/work/productive-k3s"'
-assert_file_contains "${ARTIFACT_PATH}" '"bootstrap_manifest_local": "/home/example/work/productive-k3s/test-artifacts/test-in-vm-fixture-bootstrap-manifest.json"'
+assert_file_contains "${ARTIFACT_PATH}" '"bootstrap_manifest_local": "/home/example/work/productive-k3s/test-artifacts/test-in-vm-fixture-apply-manifest.json"'
 
 assert_file_contains "${PUBLIC_ARTIFACT_PATH}" '"artifact_scope": "public"'
 assert_file_contains "${PUBLIC_ARTIFACT_PATH}" '"bootstrap_manifest_copied": "y"'

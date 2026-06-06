@@ -27,6 +27,9 @@ BOOTSTRAP_MANIFEST_REMOTE=""
 BOOTSTRAP_MANIFEST_LOCAL=""
 TRANSFER_STAGING_ROOT=""
 TRANSFER_STAGED_REPO=""
+TRANSFER_STAGED_ADDONS_REPO=""
+ADDONS_REPO_DIR=""
+REMOTE_ADDONS_DIR=""
 
 usage() {
   cat <<'EOU'
@@ -37,7 +40,7 @@ Profiles:
   smoke          Launch a clean VM and run bootstrap in --dry-run mode
   core           Launch a clean VM, install k3s + helm, skip optional components, then validate
   full           Launch a clean VM, install the full stack with default answers, then validate
-  full-clean     Run the full profile and then run scripts/clean-k3s-stack.sh --apply inside the VM
+  full-clean     Run the full profile and then run scripts/cleanup.sh --apply inside the VM
   full-rollback  Run the full profile and then build/apply a rollback from the generated bootstrap manifest
 
 Platforms:
@@ -102,6 +105,22 @@ default_remote_user_for_platform() {
   esac
 }
 
+resolve_addons_repo_dir() {
+  if [[ -n "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" && -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/addons" ]]; then
+    printf '%s\n' "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}"
+    return 0
+  fi
+
+  local sibling_dir
+  sibling_dir="$(cd "${REPO_DIR}/.." && pwd)/productive-k3s-addons"
+  if [[ -d "${sibling_dir}/addons" ]]; then
+    printf '%s\n' "${sibling_dir}"
+    return 0
+  fi
+
+  return 1
+}
+
 apply_platform_defaults() {
   case "$PLATFORM" in
     ubuntu|debian12|debian13) ;;
@@ -121,6 +140,9 @@ apply_platform_defaults() {
   if [[ -z "$REMOTE_DIR" ]]; then
     REMOTE_DIR="/home/${REMOTE_USER}/${REPO_NAME}"
   fi
+  if [[ -z "$REMOTE_ADDONS_DIR" ]]; then
+    REMOTE_ADDONS_DIR="/home/${REMOTE_USER}/productive-k3s-addons"
+  fi
 }
 
 cleanup() {
@@ -130,6 +152,7 @@ cleanup() {
   fi
   write_artifacts
   TRANSFER_STAGED_REPO=""
+  TRANSFER_STAGED_ADDONS_REPO=""
   if [[ "$KEEP_VM" == "y" || "$VM_CREATED" != "y" ]]; then
     return
   fi
@@ -326,12 +349,17 @@ launch_vm() {
 }
 
 copy_repo() {
-  local remote_parent
+  local remote_parent remote_addons_parent
   remote_parent="$(dirname "$REMOTE_DIR")"
+  remote_addons_parent="$(dirname "$REMOTE_ADDONS_DIR")"
   log "Copying repository to VM"
-  multipass exec "$VM_NAME" -- bash -lc "sudo mkdir -p '$remote_parent' && sudo chown '$REMOTE_USER':'$REMOTE_USER' '$remote_parent' && rm -rf '$REMOTE_DIR'"
+  multipass exec "$VM_NAME" -- bash -lc "sudo mkdir -p '$remote_parent' '$remote_addons_parent' && sudo chown '$REMOTE_USER':'$REMOTE_USER' '$remote_parent' '$remote_addons_parent' && rm -rf '$REMOTE_DIR' '$REMOTE_ADDONS_DIR'"
   prepare_repo_transfer_dir
   multipass transfer -r "$TRANSFER_STAGED_REPO" "$VM_NAME:$remote_parent"
+  if [[ -n "$ADDONS_REPO_DIR" ]]; then
+    prepare_addons_transfer_dir
+    multipass transfer -r "$TRANSFER_STAGED_ADDONS_REPO" "$VM_NAME:$remote_addons_parent"
+  fi
 }
 
 prepare_repo_transfer_dir() {
@@ -360,22 +388,95 @@ prepare_repo_transfer_dir() {
     -cf - . | tar -xf - -C "$TRANSFER_STAGED_REPO"
 }
 
+prepare_addons_transfer_dir() {
+  local staged_name
+
+  staged_name="$(basename "$REMOTE_ADDONS_DIR")"
+  if [[ -z "$TRANSFER_STAGING_ROOT" ]]; then
+    local staging_parent
+    staging_parent="${REPO_DIR}/test-artifacts/.transfer-staging"
+    mkdir -p "$staging_parent"
+    TRANSFER_STAGING_ROOT="$(mktemp -d "${staging_parent}/staging.XXXXXX")"
+  fi
+
+  TRANSFER_STAGED_ADDONS_REPO="${TRANSFER_STAGING_ROOT}/${staged_name}"
+  rm -rf "$TRANSFER_STAGED_ADDONS_REPO"
+  mkdir -p "$TRANSFER_STAGED_ADDONS_REPO"
+
+  tar -C "$ADDONS_REPO_DIR" \
+    --exclude=.git \
+    --exclude=.codex \
+    --exclude=dist \
+    --exclude=docs/.venv \
+    --exclude=docs/site \
+    --exclude=runs \
+    --exclude=tests/coverage \
+    --exclude=test-artifacts \
+    -cf - . | tar -xf - -C "$TRANSFER_STAGED_ADDONS_REPO"
+}
+
 run_in_vm() {
   local cmd="$1"
-  multipass exec "$VM_NAME" -- bash -lc "$cmd"
+  multipass exec "$VM_NAME" -- bash -lc "$cmd" </dev/null
+}
+
+wait_for_remote_file() {
+  local remote_path="$1"
+  local timeout_secs="${2:-1800}"
+  local sleep_secs="${3:-5}"
+  local start_ts now_ts
+  start_ts="$(date +%s)"
+
+  while true; do
+    if run_in_vm "test -f '$remote_path'"; then
+      return 0
+    fi
+
+    now_ts="$(date +%s)"
+    if (( now_ts - start_ts >= timeout_secs )); then
+      return 1
+    fi
+
+    sleep "$sleep_secs"
+  done
+}
+
+run_remote_command_with_status() {
+  local command="$1"
+  local timeout_secs="${2:-1800}"
+  local remote_log remote_status remote_pid quoted_command command_status
+
+  remote_log="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$.log"
+  remote_status="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$.status"
+  remote_pid="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$.pid"
+  command="${command}; remote_rc=\$?; printf '%s\\n' \"\${remote_rc}\" > '${remote_status}'; exit \"\${remote_rc}\""
+  quoted_command="$(printf '%q' "$command")"
+
+  run_in_vm "rm -f '$remote_log' '$remote_status' '$remote_pid'; nohup bash -lc ${quoted_command} > '$remote_log' 2>&1 < /dev/null & echo \$! > '$remote_pid'"
+  wait_for_remote_file "$remote_status" "$timeout_secs" 5 || return 1
+  command_status="$(run_in_vm "cat '$remote_status' 2>/dev/null || true" | tr -d '\r\n')"
+  [[ "${command_status}" == "0" ]]
 }
 
 bootstrap_engine_env_prefix() {
+  local prefix=""
   if [[ -n "${PRODUCTIVE_K3S_ENGINE:-}" ]]; then
-    printf 'PRODUCTIVE_K3S_ENGINE=%q ' "${PRODUCTIVE_K3S_ENGINE}"
+    prefix+="PRODUCTIVE_K3S_ENGINE=$(printf '%q' "${PRODUCTIVE_K3S_ENGINE}") "
   fi
+  if [[ -n "${PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS:-}" ]]; then
+    prefix+="PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=$(printf '%q' "${PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS}") "
+  fi
+  if [[ -n "$ADDONS_REPO_DIR" ]]; then
+    prefix+="PRODUCTIVE_K3S_ADDONS_REPO_DIR=$(printf '%q' "${REMOTE_ADDONS_DIR}") "
+  fi
+  printf '%s' "${prefix}"
 }
 
 bootstrap_command_in_vm() {
   local mode_args="$1"
   local engine_prefix
   engine_prefix="$(bootstrap_engine_env_prefix)"
-  printf "cd '%s' && printf '%%s' %s | %s./scripts/bootstrap-k3s-stack.sh --mode single-node %s" \
+  printf "cd '%s' && bootstrap_answers_file=\"\$(mktemp)\" && printf '%%s' %s > \"\${bootstrap_answers_file}\" && %s./scripts/apply.sh --mode single-node %s < \"\${bootstrap_answers_file}\"; bootstrap_rc=\$?; rm -f \"\${bootstrap_answers_file}\"; test \"\${bootstrap_rc}\" -eq 0" \
     "$REMOTE_DIR" \
     "$2" \
     "$engine_prefix" \
@@ -384,11 +485,11 @@ bootstrap_command_in_vm() {
 
 capture_bootstrap_manifest() {
   local remote_manifest local_target
-  remote_manifest="$(run_in_vm "cd '$REMOTE_DIR' && ls -1t runs/bootstrap-*.json 2>/dev/null | head -1" | tr -d '\r')"
+  remote_manifest="$(run_in_vm "cd '$REMOTE_DIR' && ls -1t runs/apply-*.json 2>/dev/null | head -1" | tr -d '\r')"
   [[ -n "$remote_manifest" ]] || return 0
 
   BOOTSTRAP_MANIFEST_REMOTE="$REMOTE_DIR/$remote_manifest"
-  local_target="${ARTIFACTS_DIR}/${ARTIFACT_BASENAME}-bootstrap-manifest.json"
+  local_target="${ARTIFACTS_DIR}/${ARTIFACT_BASENAME}-apply-manifest.json"
   ensure_artifacts_dir
   multipass transfer "$VM_NAME:$BOOTSTRAP_MANIFEST_REMOTE" "$local_target" >/dev/null 2>&1 || true
   if [[ -f "$local_target" ]]; then
@@ -400,8 +501,14 @@ run_bootstrap_with_answers() {
   local mode="$1"
   local answers="$2"
   local escaped_answers
+  local wrapped_cmd
   escaped_answers=$(printf '%q' "$answers")
-  run_in_vm "$(bootstrap_command_in_vm "$mode" "$escaped_answers")"
+  wrapped_cmd="$(bootstrap_command_in_vm "$mode" "$escaped_answers")"
+  if ! run_remote_command_with_status "$wrapped_cmd" 3600; then
+    err "Timed out waiting for remote bootstrap completion marker."
+    capture_bootstrap_manifest
+    return 1
+  fi
   capture_bootstrap_manifest
 }
 
@@ -414,11 +521,11 @@ run_validate_with_retries() {
 
   while true; do
     if [[ "$validate_mode" == "strict" ]]; then
-      if run_in_vm "cd '$REMOTE_DIR' && ./scripts/validate-k3s-stack.sh --strict"; then
+      if run_remote_command_with_status "cd '$REMOTE_DIR' && ./scripts/validate.sh --strict" 1200; then
         return 0
       fi
     else
-      if run_in_vm "cd '$REMOTE_DIR' && ./scripts/validate-k3s-stack.sh"; then
+      if run_remote_command_with_status "cd '$REMOTE_DIR' && ./scripts/validate.sh" 1200; then
         return 0
       fi
     fi
@@ -489,24 +596,17 @@ y
 
 y
 home.arpa
+2
+
+
+
+y
 
 admin
 
 
 
 n
-2
-
-
-
-y
-y
-y
-y
-y
-y
-y
-y
 y
 y
 EOF
@@ -533,7 +633,7 @@ run_full() {
 run_full_clean() {
   run_full
   log "Running destructive clean profile inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && ./scripts/clean-k3s-stack.sh --apply --yes --confirm-clean"
+  run_in_vm "cd '$REMOTE_DIR' && ./scripts/cleanup.sh --apply --yes --confirm-clean"
   assert_in_vm "systemctl is-active --quiet k3s && exit 1 || exit 0" "k3s service is no longer active after clean"
 }
 
@@ -541,17 +641,17 @@ run_full_rollback() {
   local manifest
   run_full
 
-  manifest="$(run_in_vm "cd '$REMOTE_DIR' && ls -1t runs/bootstrap-*.json 2>/dev/null | head -1" | tr -d '\r')"
+  manifest="$(run_in_vm "cd '$REMOTE_DIR' && ls -1t runs/apply-*.json 2>/dev/null | head -1" | tr -d '\r')"
   if [[ -z "$manifest" ]]; then
     err "Could not determine the bootstrap manifest inside the VM."
     return 1
   fi
 
   log "Running rollback plan inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && ./scripts/rollback-k3s-stack.sh --to '$manifest' --plan"
+  run_in_vm "cd '$REMOTE_DIR' && ./scripts/rollback.sh --to '$manifest' --plan"
 
   log "Applying rollback inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && ./scripts/rollback-k3s-stack.sh --to '$manifest' --apply --yes"
+  run_in_vm "cd '$REMOTE_DIR' && ./scripts/rollback.sh --to '$manifest' --apply --yes"
 
   assert_in_vm_with_retries "! sudo k3s kubectl get namespace cert-manager >/dev/null 2>&1" "cert-manager namespace was removed by rollback" 600 15
   assert_in_vm_with_retries "! sudo k3s kubectl get namespace longhorn-system >/dev/null 2>&1" "longhorn-system namespace was removed by rollback" 600 15
@@ -559,12 +659,13 @@ run_full_rollback() {
   assert_in_vm_with_retries "! sudo k3s kubectl get namespace registry >/dev/null 2>&1" "registry namespace was removed by rollback" 600 15
   assert_in_vm_with_retries "! sudo k3s kubectl get clusterissuer selfsigned >/dev/null 2>&1" "selfsigned ClusterIssuer was removed by rollback" 300 10
   assert_in_vm_with_retries "! grep -qE '^[[:space:]]*/srv/nfs/k8s-share[[:space:]]' /etc/exports" "NFS export was removed by rollback" 120 5
-  assert_in_vm_with_retries "! grep -q 'rancher.home.arpa\\|registry.home.arpa' /etc/hosts" "bootstrap-managed hosts entries were removed by rollback" 120 5
+  assert_in_vm_with_retries "! grep -q 'rancher.home.arpa\\|registry.home.arpa' /etc/hosts" "apply-managed hosts entries were removed by rollback" 120 5
 }
 
 main() {
   parse_args "$@"
   need_cmd multipass || { err "multipass is required"; exit 1; }
+  ADDONS_REPO_DIR="$(resolve_addons_repo_dir || true)"
   ensure_artifacts_dir
   trap cleanup EXIT
 

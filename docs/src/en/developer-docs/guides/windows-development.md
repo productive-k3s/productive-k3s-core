@@ -241,14 +241,14 @@ test-artifacts/
 The pass/fail source of truth is the test result artifact:
 
 ```bash
-find test-artifacts -maxdepth 1 -type f -name 'test-in-vm-*.json' ! -name '*-bootstrap-manifest.json'
+find test-artifacts -maxdepth 1 -type f -name 'test-in-vm-*.json' ! -name '*-apply-manifest.json'
 ```
 
 Check recent results:
 
 ```bash
 ls -1t test-artifacts/*.json | head
-find test-artifacts -maxdepth 1 -type f -name 'test-in-vm-*.json' ! -name '*-bootstrap-manifest.json' -print0 \
+find test-artifacts -maxdepth 1 -type f -name 'test-in-vm-*.json' ! -name '*-apply-manifest.json' -print0 \
   | xargs -0 jq '{status, profile, image, vm_name}'
 ```
 
@@ -258,7 +258,7 @@ Successful runs should show:
 "status": "success"
 ```
 
-Do not use `*-bootstrap-manifest.json` as the primary pass/fail indicator. Those files describe the bootstrap run, not the whole VM test profile.
+Do not use `*-apply-manifest.json` as the primary pass/fail indicator. Those files describe the bootstrap run, not the whole VM test profile.
 
 ## Common Troubleshooting
 

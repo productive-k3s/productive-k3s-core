@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Incremental k3s stack bootstrap for Ubuntu and supported Debian targets
+# Incremental k3s stack apply flow for Ubuntu and supported Debian targets
 # - Detects existing installations first
 # - Prompts before each change
 # - Leaves existing cluster components untouched by default
@@ -9,6 +9,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/component-versions.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/addons-runtime.sh"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_GREEN=$'\033[1;32m'
@@ -40,6 +42,7 @@ json_escape() {
 
 DRY_RUN=0
 MODE="single-node"
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-base}"
 PRODUCTIVE_K3S_ENGINE="${PRODUCTIVE_K3S_ENGINE:-native}"
 PRODUCTIVE_K3S_SSH_HOST="${PRODUCTIVE_K3S_SSH_HOST:-}"
 PRODUCTIVE_K3S_SSH_USER="${PRODUCTIVE_K3S_SSH_USER:-}"
@@ -147,7 +150,7 @@ emit_bootstrap_lifecycle_event() {
     return 0
   fi
 
-  event_name="core.bootstrap.$(bootstrap_event_mode_name).${phase}"
+  event_name="core.apply.$(bootstrap_event_mode_name).${phase}"
   event_file="$(mktemp)"
   {
     printf '{\n'
@@ -160,13 +163,13 @@ emit_bootstrap_lifecycle_event() {
     printf '  "parent_run_id": "%s",\n' "$(json_escape "${TELEMETRY_PARENT_RUN_ID:-}")"
     printf '  "component": "core",\n'
     printf '  "command": {\n'
-    printf '    "name": "bootstrap",\n'
+    printf '    "name": "apply",\n'
     printf '    "mode": "%s",\n' "$(json_escape "${MODE}")"
     printf '    "result": "%s"\n' "$(json_escape "${result}")"
     printf '  },\n'
     printf '  "client": {\n'
     printf '    "repository": "productive-k3s-core",\n'
-    printf '    "script": "scripts/bootstrap-k3s-stack.sh",\n'
+    printf '    "script": "scripts/apply.sh",\n'
     printf '    "telemetry_enabled": "%s"\n' "$(json_escape "${TELEMETRY_ENABLED}")"
     printf '  },\n'
     printf '  "telemetry_meta": {\n'
@@ -212,7 +215,7 @@ mode_description() {
       printf '%s' "single-node installation"
       ;;
     server)
-      printf '%s' "server bootstrap installation"
+      printf '%s' "server apply installation"
       ;;
     agent)
       printf '%s' "agent join installation"
@@ -307,8 +310,8 @@ init_run_manifest() {
   RUN_ID="${ts}-$$-${RANDOM}${RANDOM}"
   RUN_STARTED_AT="$(date -Iseconds)"
   mkdir -p "$RUNS_DIR"
-  RUN_MANIFEST="${RUNS_DIR}/bootstrap-${RUN_ID}.json"
-  RUN_PRIVATE_CONTEXT="${RUNS_DIR}/bootstrap-${RUN_ID}.private-context"
+  RUN_MANIFEST="${RUNS_DIR}/apply-${RUN_ID}.json"
+  RUN_PRIVATE_CONTEXT="${RUNS_DIR}/apply-${RUN_ID}.private-context"
   MANIFEST_INITIALIZED=1
 }
 
@@ -321,7 +324,7 @@ write_run_manifest() {
   {
     printf '{\n'
     printf '  "run_id": "%s",\n' "$(json_escape "$RUN_ID")"
-    printf '  "script": "scripts/bootstrap-k3s-stack.sh",\n'
+    printf '  "script": "scripts/apply.sh",\n'
     printf '  "mode": "%s",\n' "$( [[ "$DRY_RUN" == "1" ]] && printf 'dry-run' || printf 'apply' )"
     printf '  "status": "%s",\n' "$(json_escape "$RUN_STATUS")"
     printf '  "exit_code": %s,\n' "$exit_code"
@@ -370,7 +373,7 @@ write_private_run_context() {
   {
     printf '{\n'
     printf '  "run_id": "%s",\n' "$(json_escape "$RUN_ID")"
-    printf '  "script": "scripts/bootstrap-k3s-stack.sh",\n'
+    printf '  "script": "scripts/apply.sh",\n'
     printf '  "mode": "%s",\n' "$( [[ "$DRY_RUN" == "1" ]] && printf 'dry-run' || printf 'apply' )"
     printf '  "status": "%s",\n' "$(json_escape "$RUN_STATUS")"
     printf '  "exit_code": %s,\n' "$exit_code"
@@ -459,7 +462,7 @@ maybe_send_telemetry() {
   TELEMETRY_COMPONENT="core" \
   TELEMETRY_MARKER="${TELEMETRY_MARKER}" \
   TELEMETRY_SOURCE_REPOSITORY="productive-k3s" \
-  TELEMETRY_SOURCE_SCRIPT="scripts/bootstrap-k3s-stack.sh" \
+  TELEMETRY_SOURCE_SCRIPT="scripts/apply.sh" \
   TELEMETRY_EXIT_CODE="${exit_code}" \
   bash "$sender_script" "$RUN_MANIFEST"
 }
@@ -469,10 +472,10 @@ prompt() {
   local val
   if can_use_tty; then
     printf '%s [%s]: ' "$msg" "$default" > /dev/tty
-    IFS= read -r val < /dev/tty
+    IFS= read -r val < /dev/tty || true
   else
     printf '%s [%s]: ' "$msg" "$default"
-    IFS= read -r val
+    IFS= read -r val || true
   fi
   val="${val:-$default}"
   printf -v "$var" '%s' "$val"
@@ -484,10 +487,10 @@ prompt_yesno() {
   local d="$default"
   if can_use_tty; then
     printf '%s [%s] (y/n): ' "$msg" "$d" > /dev/tty
-    IFS= read -r val < /dev/tty
+    IFS= read -r val < /dev/tty || true
   else
     printf '%s [%s] (y/n): ' "$msg" "$d"
-    IFS= read -r val
+    IFS= read -r val || true
   fi
   val="${val:-$d}"
   case "$val" in
@@ -652,7 +655,7 @@ run_shell() {
     return 0
   fi
 
-  bash -lc "$cmd"
+  bash -lc "$cmd" </dev/null
 }
 
 apply_manifest() {
@@ -1207,7 +1210,11 @@ confirm_preflight() {
   fi
 
   local continue_anyway="n"
-  prompt_yesno continue_anyway "n" "${component} preflight found warnings. Continue anyway?"
+  if is_truthy "${PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS:-false}"; then
+    continue_anyway="y"
+  else
+    prompt_yesno continue_anyway "n" "${component} preflight found warnings. Continue anyway?"
+  fi
   if [[ "$continue_anyway" != "y" ]]; then
     warn "${component} installation cancelled."
     track_skip "${component}: cancelled after preflight warnings"
@@ -1456,11 +1463,11 @@ k3sup_remote_target_args() {
   local -a args=()
 
   [[ -n "$host" ]] || {
-    err "k3sup engine requires PRODUCTIVE_K3S_SSH_HOST for remote bootstrap modes."
+    err "k3sup engine requires PRODUCTIVE_K3S_SSH_HOST for remote apply modes."
     exit 1
   }
   [[ -n "$user" ]] || {
-    err "k3sup engine requires PRODUCTIVE_K3S_SSH_USER for remote bootstrap modes."
+    err "k3sup engine requires PRODUCTIVE_K3S_SSH_USER for remote apply modes."
     exit 1
   }
 
@@ -1532,89 +1539,167 @@ install_helm_if_needed() {
   manifest_complete_component "helm" "$(result_for_mode installed)"
 }
 
+clusterissuer_action() {
+  if [[ "${MANIFEST_PLANNED["clusterissuer"]:-skip}" != "ensure" ]]; then
+    printf '%s\n' "skip"
+  elif [[ "${MANIFEST_DETECTED["clusterissuer"]:-missing}" == "present" ]]; then
+    printf '%s\n' "reuse"
+  else
+    printf '%s\n' "install"
+  fi
+}
+
+stack_install_order_addons() {
+  if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
+    err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
+    exit 1
+  fi
+
+  stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}"
+}
+
+write_addon_config_var() {
+  local output_file="$1"
+  local key="$2"
+  local value="$3"
+  printf '%s=%q\n' "${key}" "${value}" >> "${output_file}"
+}
+
+apply_addon_config_file() {
+  local config_file="$1"
+  [[ -s "${config_file}" ]] || return 0
+  # shellcheck source=/dev/null
+  source "${config_file}"
+}
+
+run_addon_source_configure_hook() {
+  local addon_name="$1"
+  local phase="$2"
+  local output_file="$3"
+
+  if ! addon_source_script_exists "${addon_name}" configure.sh; then
+    err "Addon '${addon_name}' does not provide scripts/configure.sh"
+    exit 1
+  fi
+
+  : > "${output_file}"
+  if ! run_addon_source_hook "${addon_name}" configure.sh pk3s_addon_configure "${phase}" "${output_file}"; then
+    err "Addon '${addon_name}' configure hook 'pk3s_addon_configure' is missing."
+    exit 1
+  fi
+}
+
+install_stack_addon_by_name() {
+  local addon_name="$1"
+  local component_key
+  component_key="$(addon_component_key "${addon_name}")"
+  CURRENT_STEP="${component_key}"
+  log "Processing stack addon '${addon_name}' from stack '${PRODUCTIVE_K3S_STACK_NAME}'"
+
+  case "${addon_name}" in
+    cert-manager)
+      ensure_cert_manager \
+        "$cert_manager_present" \
+        "$CERT_MANAGER_ACTION" \
+        "$(clusterissuer_action)" \
+        "$TLS_CHOICE" \
+        "$ISSUER_NAME" \
+        "$LE_EMAIL" \
+        "$LE_ENV"
+      ;;
+    longhorn)
+      install_longhorn_if_needed \
+        "$longhorn_present" \
+        "$LONGHORN_ACTION" \
+        "$LONGHORN_DATA_PATH" \
+        "$LONGHORN_REPLICA_COUNT" \
+        "$LONGHORN_MINIMAL_AVAILABLE_PERCENTAGE" \
+        "$SINGLE_NODE_LONGHORN_MODE"
+      ;;
+    rancher)
+      install_rancher_if_needed \
+        "$rancher_present" \
+        "$RANCHER_ACTION" \
+        "$TLS_CHOICE" \
+        "$ISSUER_NAME" \
+        "$RANCHER_HOST" \
+        "$ADMIN_PASS" \
+        "$LE_EMAIL" \
+        "$LE_ENV"
+      ;;
+    registry)
+      install_registry_if_needed \
+        "$registry_present" \
+        "$REGISTRY_ACTION" \
+        "$TLS_CHOICE" \
+        "$ISSUER_NAME" \
+        "$REGISTRY_HOST" \
+        "$REGISTRY_SIZE" \
+        "$REGISTRY_STORAGE_CLASS" \
+        "$REGISTRY_AUTH_ENABLED" \
+        "$REGISTRY_AUTH_USER" \
+        "$REGISTRY_AUTH_PASSWORD"
+      ;;
+    *)
+      warn "Stack '${PRODUCTIVE_K3S_STACK_NAME}' references unsupported addon '${addon_name}'. Skipping."
+      ;;
+  esac
+}
+
 ensure_cert_manager() {
   local cert_manager_present="$1"
   local action="$2"
+  local issuer_action="$3"
+  local tls_choice="$4"
+  local issuer_name="$5"
+  local le_email="$6"
+  local le_env="$7"
 
   if [[ "$action" == "reuse" && "$cert_manager_present" == "y" ]]; then
     track_reuse "cert-manager"
     manifest_complete_component "cert_manager" "$(result_for_mode reused)"
-    return
-  fi
-
-  if [[ "$action" != "install" ]]; then
-    err "Skipping cert-manager would leave TLS-dependent installs unsupported."
-    exit 1
-  fi
-
-  track_install "cert-manager"
-  preflight_cert_manager_install || exit 1
-  log "Installing cert-manager..."
-  ensure_namespace cert-manager
-  run_cmd "Applying cert-manager manifest" sudo k3s kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${PRODUCTIVE_K3S_CERT_MANAGER_VERSION}/cert-manager.yaml"
-  wait_pods_ready "cert-manager" 420
-  wait_service_endpoints "cert-manager" "cert-manager-webhook" 180
-  manifest_complete_component "cert_manager" "$(result_for_mode installed)"
-}
-
-ensure_issuer() {
-  local tls_choice="$1"
-  local issuer_name="$2"
-  local le_email="$3"
-  local le_env="$4"
-  local issuer_manifest=""
-
-  if clusterissuer_exists "$issuer_name"; then
-    log "ClusterIssuer '${issuer_name}' already exists. Leaving it untouched."
-    track_reuse "clusterissuer/${issuer_name}"
-    manifest_complete_component "clusterissuer" "$(result_for_mode reused)" "$issuer_name"
-    return
-  fi
-
-  local create_issuer="y"
-  prompt_yesno create_issuer "y" "ClusterIssuer '${issuer_name}' is missing. Create it now?"
-  if [[ "$create_issuer" != "y" ]]; then
-    err "Cannot continue without the required ClusterIssuer."
-    exit 1
-  fi
-
-  track_install "clusterissuer/${issuer_name}"
-  log "Creating ClusterIssuer '${issuer_name}'..."
-  if [[ "$tls_choice" == "1" ]]; then
-    issuer_manifest="$(cat <<EOF
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: ${issuer_name}
-spec:
-  acme:
-    email: ${le_email}
-    server: $( [[ "$le_env" == "production" ]] && echo "https://acme-v02.api.letsencrypt.org/directory" || echo "https://acme-staging-v02.api.letsencrypt.org/directory" )
-    privateKeySecretRef:
-      name: ${issuer_name}-account-key
-    solvers:
-    - http01:
-        ingress:
-          ingressClassName: traefik
-EOF
-)"
+  elif [[ "$action" != "install" ]]; then
+    if [[ "$issuer_action" == "install" ]]; then
+      err "Skipping cert-manager would leave TLS-dependent installs unsupported."
+      exit 1
+    fi
+    track_skip "cert-manager: user chose not to install"
+    manifest_complete_component "cert_manager" "skipped"
   else
-    issuer_manifest="$(cat <<EOF
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: ${issuer_name}
-spec:
-  selfSigned: {}
-EOF
-)"
+    track_install "cert-manager"
+    preflight_cert_manager_install || exit 1
+    if ! addon_source_script_exists cert-manager install.sh; then
+      err "Addon source for cert-manager is required but scripts/install.sh was not found."
+      exit 1
+    fi
+    log "Installing cert-manager from addon source..."
+    if ! PK3S_KUBECTL_MODE="k3s" \
+      PK3S_CERT_MANAGER_VERSION="${PRODUCTIVE_K3S_CERT_MANAGER_VERSION}" \
+      PK3S_CLUSTER_ISSUER_ACTION="${issuer_action}" \
+      PK3S_TLS_SOURCE="$( [[ "${tls_choice}" == "1" ]] && echo letsencrypt || echo secret )" \
+      PK3S_CLUSTER_ISSUER="${issuer_name}" \
+      PK3S_LETSENCRYPT_EMAIL="${le_email}" \
+      PK3S_LETSENCRYPT_ENVIRONMENT="${le_env}" \
+      run_addon_source_hook cert-manager install.sh pk3s_addon_install; then
+      err "Addon source for cert-manager must define pk3s_addon_install."
+      exit 1
+    fi
+    manifest_complete_component "cert_manager" "$(result_for_mode installed)"
   fi
 
-  if ! apply_manifest_with_retries "Creating ClusterIssuer ${issuer_name}" "$issuer_manifest" 180 5; then
-    err "Could not create ClusterIssuer '${issuer_name}' after waiting for cert-manager webhook readiness."
-    exit 1
-  fi
-  manifest_complete_component "clusterissuer" "$(result_for_mode installed)" "$issuer_name"
+  case "${issuer_action}" in
+    reuse)
+      track_reuse "clusterissuer/${issuer_name}"
+      manifest_complete_component "clusterissuer" "$(result_for_mode reused)" "$issuer_name"
+      ;;
+    install)
+      track_install "clusterissuer/${issuer_name}"
+      manifest_complete_component "clusterissuer" "$(result_for_mode installed)" "$issuer_name"
+      ;;
+    *)
+      manifest_complete_component "clusterissuer" "skipped"
+      ;;
+  esac
 }
 
 install_longhorn_if_needed() {
@@ -1646,68 +1731,22 @@ install_longhorn_if_needed() {
   warn "This script will not format or mount disks. Prepare dedicated mounted storage yourself if you need it."
   run_cmd "Ensuring directory ${longhorn_data_path} exists" sudo mkdir -p "$longhorn_data_path"
 
-  log "Installing Longhorn..."
-  ensure_helm_repo longhorn https://charts.longhorn.io
-  run_cmd_with_retries "Updating Helm repos for Longhorn" 180 10 helm repo update
-  ensure_namespace longhorn-system
-  run_cmd_with_retries "Installing Longhorn" 300 15 helm install longhorn longhorn/longhorn \
-    --namespace longhorn-system \
-    --version "${PRODUCTIVE_K3S_LONGHORN_VERSION}" \
-    --set defaultSettings.defaultReplicaCount="${replica_count}" \
-    --set defaultSettings.defaultDataPath="${longhorn_data_path}"
-  wait_pods_ready "longhorn-system" 600
-
-  if [[ "$single_node_mode" == "y" ]]; then
-    apply_manifest "Creating Longhorn single-node StorageClass" "$(cat <<EOF
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: longhorn-single
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "false"
-provisioner: driver.longhorn.io
-allowVolumeExpansion: true
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
-parameters:
-  numberOfReplicas: "1"
-EOF
-)"
-
-    run_cmd "Setting Longhorn minimal available percentage to ${minimal_available_pct}" \
-      kubectl_k3s patch settings.longhorn.io storage-minimal-available-percentage -n longhorn-system --type=merge \
-      -p "{\"value\":\"${minimal_available_pct}\"}" || true
+  if ! addon_source_script_exists longhorn install.sh; then
+    err "Addon source for longhorn is required but scripts/install.sh was not found."
+    exit 1
   fi
-
-  local make_default_sc="n"
-  if [[ "$single_node_mode" == "y" ]]; then
-    make_default_sc="y"
-  fi
-  prompt_yesno make_default_sc "$make_default_sc" "Make Longhorn the default StorageClass?"
-  if [[ "$make_default_sc" == "y" ]]; then
-    local preferred_longhorn_sc="longhorn"
-    if [[ "$single_node_mode" == "y" ]] && storageclass_exists longhorn-single; then
-      preferred_longhorn_sc="longhorn-single"
-    fi
-    if storageclass_exists "$preferred_longhorn_sc"; then
-      run_cmd "Marking ${preferred_longhorn_sc} as default StorageClass" kubectl_k3s patch storageclass "$preferred_longhorn_sc" -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' || true
-      if storageclass_exists longhorn && [[ "$preferred_longhorn_sc" != "longhorn" ]]; then
-        run_cmd "Marking longhorn as non-default StorageClass" kubectl_k3s patch storageclass longhorn -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' || true
-      fi
-      if storageclass_exists local-path; then
-        run_cmd "Marking local-path as non-default StorageClass" kubectl_k3s patch storageclass local-path -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' || true
-      fi
-      if storageclass_exists longhorn-static; then
-        run_cmd "Marking longhorn-static as non-default StorageClass" kubectl_k3s patch storageclass longhorn-static -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' || true
-      fi
-    else
-      warn "Preferred Longhorn StorageClass '${preferred_longhorn_sc}' was not found after installation."
-    fi
-  elif storageclass_exists longhorn; then
-    run_cmd "Marking Longhorn as non-default StorageClass" kubectl_k3s patch storageclass longhorn -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' || true
-    if storageclass_exists longhorn-single; then
-      run_cmd "Marking longhorn-single as non-default StorageClass" kubectl_k3s patch storageclass longhorn-single -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' || true
-    fi
+  log "Installing Longhorn from addon source..."
+  if ! PK3S_KUBECTL_MODE="k3s" \
+    PK3S_HELM_BIN="helm" \
+    PK3S_LONGHORN_VERSION="${PRODUCTIVE_K3S_LONGHORN_VERSION}" \
+    PK3S_LONGHORN_DATA_PATH="${longhorn_data_path}" \
+    PK3S_LONGHORN_REPLICA_COUNT="${replica_count}" \
+    PK3S_LONGHORN_SINGLE_NODE_MODE="${single_node_mode}" \
+    PK3S_LONGHORN_MINIMAL_AVAILABLE_PERCENTAGE="${minimal_available_pct}" \
+    PK3S_LONGHORN_MAKE_DEFAULT="${LONGHORN_MAKE_DEFAULT:-n}" \
+    run_addon_source_hook longhorn install.sh pk3s_addon_install; then
+    err "Addon source for longhorn must define pk3s_addon_install."
+    exit 1
   fi
   manifest_complete_component "longhorn" "$(result_for_mode installed)"
 }
@@ -1737,67 +1776,23 @@ install_rancher_if_needed() {
 
   track_install "Rancher"
   preflight_rancher_install "$rancher_host" || return
-  log "Installing Rancher..."
-  ensure_helm_repo rancher-latest https://releases.rancher.com/server-charts/latest
-  run_cmd_with_retries "Updating Helm repos for Rancher" 180 10 helm repo update
-  ensure_namespace cattle-system
-
-  if [[ "$tls_choice" == "2" ]] && ! secret_exists cattle-system rancher-tls; then
-    log "Creating certificate for Rancher..."
-    apply_manifest "Creating Rancher TLS certificate" "$(cat <<EOF
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: rancher-tls
-  namespace: cattle-system
-spec:
-  secretName: rancher-tls
-  issuerRef:
-    name: ${issuer_name}
-    kind: ClusterIssuer
-  dnsNames:
-  - ${rancher_host}
-EOF
-)"
-
-    log "Waiting for Rancher TLS secret to be issued..."
-    if ! wait_for_secret cattle-system rancher-tls 120; then
-      err "Timed out waiting for cattle-system/rancher-tls."
-      exit 1
-    fi
-    if ! wait_for_certificate_ready cattle-system rancher-tls 180; then
-      err "Timed out waiting for cattle-system/rancher-tls Certificate to become Ready."
-      exit 1
-    fi
-
-    ensure_rancher_private_ca_secret
+  if ! addon_source_script_exists rancher install.sh; then
+    err "Addon source for rancher is required but scripts/install.sh was not found."
+    exit 1
   fi
-
-  if [[ "$tls_choice" == "1" ]]; then
-    run_cmd_with_retries "Installing Rancher" 300 15 helm install rancher rancher-latest/rancher \
-      --namespace cattle-system \
-      --version "${PRODUCTIVE_K3S_RANCHER_VERSION}" \
-      --set hostname="${rancher_host}" \
-      --set bootstrapPassword="${admin_pass}" \
-      --set ingress.tls.source=letsEncrypt \
-      --set letsEncrypt.email="${le_email}" \
-      --set letsEncrypt.environment="${le_env}"
-  else
-    run_cmd_with_retries "Installing Rancher" 300 15 helm install rancher rancher-latest/rancher \
-      --namespace cattle-system \
-      --version "${PRODUCTIVE_K3S_RANCHER_VERSION}" \
-      --set hostname="${rancher_host}" \
-      --set bootstrapPassword="${admin_pass}" \
-      --set ingress.tls.source=secret \
-      --set privateCA=true
-  fi
-
-  log "Waiting for Rancher deployment..."
-  if [[ "$DRY_RUN" == "1" ]]; then
-    log "[dry-run] Skipping Rancher rollout wait."
-  else
-    kubectl_k3s -n cattle-system rollout status deploy/rancher --timeout=10m || true
-    kubectl_k3s get pods -n cattle-system -o wide || true
+  log "Installing Rancher from addon source..."
+  if ! PK3S_KUBECTL_MODE="k3s" \
+    PK3S_HELM_BIN="helm" \
+    PK3S_RANCHER_VERSION="${PRODUCTIVE_K3S_RANCHER_VERSION}" \
+    PK3S_RANCHER_HOST="${rancher_host}" \
+    PK3S_RANCHER_BOOTSTRAP_PASSWORD="${admin_pass}" \
+    PK3S_TLS_SOURCE="$( [[ "${tls_choice}" == "1" ]] && echo letsencrypt || echo secret )" \
+    PK3S_CLUSTER_ISSUER="${issuer_name}" \
+    PK3S_LETSENCRYPT_EMAIL="${le_email}" \
+    PK3S_LETSENCRYPT_ENVIRONMENT="${le_env}" \
+    run_addon_source_hook rancher install.sh pk3s_addon_install; then
+    err "Addon source for rancher must define pk3s_addon_install."
+    exit 1
   fi
   manifest_complete_component "rancher" "$(result_for_mode installed)"
 }
@@ -1829,176 +1824,25 @@ install_registry_if_needed() {
 
   track_install "Registry"
   preflight_registry_install "$registry_host" "$registry_storage_class" || return
-  log "Installing the in-cluster Docker Registry..."
-  ensure_namespace registry
-
-  if [[ "$tls_choice" == "2" ]] && ! secret_exists registry registry-tls; then
-    log "Creating certificate for the registry..."
-    apply_manifest "Creating registry TLS certificate" "$(cat <<EOF
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: registry-tls
-  namespace: registry
-spec:
-  secretName: registry-tls
-  issuerRef:
-    name: ${issuer_name}
-    kind: ClusterIssuer
-  dnsNames:
-  - ${registry_host}
-EOF
-)"
-    log "Waiting for Registry TLS secret to be issued..."
-    if ! wait_for_secret registry registry-tls 120; then
-      err "Timed out waiting for registry/registry-tls."
-      exit 1
-    fi
-    if ! wait_for_certificate_ready registry registry-tls 180; then
-      err "Timed out waiting for registry/registry-tls Certificate to become Ready."
-      exit 1
-    fi
+  if ! addon_source_script_exists registry install.sh; then
+    err "Addon source for registry is required but scripts/install.sh was not found."
+    exit 1
   fi
-
-  if [[ "$registry_auth_enabled" == "y" ]]; then
-    if ! need_cmd openssl; then
-      err "openssl is required to generate registry htpasswd entries."
-      exit 1
-    fi
-
-    local auth_hash
-    auth_hash="$(openssl passwd -apr1 "$registry_auth_password")"
-    if [[ -z "$auth_hash" ]]; then
-      err "Failed to generate registry htpasswd entry."
-      exit 1
-    fi
-
-    if [[ "$DRY_RUN" == "1" ]]; then
-      log "[dry-run] Creating/updating registry basic-auth secret"
-      echo "  username: ${registry_auth_user}"
-    else
-      kubectl_k3s delete secret registry-auth -n registry >/dev/null 2>&1 || true
-      printf '%s:%s\n' "$registry_auth_user" "$auth_hash" | kubectl_k3s create secret generic registry-auth -n registry --from-file=htpasswd=/dev/stdin >/dev/null
-    fi
+  log "Installing Registry from addon source..."
+  if ! PK3S_KUBECTL_MODE="k3s" \
+    PK3S_REGISTRY_IMAGE="${PRODUCTIVE_K3S_REGISTRY_IMAGE}" \
+    PK3S_REGISTRY_HOST="${registry_host}" \
+    PK3S_REGISTRY_PVC_SIZE="${registry_size}" \
+    PK3S_REGISTRY_STORAGE_CLASS="${registry_storage_class}" \
+    PK3S_TLS_SOURCE="$( [[ "${tls_choice}" == "1" ]] && echo letsencrypt || echo secret )" \
+    PK3S_CLUSTER_ISSUER="${issuer_name}" \
+    PK3S_REGISTRY_AUTH_ENABLED="${registry_auth_enabled}" \
+    PK3S_REGISTRY_AUTH_USER="${registry_auth_user}" \
+    PK3S_REGISTRY_AUTH_PASSWORD="${registry_auth_password}" \
+    run_addon_source_hook registry install.sh pk3s_addon_install; then
+    err "Addon source for registry must define pk3s_addon_install."
+    exit 1
   fi
-
-  local pvc_storage_class_block=""
-  if [[ -n "$registry_storage_class" ]]; then
-    pvc_storage_class_block="  storageClassName: ${registry_storage_class}"
-  fi
-
-  local ingress_annotations=""
-  if [[ "$tls_choice" == "1" ]]; then
-    ingress_annotations="  annotations:
-    cert-manager.io/cluster-issuer: ${issuer_name}"
-  fi
-
-  local registry_auth_env_block=""
-  local registry_auth_mount_block=""
-  local registry_auth_volume_block=""
-  if [[ "$registry_auth_enabled" == "y" ]]; then
-    registry_auth_env_block="        - name: REGISTRY_AUTH
-          value: htpasswd
-        - name: REGISTRY_AUTH_HTPASSWD_REALM
-          value: Registry Realm
-        - name: REGISTRY_AUTH_HTPASSWD_PATH
-          value: /auth/htpasswd"
-    registry_auth_mount_block="        - name: auth
-          mountPath: /auth
-          readOnly: true"
-    registry_auth_volume_block="      - name: auth
-        secret:
-          secretName: registry-auth"
-  fi
-
-  apply_manifest "Installing the in-cluster registry" "$(cat <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: registry
-  namespace: registry
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: registry
-  template:
-    metadata:
-      labels:
-        app: registry
-    spec:
-      containers:
-      - name: registry
-        image: ${PRODUCTIVE_K3S_REGISTRY_IMAGE}
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 5000
-          name: http
-        env:
-        - name: REGISTRY_HTTP_ADDR
-          value: 0.0.0.0:5000
-${registry_auth_env_block}
-        volumeMounts:
-        - name: data
-          mountPath: /var/lib/registry
-${registry_auth_mount_block}
-      volumes:
-      - name: data
-        persistentVolumeClaim:
-          claimName: registry-data
-${registry_auth_volume_block}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: registry
-  namespace: registry
-spec:
-  selector:
-    app: registry
-  ports:
-  - name: http
-    port: 5000
-    targetPort: http
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: registry-data
-  namespace: registry
-spec:
-  accessModes:
-  - ReadWriteOnce
-${pvc_storage_class_block}
-  resources:
-    requests:
-      storage: ${registry_size}
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: registry
-  namespace: registry
-${ingress_annotations}
-spec:
-  tls:
-  - hosts:
-    - ${registry_host}
-    secretName: registry-tls
-  rules:
-  - host: ${registry_host}
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: registry
-            port:
-              number: 5000
-EOF
-)"
-  wait_pods_ready "registry" 300
   manifest_complete_component "registry" "$(result_for_mode installed)"
 }
 
@@ -2090,7 +1934,7 @@ main() {
     mode_label="dry-run ${mode_label}"
   fi
 
-  log "Incremental bootstrap: k3s + Rancher + Longhorn + Registry (${OS_PRETTY_NAME})"
+  log "Incremental apply: k3s + Rancher + Longhorn + Registry (${OS_PRETTY_NAME})"
   log "Mode: ${MODE} (${mode_label})"
   log "k3s installation engine: ${PRODUCTIVE_K3S_ENGINE}"
   line "  Run manifest: ${RUN_MANIFEST}"
@@ -2184,6 +2028,7 @@ main() {
   local LONGHORN_REPLICA_COUNT="1"
   local LONGHORN_MINIMAL_AVAILABLE_PERCENTAGE="10"
   local LONGHORN_DATA_PATH="/data"
+  local LONGHORN_MAKE_DEFAULT="n"
   local REGISTRY_STORAGE_CLASS=""
   local TLS_CHOICE="2"
   local LE_EMAIL="you@example.com"
@@ -2264,41 +2109,23 @@ main() {
     HELM_ACTION="reuse"
   fi
 
+  local addon_config_file
+  addon_config_file="$(mktemp)"
+
   if mode_runs_stack; then
-    if [[ "$longhorn_present" == "y" ]]; then
-      prompt_yesno REUSE_LONGHORN "y" "Longhorn is already present. Leave it unchanged and continue? [optional]"
-      if [[ "$REUSE_LONGHORN" == "y" ]]; then LONGHORN_ACTION="reuse"; else LONGHORN_ACTION="skip"; fi
-    else
-      prompt_yesno INSTALL_LONGHORN "y" "Longhorn is missing. Install it now? [optional]"
-      if [[ "$INSTALL_LONGHORN" == "y" ]]; then LONGHORN_ACTION="install"; else LONGHORN_ACTION="skip"; fi
-    fi
+    PK3S_ADDON_PRESENT="$longhorn_present" run_addon_source_configure_hook "longhorn" "action" "${addon_config_file}"
+    apply_addon_config_file "${addon_config_file}"
 
-    if [[ "$rancher_present" == "y" ]]; then
-      prompt_yesno REUSE_RANCHER "y" "Rancher is already present. Leave it unchanged and continue? [optional]"
-      if [[ "$REUSE_RANCHER" == "y" ]]; then RANCHER_ACTION="reuse"; else RANCHER_ACTION="skip"; fi
-    else
-      prompt_yesno INSTALL_RANCHER "y" "Rancher is missing. Install it now? [optional]"
-      if [[ "$INSTALL_RANCHER" == "y" ]]; then RANCHER_ACTION="install"; else RANCHER_ACTION="skip"; fi
-    fi
+    PK3S_ADDON_PRESENT="$rancher_present" run_addon_source_configure_hook "rancher" "action" "${addon_config_file}"
+    apply_addon_config_file "${addon_config_file}"
 
-    if [[ "$registry_present" == "y" ]]; then
-      prompt_yesno REUSE_REGISTRY "y" "The in-cluster registry is already present. Leave it unchanged and continue? [optional]"
-      if [[ "$REUSE_REGISTRY" == "y" ]]; then REGISTRY_ACTION="reuse"; else REGISTRY_ACTION="skip"; fi
-    else
-      prompt_yesno INSTALL_REGISTRY "y" "The in-cluster registry is missing. Install it now? [optional]"
-      if [[ "$INSTALL_REGISTRY" == "y" ]]; then REGISTRY_ACTION="install"; else REGISTRY_ACTION="skip"; fi
-    fi
+    PK3S_ADDON_PRESENT="$registry_present" run_addon_source_configure_hook "registry" "action" "${addon_config_file}"
+    apply_addon_config_file "${addon_config_file}"
 
-    if [[ "$cert_manager_present" == "y" ]]; then
-      CERT_MANAGER_ACTION="reuse"
-    elif [[ "$RANCHER_ACTION" == "install" || "$REGISTRY_ACTION" == "install" ]]; then
-      prompt_yesno INSTALL_CERT_MANAGER "y" "cert-manager is missing. Install it now? [required for TLS-dependent installs]"
-      [[ "$INSTALL_CERT_MANAGER" == "y" ]] || { err "Skipping cert-manager would leave TLS-dependent installs unsupported."; exit 1; }
-      CERT_MANAGER_ACTION="install"
-    else
-      CERT_MANAGER_ACTION="skip"
-      MANIFEST_RESULT["cert_manager"]="skipped"
-    fi
+    PK3S_ADDON_PRESENT="$cert_manager_present" PK3S_CERT_MANAGER_REQUIRED="$( [[ "$RANCHER_ACTION" == "install" || "$REGISTRY_ACTION" == "install" ]] && echo y || echo n )" \
+      run_addon_source_configure_hook "cert-manager" "action" "${addon_config_file}"
+    apply_addon_config_file "${addon_config_file}"
+    [[ "${CERT_MANAGER_ACTION}" != "skip" ]] || MANIFEST_RESULT["cert_manager"]="skipped"
   else
     CERT_MANAGER_ACTION="skip"
     LONGHORN_ACTION="skip"
@@ -2371,25 +2198,6 @@ main() {
 
   if mode_runs_stack && [[ "$RANCHER_ACTION" == "install" || "$REGISTRY_ACTION" == "install" ]]; then
     prompt DOMAIN "$DOMAIN" "Base domain (used to build hostnames)"
-    if [[ "$RANCHER_ACTION" == "install" ]]; then
-      prompt RANCHER_HOST "${rancher_existing_host:-rancher.${DOMAIN}}" "Rancher hostname (DNS name)"
-      prompt ADMIN_PASS "$ADMIN_PASS" "Rancher bootstrap password"
-    fi
-    if [[ "$REGISTRY_ACTION" == "install" ]]; then
-      prompt REGISTRY_HOST "${registry_existing_host:-registry.${DOMAIN}}" "Registry hostname (DNS name)"
-      prompt REGISTRY_SIZE "$REGISTRY_SIZE" "Registry PVC size"
-      if mode_uses_single_node_defaults && [[ "$SINGLE_NODE_LONGHORN_MODE" == "y" ]]; then
-        REGISTRY_STORAGE_CLASS="longhorn-single"
-      elif storageclass_exists longhorn; then
-        REGISTRY_STORAGE_CLASS="longhorn"
-      fi
-      prompt REGISTRY_STORAGE_CLASS "$REGISTRY_STORAGE_CLASS" "Registry StorageClass (blank uses cluster default)"
-      prompt_yesno REGISTRY_AUTH_ENABLED "$REGISTRY_AUTH_ENABLED" "Do you want to enable basic auth on the in-cluster registry?"
-      if [[ "$REGISTRY_AUTH_ENABLED" == "y" ]]; then
-        prompt REGISTRY_AUTH_USER "$REGISTRY_AUTH_USER" "Registry username"
-        prompt REGISTRY_AUTH_PASSWORD "$REGISTRY_AUTH_PASSWORD" "Registry password"
-      fi
-    fi
 
     echo
     echo "TLS options:"
@@ -2404,12 +2212,28 @@ main() {
   fi
 
   if mode_runs_stack && [[ "$LONGHORN_ACTION" == "install" ]]; then
-    prompt LONGHORN_DATA_PATH "$LONGHORN_DATA_PATH" "Longhorn data mount path"
-    prompt LONGHORN_REPLICA_COUNT "$LONGHORN_REPLICA_COUNT" "Longhorn default replica count (1 for single-node)"
     if mode_uses_single_node_defaults && [[ "$SINGLE_NODE_LONGHORN_MODE" == "y" ]]; then
-      prompt LONGHORN_MINIMAL_AVAILABLE_PERCENTAGE "$LONGHORN_MINIMAL_AVAILABLE_PERCENTAGE" "Longhorn storage minimal available percentage (10 is recommended for single-node dev/lab)"
-      log "Single-node Longhorn mode is enabled. The bootstrap will create a 'longhorn-single' StorageClass with numberOfReplicas=1."
+      LONGHORN_MAKE_DEFAULT="y"
     fi
+    PK3S_SINGLE_NODE_LONGHORN_MODE="${SINGLE_NODE_LONGHORN_MODE}" run_addon_source_configure_hook "longhorn" "details" "${addon_config_file}"
+    apply_addon_config_file "${addon_config_file}"
+  fi
+
+  if mode_runs_stack && [[ "$RANCHER_ACTION" == "install" ]]; then
+    RANCHER_HOST="${rancher_existing_host:-rancher.${DOMAIN}}"
+    run_addon_source_configure_hook "rancher" "details" "${addon_config_file}"
+    apply_addon_config_file "${addon_config_file}"
+  fi
+
+  if mode_runs_stack && [[ "$REGISTRY_ACTION" == "install" ]]; then
+    REGISTRY_HOST="${registry_existing_host:-registry.${DOMAIN}}"
+    if mode_uses_single_node_defaults && [[ "$SINGLE_NODE_LONGHORN_MODE" == "y" ]]; then
+      REGISTRY_STORAGE_CLASS="longhorn-single"
+    elif storageclass_exists longhorn; then
+      REGISTRY_STORAGE_CLASS="longhorn"
+    fi
+    run_addon_source_configure_hook "registry" "details" "${addon_config_file}"
+    apply_addon_config_file "${addon_config_file}"
   fi
 
   if mode_runs_host_local && [[ "$TLS_CHOICE" == "2" ]]; then
@@ -2470,7 +2294,9 @@ main() {
     "$( [[ "$TLS_CHOICE" == "2" && "$TRUST_REGISTRY_IN_DOCKER" == "y" ]] && echo install || echo skip )"
 
   prompt_yesno PROCEED_WITH_PLAN "y" "Proceed with this plan?"
-  [[ "$PROCEED_WITH_PLAN" == "y" ]] || { RUN_STATUS="cancelled"; warn "Bootstrap cancelled before applying changes."; exit 0; }
+  rm -f "${addon_config_file}"
+  [[ "$PROCEED_WITH_PLAN" == "y" ]] || { RUN_STATUS="cancelled"; warn "Apply cancelled before applying changes."; exit 0; }
+  exec </dev/null
 
   CURRENT_STEP="k3s"
   install_k3s_if_needed "$K3S_ACTION"
@@ -2493,19 +2319,14 @@ main() {
   else
     warn "k3s is not active yet. Cluster-level checks will be partial until it is installed for real."
   fi
-  if mode_runs_stack && [[ "$RANCHER_ACTION" == "install" || "$REGISTRY_ACTION" == "install" ]]; then
-    CURRENT_STEP="cert_manager"
-    ensure_cert_manager "$cert_manager_present" "$CERT_MANAGER_ACTION"
-    CURRENT_STEP="clusterissuer"
-    ensure_issuer "$TLS_CHOICE" "$ISSUER_NAME" "$LE_EMAIL" "$LE_ENV"
-  fi
   if mode_runs_stack; then
-    CURRENT_STEP="longhorn"
-    install_longhorn_if_needed "$longhorn_present" "$LONGHORN_ACTION" "$LONGHORN_DATA_PATH" "$LONGHORN_REPLICA_COUNT" "$LONGHORN_MINIMAL_AVAILABLE_PERCENTAGE" "$SINGLE_NODE_LONGHORN_MODE"
-    CURRENT_STEP="rancher"
-    install_rancher_if_needed "$rancher_present" "$RANCHER_ACTION" "$TLS_CHOICE" "$ISSUER_NAME" "$RANCHER_HOST" "$ADMIN_PASS" "$LE_EMAIL" "$LE_ENV"
-    CURRENT_STEP="registry"
-    install_registry_if_needed "$registry_present" "$REGISTRY_ACTION" "$TLS_CHOICE" "$ISSUER_NAME" "$REGISTRY_HOST" "$REGISTRY_SIZE" "$REGISTRY_STORAGE_CLASS" "$REGISTRY_AUTH_ENABLED" "$REGISTRY_AUTH_USER" "$REGISTRY_AUTH_PASSWORD"
+    local stack_addon_name
+    local -a stack_addons=()
+    mapfile -t stack_addons < <(stack_install_order_addons)
+    for stack_addon_name in "${stack_addons[@]}"; do
+      [[ -n "${stack_addon_name}" ]] || continue
+      install_stack_addon_by_name "${stack_addon_name}"
+    done
   fi
   if mode_runs_host_local && [[ "$ENABLE_NFS" == "y" ]]; then
     CURRENT_STEP="nfs"

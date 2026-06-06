@@ -15,7 +15,7 @@ Estos son los entrypoints de uso diario más comunes desde la raíz del reposito
 | --- | --- |
 | `make preflight` | Ejecutar los chequeos de preflight del host con guía en nivel warning |
 | `make preflight-strict` | Ejecutar los chequeos de preflight del host y fallar también por warnings |
-| `make bootstrap` | Ejecutar el flujo interactivo de bootstrap en su modo default `single-node` |
+| `make apply` | Ejecutar el flujo interactivo de bootstrap en su modo default `single-node` |
 | `make dry-run` | Ejecutar el bootstrap en modo planificación sin aplicar cambios |
 | `make backup` | Capturar un snapshot de backup del host y del clúster |
 | `make validate` | Ejecutar el validador del stack |

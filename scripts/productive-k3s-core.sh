@@ -15,15 +15,16 @@ Usage:
   ./productive-k3s-core.sh addon <validate|install> --tgz <file>
   ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)
   ./productive-k3s-core.sh dev addon validate --source <dir>
-  ./productive-k3s-core.sh [bootstrap args...]
+  ./productive-k3s-core.sh dev stack validate --source <dir>
+  ./productive-k3s-core.sh [apply args...]
 
 Operational commands:
   bundle      Show bundle metadata for automation
   bom         Show a JSON bill of materials for this CLI/runtime
-  preflight   Run host compatibility checks before bootstrap
-  bootstrap   Run the interactive bootstrap flow
+  preflight   Run host compatibility checks before apply
+  apply       Run the interactive apply flow
   backup      Capture a host and cluster backup snapshot
-  validate    Run the post-bootstrap validator
+  validate    Run the post-apply validator
   addon       Validate or install packaged add-ons
   dev         Development-oriented source-based addon workflows
   help        Show this help
@@ -33,14 +34,14 @@ Examples:
   ./productive-k3s-core.sh bom --json
   ./productive-k3s-core.sh preflight
   ./productive-k3s-core.sh preflight --strict
-  ./productive-k3s-core.sh bootstrap --dry-run
+  ./productive-k3s-core.sh apply --dry-run
   ./productive-k3s-core.sh validate --strict
   ./productive-k3s-core.sh addon validate --tgz ./longhorn-addon.tgz
   ./productive-k3s-core.sh addon install --tgz ./longhorn-addon.tgz --cluster-context default
   ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal --cluster-context default
 
 If no command is provided, or the first argument is an option, the wrapper
-defaults to `bootstrap` for release-installer compatibility.
+defaults to `apply` for release-installer compatibility.
 EOF
 }
 
@@ -159,7 +160,7 @@ core_command_emits_telemetry() {
   local command="${1:-}"
   shift || true
   case "${command}" in
-    bootstrap)
+    apply)
       return 0
       ;;
     addon)
@@ -179,13 +180,13 @@ run_preflight() {
   "${SCRIPT_DIR}/preflight-host.sh" "$@"
 }
 
-run_bootstrap() {
+run_apply() {
   local parent_run_id="${TELEMETRY_RUN_ID:-}"
-  TELEMETRY_PARENT_RUN_ID="${parent_run_id}" TELEMETRY_RUN_ID="" TELEMETRY_COMPONENT="core" "${SCRIPT_DIR}/bootstrap-k3s-stack.sh" "$@"
+  TELEMETRY_PARENT_RUN_ID="${parent_run_id}" TELEMETRY_RUN_ID="" TELEMETRY_COMPONENT="core" "${SCRIPT_DIR}/apply.sh" "$@"
 }
 
 run_backup() {
-  "${SCRIPT_DIR}/backup-k3s-stack.sh" "$@"
+  "${SCRIPT_DIR}/backup.sh" "$@"
 }
 
 resolve_bundle_version_fallback() {
@@ -337,6 +338,19 @@ addon_yaml_get() {
   ' "${file}"
 }
 
+stack_yaml_get() {
+  local file="$1"
+  local key="$2"
+  awk -v key="${key}" '
+    /^metadata:/ { section="metadata"; subsection=""; next }
+    /^spec:/ { section="spec"; subsection=""; next }
+    section == "spec" && /^  addons:/ { subsection="addons"; next }
+    section == "metadata" && key == "metadata.name" && /^  name:/ { print; exit }
+    section == "metadata" && key == "metadata.version" && /^  version:/ { print; exit }
+    section == "spec" && subsection == "addons" && /^    - / { print }
+  ' "${file}"
+}
+
 extract_tgz_to_temp() {
   local archive="$1"
   [[ -f "${archive}" ]] || {
@@ -364,6 +378,17 @@ resolve_addon_manifest() {
   printf '%s\n' "${manifest}"
 }
 
+resolve_stack_manifest() {
+  local package_root="$1"
+  local manifest
+  manifest="$(find "${package_root}" -type f -name 'stack.yaml' | head -n1)"
+  [[ -n "${manifest}" ]] || {
+    printf 'stack source is missing stack.yaml\n' >&2
+    return 4
+  }
+  printf '%s\n' "${manifest}"
+}
+
 validate_addon_manifest() {
   local manifest="$1"
   local addon_name addon_type install_script
@@ -385,6 +410,37 @@ validate_addon_manifest() {
   }
 
   printf '%s\n%s\n%s\n' "${addon_name}" "${addon_type}" "${install_script}"
+}
+
+validate_stack_manifest() {
+  local manifest="$1"
+  local stack_name stack_version addons_raw addon_count=0
+  stack_name="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "metadata.name")")"
+  stack_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "metadata.version")")"
+  addons_raw="$(stack_yaml_get "${manifest}" "spec.addons")"
+
+  [[ -n "${stack_name}" ]] || {
+    printf 'stack source metadata.name is required\n' >&2
+    return 4
+  }
+  [[ -n "${stack_version}" ]] || {
+    printf 'stack source metadata.version is required\n' >&2
+    return 4
+  }
+  while IFS= read -r addon_line; do
+    [[ -n "${addon_line}" ]] || continue
+    local addon_name
+    addon_name="${addon_line#*- }"
+    addon_name="${addon_name# }"
+    [[ -n "${addon_name}" ]] || continue
+    addon_count=$((addon_count + 1))
+  done <<< "${addons_raw}"
+  (( addon_count > 0 )) || {
+    printf 'stack source spec.addons must include at least one addon\n' >&2
+    return 4
+  }
+
+  printf '%s\n%s\n%s\n' "${stack_name}" "${stack_version}" "${addon_count}"
 }
 
 resolve_addon_public_ingress_support() {
@@ -638,6 +694,36 @@ run_dev_addon_validate() {
   printf 'Addon source validation passed\n'
 }
 
+run_dev_stack_validate() {
+  local source_dir=""
+  while (($# > 0)); do
+    case "$1" in
+      --source)
+        source_dir="${2:-}"
+        shift 2
+        ;;
+      *)
+        printf 'Usage: ./productive-k3s-core.sh dev stack validate --source <dir>\n' >&2
+        return 2
+        ;;
+    esac
+  done
+  [[ -n "${source_dir}" ]] || {
+    printf 'Usage: ./productive-k3s-core.sh dev stack validate --source <dir>\n' >&2
+    return 2
+  }
+  local manifest metadata stack_name stack_version addon_count
+  manifest="$(resolve_stack_manifest "${source_dir}")" || return $?
+  metadata="$(validate_stack_manifest "${manifest}")" || return $?
+  stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
+  stack_version="$(printf '%s\n' "${metadata}" | sed -n '2p')"
+  addon_count="$(printf '%s\n' "${metadata}" | sed -n '3p')"
+  printf 'Stack source: %s\n' "${stack_name}"
+  printf 'Stack version: %s\n' "${stack_version}"
+  printf 'Referenced addons: %s\n' "${addon_count}"
+  printf 'Stack source validation passed\n'
+}
+
 run_addon() {
   local action="${1:-}"
   shift || true
@@ -663,8 +749,11 @@ run_dev() {
     addon:validate)
       run_dev_addon_validate "$@"
       ;;
+    stack:validate)
+      run_dev_stack_validate "$@"
+      ;;
     *)
-      printf 'Usage: ./productive-k3s-core.sh dev addon validate --source <dir>\n' >&2
+      printf 'Usage: ./productive-k3s-core.sh dev <addon|stack> validate --source <dir>\n' >&2
       return 2
       ;;
   esac
@@ -700,15 +789,15 @@ run_validate() {
     shift
   done
 
-  "${SCRIPT_DIR}/validate-k3s-stack.sh" "${translated_args[@]}"
+  "${SCRIPT_DIR}/validate.sh" "${translated_args[@]}"
 }
 
 main() {
-  local command="${1:-bootstrap}"
+  local command="${1:-apply}"
   local rc=0
 
   if (($# == 0)); then
-    command="bootstrap"
+    command="apply"
   fi
 
   if core_command_emits_telemetry "${command}" "$@"; then
@@ -734,9 +823,9 @@ main() {
       shift
       run_preflight "$@" || rc=$?
       ;;
-    bootstrap)
+    apply)
       shift
-      run_bootstrap "$@" || rc=$?
+      run_apply "$@" || rc=$?
       ;;
     backup)
       shift
@@ -755,8 +844,8 @@ main() {
       run_dev "$@" || rc=$?
       ;;
     -*)
-      command="bootstrap"
-      run_bootstrap "$@" || rc=$?
+      command="apply"
+      run_apply "$@" || rc=$?
       ;;
     *)
       printf 'Unsupported command: %s\n\n' "$command" >&2

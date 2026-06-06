@@ -101,8 +101,8 @@ Reference commands:
 Check Ubuntu 22.04 artifacts:
 
 ```bash
-find test-artifacts -maxdepth 1 -type f -name 'test-in-vm-*ubuntu*.json' ! -name '*-bootstrap-manifest.json' | sort | tail
-find test-artifacts -maxdepth 1 -type f -name 'test-in-vm-*ubuntu*.json' ! -name '*-bootstrap-manifest.json' -print0 \
+find test-artifacts -maxdepth 1 -type f -name 'test-in-vm-*ubuntu*.json' ! -name '*-apply-manifest.json' | sort | tail
+find test-artifacts -maxdepth 1 -type f -name 'test-in-vm-*ubuntu*.json' ! -name '*-apply-manifest.json' -print0 \
   | xargs -0 jq '{status, profile, platform, image, remote_user, remote_dir, vm_name}'
 ```
 

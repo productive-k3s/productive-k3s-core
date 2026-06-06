@@ -58,7 +58,7 @@ EOF
     The output should include '"sent_at":'
     The output should include '"run_id": "run-123"'
     The output should include '"session_id": "session-abc"'
-    The output should include '"event_name": "bootstrap.completed"'
+    The output should include '"event_name": "apply.completed"'
 
     rm -f "${manifest}"
   End

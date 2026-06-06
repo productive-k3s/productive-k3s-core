@@ -16,7 +16,7 @@ collect_result_artifacts() {
   [[ -d "${ARTIFACTS_DIR}" ]] || return 0
 
   find "${ARTIFACTS_DIR}" -maxdepth 1 -type f -name '*.json' \
-    ! -name '*-bootstrap-manifest.json' \
+    ! -name '*-apply-manifest.json' \
     ! -name '*-public.json' \
     -print0 | sort -z
 }

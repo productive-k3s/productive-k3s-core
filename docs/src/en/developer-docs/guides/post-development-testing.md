@@ -92,9 +92,9 @@ make test-checkstatus
 The current maintainer baseline from the latest local `make test-coverage` run is:
 
 - total ShellSpec coverage: `75.06%`
-- `scripts/bootstrap-k3s-stack.sh`: `78.17%`
+- `scripts/apply.sh`: `78.17%`
 - `scripts/preflight-host.sh`: `89.02%`
-- `scripts/validate-k3s-stack.sh`: `59.52%`
+- `scripts/validate.sh`: `59.52%`
 - `scripts/send-telemetry.sh`: `83.48%`
 - `scripts/send-telemetry-event.sh`: `60.94%`
 
@@ -107,7 +107,7 @@ This baseline is intended to guide future additions and refactors. It is not yet
 Removes the local files that this repository uses as test state:
 
 - `test-artifacts/`
-- local `runs/bootstrap-*.json`
+- local `runs/apply-*.json`
 - local `runs/telemetry-outbox/bootstrap-*.json`
 - local `runs/telemetry-outbox/bootstrap-*.status`
 
@@ -124,7 +124,7 @@ It reports entries such as:
 
 It intentionally ignores files that are not the real top-level test result:
 
-- copied bootstrap manifests like `*-bootstrap-manifest.json`
+- copied bootstrap manifests like `*-apply-manifest.json`
 - public privacy-scrubbed companion artifacts like `*-public.json`
 
 If at least one recorded test result is failed, `make test-checkstatus` exits non-zero.

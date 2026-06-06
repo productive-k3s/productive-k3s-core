@@ -1,6 +1,6 @@
 # shellcheck shell=bash disable=SC2016
 Describe 'bootstrap manifest and args'
-  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/bootstrap-k3s-stack.sh"
+  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/apply.sh"
   RUNNER="$SHELLSPEC_PROJECT_ROOT/tests/helpers/run-bootstrap-lib.sh"
 
   It 'parses dry-run and stack mode arguments'
@@ -88,7 +88,7 @@ EOF
       emit_bootstrap_lifecycle_event started started
       cat "${capture}"'
     The status should equal 0
-    The output should include '"event_name": "core.bootstrap.single_node.started"'
+    The output should include '"event_name": "core.apply.single_node.started"'
     The output should include '"sent_at":'
     The output should include '"session_id": "session-xyz"'
     The output should include '"run_id": "run-xyz"'

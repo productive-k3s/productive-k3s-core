@@ -28,7 +28,7 @@ sudo k3s kubectl get ingress -A
 ## Validador administrado
 
 ```bash
-./scripts/validate-k3s-stack.sh
-./scripts/validate-k3s-stack.sh --strict
-./scripts/validate-k3s-stack.sh --json | jq
+./scripts/validate.sh
+./scripts/validate.sh --strict
+./scripts/validate.sh --json | jq
 ```

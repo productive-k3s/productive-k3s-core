@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/addons-runtime.sh"
+
 STRICT=0
 JSON_OUTPUT=0
 DOCKER_REGISTRY_TEST=0
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-base}"
 FAILURES=0
 WARNINGS=0
 CHECK_RESULTS=()
@@ -439,142 +443,29 @@ check_namespace_rollup() {
   fi
 }
 
-check_cert_manager() {
-  info "Checking cert-manager"
-  if ! k get namespace cert-manager >/dev/null 2>&1; then
-    if k get namespace cattle-system >/dev/null 2>&1 || k get namespace registry >/dev/null 2>&1; then
-      record_warn "cert-manager namespace does not exist even though TLS-dependent components are present"
-    else
-      info "cert-manager is not installed; skipping cert-manager-specific checks"
-    fi
+run_stack_addon_validations() {
+  local addon_name addon_dir validate_fn
+  if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
+    record_fail "stack source '${PRODUCTIVE_K3S_STACK_NAME}' could not be resolved for validation"
     return
   fi
 
-  check_namespace_rollup "cert-manager" "cert-manager"
-
-  local issuers
-  if ! issuers="$(safe_run k get clusterissuer 2>/dev/null)"; then
-    record_warn "unable to query ClusterIssuers"
-    return
-  fi
-
-  if printf '%s\n' "$issuers" | awk 'NR>1 {print}' | grep -q .; then
-    record_ok "ClusterIssuer resources are present"
-  else
-    record_warn "no ClusterIssuer resources found"
-  fi
-
-  local certs not_ready
-  if certs="$(safe_run k get certificates -A 2>/dev/null)"; then
-    not_ready="$(printf '%s\n' "$certs" | awk 'NR>1 && $3 != "True" {print}')"
-    if [[ -n "$not_ready" ]]; then
-      record_warn "some certificates are not Ready"
-      printf '%s\n' "$not_ready"
-    else
-      record_ok "all certificates are Ready"
+  while IFS= read -r addon_name; do
+    [[ -n "${addon_name}" ]] || continue
+    if ! addon_source_script_exists "${addon_name}" validate.sh; then
+      record_fail "addon '${addon_name}' does not provide scripts/validate.sh"
+      continue
     fi
-  fi
-}
-
-check_longhorn() {
-  info "Checking Longhorn"
-  if ! k get namespace longhorn-system >/dev/null 2>&1; then
-    info "Longhorn is not installed; skipping Longhorn-specific checks"
-    return
-  fi
-
-  check_namespace_rollup "longhorn-system" "Longhorn"
-
-  local volumes
-  if volumes="$(safe_run k get volumes.longhorn.io -n longhorn-system 2>/dev/null)"; then
-    if printf '%s\n' "$volumes" | awk 'NR>1 {print}' | grep -q .; then
-      record_ok "Longhorn volumes API is responding"
-      check_longhorn_volume_health
-    else
-      record_ok "Longhorn is installed but no volumes exist yet"
+    addon_dir="$(resolve_addon_source_dir "${addon_name}")"
+    # shellcheck source=/dev/null
+    source "${addon_dir}/scripts/validate.sh"
+    validate_fn="pk3s_addon_validate"
+    if ! declare -F "${validate_fn}" >/dev/null 2>&1; then
+      record_fail "addon '${addon_name}' validate hook '${validate_fn}' is missing"
+      continue
     fi
-  fi
-
-  local node_count
-  node_count="$(cluster_node_count)"
-  if [[ "$node_count" == "1" ]]; then
-    info "Checking Longhorn single-node alignment"
-
-    local default_scs
-    default_scs="$(default_storageclasses)"
-    if printf '%s\n' "$default_scs" | grep -qx 'longhorn-single'; then
-      record_ok "single-node cluster uses longhorn-single as the default StorageClass"
-    elif printf '%s\n' "$default_scs" | grep -q .; then
-      record_warn "single-node cluster default StorageClass is not longhorn-single"
-      printf '%s\n' "$default_scs"
-    else
-      record_warn "single-node cluster has no default StorageClass set to longhorn-single"
-    fi
-
-    local minimal_available
-    minimal_available="$(longhorn_setting_value storage-minimal-available-percentage)"
-    if [[ -z "$minimal_available" ]]; then
-      record_warn "unable to read Longhorn storage-minimal-available-percentage"
-    elif [[ "$minimal_available" =~ ^[0-9]+$ ]]; then
-      if (( minimal_available <= 10 )); then
-        record_ok "Longhorn storage-minimal-available-percentage is single-node friendly (${minimal_available})"
-      else
-        record_warn "Longhorn storage-minimal-available-percentage may be too aggressive for a single-node dev/lab cluster (${minimal_available})"
-      fi
-    else
-      record_warn "Longhorn storage-minimal-available-percentage is non-numeric (${minimal_available})"
-    fi
-  fi
-}
-
-check_rancher() {
-  info "Checking Rancher"
-  if ! k get namespace cattle-system >/dev/null 2>&1; then
-    info "Rancher is not installed; skipping Rancher-specific checks"
-    return
-  fi
-
-  check_namespace_rollup "cattle-system" "Rancher"
-
-  if k get secret tls-ca -n cattle-system >/dev/null 2>&1; then
-    record_ok "Rancher private CA secret exists"
-  else
-    record_warn "Rancher private CA secret 'tls-ca' is missing"
-  fi
-
-  if k get ingress rancher -n cattle-system >/dev/null 2>&1; then
-    record_ok "Rancher ingress exists"
-  else
-    record_warn "Rancher ingress does not exist"
-  fi
-}
-
-check_registry() {
-  info "Checking in-cluster registry"
-  if ! k get namespace registry >/dev/null 2>&1; then
-    info "Registry is not installed; skipping registry-specific checks"
-    return
-  fi
-
-  check_namespace_rollup "registry" "Registry"
-
-  local pvc
-  if pvc="$(safe_run k get pvc -n registry 2>/dev/null)"; then
-    if printf '%s\n' "$pvc" | awk 'NR>1 && $2 != "Bound" {print}' | grep -q .; then
-      record_fail "registry PVC exists but is not Bound"
-      printf '%s\n' "$pvc"
-    elif printf '%s\n' "$pvc" | awk 'NR>1 {print}' | grep -q .; then
-      record_ok "registry PVC is Bound"
-    else
-      record_warn "no registry PVC found"
-    fi
-  fi
-
-  if k get ingress registry -n registry >/dev/null 2>&1; then
-    record_ok "registry ingress exists"
-  else
-    record_warn "registry ingress does not exist"
-  fi
+    "${validate_fn}"
+  done < <(stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}")
 }
 
 check_dns_and_http() {
@@ -772,10 +663,7 @@ main() {
   check_all_pods
   check_storage_classes
   check_ingress
-  check_cert_manager
-  check_longhorn
-  check_rancher
-  check_registry
+  run_stack_addon_validations
   check_dns_and_http
   check_nfs
   check_docker_registry_flow

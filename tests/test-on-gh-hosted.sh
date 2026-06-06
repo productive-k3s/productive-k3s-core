@@ -72,7 +72,7 @@ cleanup_and_write_summary() {
   if [[ "$HOST_BOOTSTRAP_STATUS" == "success" && "$HOST_CLEAN_STATUS" == "not-run" ]]; then
     echo "[INFO] Running best-effort cleanup after partial hosted validation"
     local confirm=$'y\nCLEAN\n'
-    if printf '%s' "$confirm" | ./scripts/clean-k3s-stack.sh --apply >"$HOST_CLEAN_LOG" 2>&1; then
+    if printf '%s' "$confirm" | ./scripts/cleanup.sh --apply >"$HOST_CLEAN_LOG" 2>&1; then
       HOST_CLEAN_STATUS="success"
     else
       HOST_CLEAN_STATUS="failed"
@@ -92,7 +92,7 @@ run_validate_with_retries() {
 
   while true; do
     set +e
-    bash ./scripts/validate-k3s-stack.sh --strict > >(tee -a "$HOST_VALIDATE_LOG") 2>&1
+    bash ./scripts/validate.sh --strict > >(tee -a "$HOST_VALIDATE_LOG") 2>&1
     local rc=$?
     set -e
     if [[ "$rc" -eq 0 ]]; then
@@ -120,11 +120,11 @@ main() {
   cd "$REPO_DIR"
 
   echo "[INFO] Checking shell syntax"
-  bash -n scripts/bootstrap-k3s-stack.sh
+  bash -n scripts/apply.sh
   bash -n scripts/send-telemetry.sh
   bash -n tests/test-in-vm.sh
-  bash -n scripts/rollback-k3s-stack.sh
-  bash -n scripts/clean-k3s-stack.sh
+  bash -n scripts/rollback.sh
+  bash -n scripts/cleanup.sh
   bash ./tests/test-telemetry-consent.sh
 
   echo "[INFO] Running hosted full bootstrap on ubuntu-24.04"
@@ -158,7 +158,7 @@ y
 y
 y
 '
-  if ! printf '%s' "$answers" | ./scripts/bootstrap-k3s-stack.sh | tee "$HOST_FULL_LOG"; then
+  if ! printf '%s' "$answers" | ./scripts/apply.sh | tee "$HOST_FULL_LOG"; then
     HOST_BOOTSTRAP_STATUS="failed"
     return 1
   fi
@@ -175,7 +175,7 @@ y
 
   echo "[INFO] Running destructive cleanup on hosted ubuntu-24.04"
   local confirm=$'y\nCLEAN\n'
-  if ! printf '%s' "$confirm" | ./scripts/clean-k3s-stack.sh --apply | tee "$HOST_CLEAN_LOG"; then
+  if ! printf '%s' "$confirm" | ./scripts/cleanup.sh --apply | tee "$HOST_CLEAN_LOG"; then
     HOST_CLEAN_STATUS="failed"
     return 1
   fi

@@ -1,6 +1,6 @@
 # shellcheck shell=bash disable=SC2016
 Describe 'bootstrap dry-run main flows'
-  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/bootstrap-k3s-stack.sh"
+  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/apply.sh"
   RUNNER="$SHELLSPEC_PROJECT_ROOT/tests/helpers/run-bootstrap-lib.sh"
 
   It 'runs a full single-node dry-run bootstrap plan'

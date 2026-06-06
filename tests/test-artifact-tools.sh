@@ -49,7 +49,7 @@ cat > "${ARTIFACTS_DIR}/test-in-vm-20260508-000001-core-ubuntu.json" <<'EOF'
 }
 EOF
 
-cat > "${ARTIFACTS_DIR}/test-in-vm-20260508-000001-core-ubuntu-bootstrap-manifest.json" <<'EOF'
+cat > "${ARTIFACTS_DIR}/test-in-vm-20260508-000001-core-ubuntu-apply-manifest.json" <<'EOF'
 {
   "status": "success"
 }

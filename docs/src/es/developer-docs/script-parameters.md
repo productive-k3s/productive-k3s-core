@@ -28,7 +28,7 @@ Para `server` y `agent`, igual captura el snapshot de recursos del host, pero no
 
 Por ahora, la baseline pública soportada incluye `amd64`/`x86_64` y Ubuntu `24.04` sobre `arm64`/`aarch64`. El preflight acepta ambas familias para los targets Ubuntu y Debian actualmente soportados, mientras que la evidencia ARM retenida hoy es específica de Ubuntu `24.04`.
 
-## `scripts/bootstrap-k3s-stack.sh`
+## `scripts/apply.sh`
 
 ### Opciones CLI
 
@@ -123,7 +123,7 @@ El manifest de bootstrap registra settings como:
 - `manage_local_hosts`
 - `trust_registry_in_docker`
 
-## `scripts/validate-k3s-stack.sh`
+## `scripts/validate.sh`
 
 ### Opciones CLI
 
@@ -141,7 +141,7 @@ Para el camino opcional de Docker login, el validador puede consumir:
 - `REGISTRY_USER`
 - `REGISTRY_PASSWORD`
 
-## `scripts/clean-k3s-stack.sh`
+## `scripts/cleanup.sh`
 
 ### Opciones CLI
 
@@ -153,7 +153,7 @@ Para el camino opcional de Docker login, el validador puede consumir:
 | `--confirm-clean` | Auto-aprobar la confirmación tipeada `CLEAN` |
 | `-h`, `--help` | Mostrar ayuda CLI |
 
-## `scripts/rollback-k3s-stack.sh`
+## `scripts/rollback.sh`
 
 ### Opciones CLI
 

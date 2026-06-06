@@ -117,7 +117,7 @@ To inspect the CLI/runtime bill of materials for a local checkout or a published
 
 The versions pinned for the managed stack components live in [scripts/component-versions.sh](./scripts/component-versions.sh). The bootstrap flow and the BOM both read from that same file so the reported versions match what the installer actually selects.
 
-Telemetry consent is only relevant for mutating public CLI flows such as `bootstrap` and `addon install`. Read-only commands like `help`, `bundle info --json`, and `bom --json` do not prompt for telemetry and do not emit command-level telemetry events.
+Telemetry consent is only relevant for mutating public CLI flows such as `apply` and `addon install`. Read-only commands like `help`, `bundle info --json`, and `bom --json` do not prompt for telemetry and do not emit command-level telemetry events.
 
 `addon install` also supports an optional basic public exposure contract:
 

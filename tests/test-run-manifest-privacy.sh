@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BOOTSTRAP_SCRIPT="${ROOT_DIR}/scripts/bootstrap-k3s-stack.sh"
-ROLLBACK_SCRIPT="${ROOT_DIR}/scripts/rollback-k3s-stack.sh"
+BOOTSTRAP_SCRIPT="${ROOT_DIR}/scripts/apply.sh"
+ROLLBACK_SCRIPT="${ROOT_DIR}/scripts/rollback.sh"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 

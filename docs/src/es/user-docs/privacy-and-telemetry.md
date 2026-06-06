@@ -10,7 +10,7 @@ Objetivos:
 
 ## Manifiesto público de ejecución
 
-Los bootstrap escriben un manifiesto público bajo `runs/bootstrap-<run_id>.json`.
+Los bootstrap escriben un manifiesto público bajo `runs/apply-<run_id>.json`.
 
 Ese manifiesto está limitado intencionalmente a datos operativos anónimos como:
 
@@ -36,7 +36,7 @@ Algunas operaciones de rollback todavía necesitan detalles locales como hostnam
 
 Por eso el bootstrap también escribe un archivo local-only asociado:
 
-- `runs/bootstrap-<run_id>-private.json`
+- `runs/apply-<run_id>-private.json`
 
 Ese archivo se usa sólo para soportar el planning y la aplicación del rollback sobre la misma máquina.
 
@@ -54,7 +54,7 @@ Cuando la telemetría está habilitada, sigue siendo:
 Core emite dos familias de telemetría:
 
 - entrega del manifiesto de bootstrap vía `scripts/send-telemetry.sh`
-- eventos de lifecycle de comando y bootstrap como `core.command.started`, `core.command.completed`, `core.bootstrap.server.started` y `core.bootstrap.server.completed`
+- eventos de lifecycle de comando y bootstrap como `core.command.started`, `core.command.completed`, `core.apply.server.started` y `core.apply.server.completed`
 
 Ejemplos de categorías de evento seguras:
 

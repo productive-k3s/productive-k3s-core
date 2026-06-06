@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BOOTSTRAP_SCRIPT="${ROOT_DIR}/scripts/bootstrap-k3s-stack.sh"
+BOOTSTRAP_SCRIPT="${ROOT_DIR}/scripts/apply.sh"
 
 PRODUCTIVE_K3S_LIB_ONLY=1
 # shellcheck disable=SC1090

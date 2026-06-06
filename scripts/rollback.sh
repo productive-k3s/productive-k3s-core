@@ -102,7 +102,7 @@ delete_named_resources_matching() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/rollback-k3s-stack.sh --to runs/bootstrap-...json [--plan|--apply] [--yes]
+  ./scripts/rollback.sh --to runs/apply-...json [--plan|--apply] [--yes]
 
 Options:
   --to <file>   Bootstrap run manifest JSON to evaluate
@@ -371,7 +371,7 @@ build_plan() {
   result="$(component_field local_hosts result)"
   now="$(current_state local_hosts)"
   if [[ "$planned" == "update" && "$result" == "configured" && "$now" == "present" ]]; then
-    add_plan_item "local_hosts" "Remove bootstrap-managed /etc/hosts line: '$(component_field local_hosts note)'" "safe" "remove_hosts_line"
+    add_plan_item "local_hosts" "Remove apply-managed /etc/hosts line: '$(component_field local_hosts note)'" "safe" "remove_hosts_line"
   fi
 
   planned="$(component_field docker_registry_trust planned_action)"

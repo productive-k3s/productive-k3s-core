@@ -51,9 +51,9 @@ These commands are intentionally local-maintainer oriented. They do not redefine
 Latest local `make test-coverage` run:
 
 - total ShellSpec coverage: `75.06%`
-- `scripts/bootstrap-k3s-stack.sh`: `78.17%`
+- `scripts/apply.sh`: `78.17%`
 - `scripts/preflight-host.sh`: `89.02%`
-- `scripts/validate-k3s-stack.sh`: `59.52%`
+- `scripts/validate.sh`: `59.52%`
 - `scripts/send-telemetry.sh`: `83.48%`
 - `scripts/send-telemetry-event.sh`: `60.94%`
 
