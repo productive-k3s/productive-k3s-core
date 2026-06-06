@@ -30,6 +30,7 @@ TRANSFER_STAGED_REPO=""
 TRANSFER_STAGED_ADDONS_REPO=""
 ADDONS_REPO_DIR=""
 REMOTE_ADDONS_DIR=""
+REMOTE_COMMAND_STATUS=""
 
 usage() {
   cat <<'EOU'
@@ -363,11 +364,12 @@ copy_repo() {
 }
 
 prepare_repo_transfer_dir() {
-  local staged_name staging_parent
+  local staged_name
+  local staging_parent
 
   staged_name="$(basename "$REMOTE_DIR")"
   if [[ -z "$TRANSFER_STAGING_ROOT" ]]; then
-    staging_parent="${REPO_DIR}/test-artifacts/.transfer-staging"
+    staging_parent="${HOME}/pk3s-transfer-staging"
     mkdir -p "$staging_parent"
     TRANSFER_STAGING_ROOT="$(mktemp -d "${staging_parent}/staging.XXXXXX")"
   fi
@@ -390,11 +392,11 @@ prepare_repo_transfer_dir() {
 
 prepare_addons_transfer_dir() {
   local staged_name
+  local staging_parent
 
   staged_name="$(basename "$REMOTE_ADDONS_DIR")"
   if [[ -z "$TRANSFER_STAGING_ROOT" ]]; then
-    local staging_parent
-    staging_parent="${REPO_DIR}/test-artifacts/.transfer-staging"
+    staging_parent="${HOME}/pk3s-transfer-staging"
     mkdir -p "$staging_parent"
     TRANSFER_STAGING_ROOT="$(mktemp -d "${staging_parent}/staging.XXXXXX")"
   fi
@@ -453,8 +455,10 @@ run_remote_command_with_status() {
   quoted_command="$(printf '%q' "$command")"
 
   run_in_vm "rm -f '$remote_log' '$remote_status' '$remote_pid'; nohup bash -lc ${quoted_command} > '$remote_log' 2>&1 < /dev/null & echo \$! > '$remote_pid'"
-  wait_for_remote_file "$remote_status" "$timeout_secs" 5 || return 1
+  REMOTE_COMMAND_STATUS=""
+  wait_for_remote_file "$remote_status" "$timeout_secs" 5 || return 124
   command_status="$(run_in_vm "cat '$remote_status' 2>/dev/null || true" | tr -d '\r\n')"
+  REMOTE_COMMAND_STATUS="${command_status}"
   [[ "${command_status}" == "0" ]]
 }
 
@@ -505,7 +509,11 @@ run_bootstrap_with_answers() {
   escaped_answers=$(printf '%q' "$answers")
   wrapped_cmd="$(bootstrap_command_in_vm "$mode" "$escaped_answers")"
   if ! run_remote_command_with_status "$wrapped_cmd" 3600; then
-    err "Timed out waiting for remote bootstrap completion marker."
+    if [[ "${REMOTE_COMMAND_STATUS:-}" == "124" || -z "${REMOTE_COMMAND_STATUS:-}" ]]; then
+      err "Timed out waiting for remote apply completion marker."
+    else
+      err "Remote apply exited with status ${REMOTE_COMMAND_STATUS}."
+    fi
     capture_bootstrap_manifest
     return 1
   fi
@@ -626,7 +634,16 @@ run_core() {
 run_full() {
   log "Running full profile in VM"
   warn "This can take a while. It installs Longhorn, Rancher, Registry, cert-manager, and NFS inside the VM."
+  local previous_auto_approve="${PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS:-}"
+  if [[ -z "${PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS:-}" ]]; then
+    export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true
+  fi
   run_bootstrap_with_answers "" "$(full_answers)"
+  if [[ -n "${previous_auto_approve}" ]]; then
+    export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS="${previous_auto_approve}"
+  else
+    unset PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS || true
+  fi
   run_validate_with_retries strict 900 15
 }
 

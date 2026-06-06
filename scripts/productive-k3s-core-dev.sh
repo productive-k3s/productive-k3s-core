@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+TEMP_ADDONS_CLONE_DIR=""
 
 usage() {
   cat <<'EOF'
@@ -35,7 +36,51 @@ Development commands:
   test-matrix-full-clean
   test-matrix-all
   help
+
+Environment:
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR  Local productive-k3s-addons checkout to copy for full/core VM tests
+  PRODUCTIVE_K3S_ADDONS_REPO_URL  Git URL to clone productive-k3s-addons when no local checkout is provided
+  PRODUCTIVE_K3S_ADDONS_REPO_REF  Branch or tag to clone from PRODUCTIVE_K3S_ADDONS_REPO_URL (default: main)
 EOF
+}
+
+cleanup_temp_addons_clone() {
+  if [[ -n "${TEMP_ADDONS_CLONE_DIR}" && -d "${TEMP_ADDONS_CLONE_DIR}" ]]; then
+    rm -rf "${TEMP_ADDONS_CLONE_DIR}"
+  fi
+}
+
+prepare_addons_repo_checkout() {
+  TEMP_ADDONS_CLONE_DIR="$(mktemp -d)"
+  trap cleanup_temp_addons_clone EXIT
+
+  if [[ -n "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" ]]; then
+    [[ -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/addons" && -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/stacks" ]] || {
+      printf 'invalid PRODUCTIVE_K3S_ADDONS_REPO_DIR: %s\n' "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}" >&2
+      exit 1
+    }
+    mkdir -p "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"
+    cp -a "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/." \
+      "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons/"
+  else
+    if [[ -z "${PRODUCTIVE_K3S_ADDONS_REPO_URL:-}" ]]; then
+      printf 'tests that use productive-k3s-addons require PRODUCTIVE_K3S_ADDONS_REPO_DIR or PRODUCTIVE_K3S_ADDONS_REPO_URL\n' >&2
+      exit 1
+    fi
+    git clone --depth 1 --branch "${PRODUCTIVE_K3S_ADDONS_REPO_REF:-main}" \
+      "${PRODUCTIVE_K3S_ADDONS_REPO_URL}" \
+      "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons" >/dev/null 2>&1
+  fi
+
+  cat >> "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons/.gitignore" <<'EOF'
+test-artifacts/
+.tmp/
+.tmp-*/
+.live-*/
+runs/
+EOF
+
+  export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"
 }
 
 run_tests_make() {
@@ -115,14 +160,17 @@ main() {
       ;;
     test-core)
       shift
+      prepare_addons_repo_checkout
       exec "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile core "$@"
       ;;
     test-core-debian12)
       shift
+      prepare_addons_repo_checkout
       exec "${REPO_DIR}/tests/test-in-vm.sh" --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 --profile core "$@"
       ;;
     test-core-debian13)
       shift
+      prepare_addons_repo_checkout
       exec "${REPO_DIR}/tests/test-in-vm.sh" --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 --profile core "$@"
       ;;
     test-matrix-smoke)
@@ -135,18 +183,22 @@ main() {
       ;;
     test-matrix-full)
       shift
+      prepare_addons_repo_checkout
       run_tests_make run-full-tests "$@"
       ;;
     test-matrix-full-rollback)
       shift
+      prepare_addons_repo_checkout
       run_tests_make run-full-rollback-tests "$@"
       ;;
     test-matrix-full-clean)
       shift
+      prepare_addons_repo_checkout
       run_tests_make run-full-clean-tests "$@"
       ;;
     test-matrix-all)
       shift
+      prepare_addons_repo_checkout
       run_tests_make run-all-tests "$@"
       ;;
     *)
