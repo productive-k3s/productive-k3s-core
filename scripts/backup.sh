@@ -89,7 +89,6 @@ main() {
     "$output_dir/cluster" \
     "$output_dir/namespaces" \
     "$output_dir/host" \
-    "$output_dir/docker" \
     "$output_dir/k3s"
 
   log "Exporting cluster-wide resources"
@@ -134,16 +133,9 @@ main() {
 
   log "Exporting host config"
   [[ -f /etc/exports ]] && sudo cp /etc/exports "$output_dir/host/exports"
-  [[ -f /etc/hosts ]] && sudo cp /etc/hosts "$output_dir/host/hosts"
   safe_write_cmd "$output_dir/host/exportfs.txt" sudo exportfs -v
   safe_write_cmd "$output_dir/host/k3s-service.txt" sudo systemctl status k3s --no-pager
   safe_write_cmd "$output_dir/host/inotify.txt" bash -lc 'cat /proc/sys/fs/inotify/max_user_watches; echo; cat /proc/sys/fs/inotify/max_user_instances'
-
-  if [[ -d /etc/docker/certs.d ]]; then
-    log "Exporting Docker registry trust"
-    sudo cp -a /etc/docker/certs.d "$output_dir/docker/certs.d"
-    sudo chown -R "$(id -u):$(id -g)" "$output_dir/docker/certs.d"
-  fi
 
   archive_path="${output_dir}.tar.gz"
   log "Creating archive ${archive_path}"

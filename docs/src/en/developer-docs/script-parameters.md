@@ -61,8 +61,9 @@ Common prompted values include:
 - `Longhorn storage minimal available percentage`
 - `NFS export path`
 - `NFS allowed client network/CIDR`
-- whether to manage local `/etc/hosts`
-- whether to trust the self-signed registry in local Docker
+- whether the `rancher` add-on may manage local `/etc/hosts`
+- whether the `registry` add-on may manage local `/etc/hosts`
+- whether the `registry` add-on may install self-signed trust into local Docker
 
 ### Telemetry-related environment variables
 
@@ -120,8 +121,9 @@ The bootstrap manifest records settings such as:
 - `nfs_manage`
 - `nfs_export_path`
 - `nfs_allowed_network`
-- `manage_local_hosts`
-- `trust_registry_in_docker`
+- `rancher_manage_local_hosts`
+- `registry_manage_local_hosts`
+- `registry_trust_docker`
 
 ## `scripts/validate.sh`
 
@@ -136,7 +138,7 @@ The bootstrap manifest records settings such as:
 
 ### Related environment variables
 
-For the optional Docker login path, the validator can consume:
+The validator still accepts `--docker-registry-test`, but the actual registry push/pull check now lives in the `registry` add-on validation hook. For that optional Docker login path, the validator can consume:
 
 - `REGISTRY_USER`
 - `REGISTRY_PASSWORD`

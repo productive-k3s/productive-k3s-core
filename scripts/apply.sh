@@ -85,7 +85,7 @@ declare -A MANIFEST_DETECTED=()
 declare -A MANIFEST_PLANNED=()
 declare -A MANIFEST_RESULT=()
 declare -A MANIFEST_NOTES=()
-MANIFEST_COMPONENT_ORDER=(k3s helm cert_manager clusterissuer longhorn rancher registry nfs local_hosts docker_registry_trust)
+MANIFEST_COMPONENT_ORDER=(k3s helm cert_manager clusterissuer longhorn longhorn_host_prep rancher rancher_host_local registry registry_host_local registry_docker_trust nfs)
 PUBLIC_MANIFEST_SETTINGS=(
   host_os_id
   host_os_version_id
@@ -105,8 +105,9 @@ PUBLIC_MANIFEST_SETTINGS=(
   registry_storage_class_configured
   registry_auth_enabled
   nfs_manage
-  manage_local_hosts
-  trust_registry_in_docker
+  rancher_manage_local_hosts
+  registry_manage_local_hosts
+  registry_trust_docker
   telemetry_enabled
   telemetry_max_retries
 )
@@ -761,75 +762,6 @@ ensure_rancher_private_ca_secret() {
   kubectl_k3s create secret generic "$target_secret_name" -n "$source_secret_ns" --from-literal=cacerts.pem="$ca_crt" >/dev/null
 }
 
-ensure_local_hosts_entries() {
-  local target_ip="$1"
-  shift
-  local hosts=("$@")
-
-  if [[ -z "$target_ip" || ${#hosts[@]} -eq 0 ]]; then
-    warn "Skipping /etc/hosts update because the target IP or hostnames are missing."
-    return
-  fi
-
-  local hosts_regex
-  hosts_regex="$(printf '%s\n' "${hosts[@]}" | sed 's/[.[\\*^$()+?{|]/\\\\&/g' | paste -sd'|' -)"
-  local host_line="${target_ip} ${hosts[*]}"
-  local cmd="tmp=\$(mktemp); grep -vE '(^|[[:space:]])(${hosts_regex})([[:space:]]|$)' /etc/hosts > \"\$tmp\" || true; printf '%s\\n' '${host_line}' >> \"\$tmp\"; cat \"\$tmp\" > /etc/hosts; rm -f \"\$tmp\""
-
-  if [[ "$DRY_RUN" == "1" ]]; then
-    track_install "local /etc/hosts entries"
-    log "[dry-run] Adding/updating local /etc/hosts entries"
-    line "  ${host_line}"
-    manifest_complete_component "local_hosts" "dry-run" "$host_line"
-    return
-  fi
-
-  run_cmd "Adding/updating local /etc/hosts entries" sudo bash -lc "$cmd"
-  manifest_complete_component "local_hosts" "configured" "$host_line"
-}
-
-ensure_local_docker_registry_trust() {
-  local registry_host="$1"
-
-  if [[ -z "$registry_host" ]]; then
-    warn "Skipping Docker trust setup because the registry hostname is missing."
-    return
-  fi
-
-  if ! need_cmd docker; then
-    warn "Skipping Docker trust setup because docker is not installed on this machine."
-    return
-  fi
-
-  if ! secret_exists registry registry-tls; then
-    warn "Skipping Docker trust setup because registry/registry-tls does not exist."
-    return
-  fi
-
-  local cert_dir="/etc/docker/certs.d/${registry_host}"
-  local cert_file="${cert_dir}/ca.crt"
-
-  if [[ "$DRY_RUN" == "1" ]]; then
-    track_install "Docker registry trust for ${registry_host}"
-    log "[dry-run] Installing Docker trust for ${registry_host}"
-    line "  sudo mkdir -p ${cert_dir}"
-    line "  sudo k3s kubectl get secret registry-tls -n registry -o jsonpath='{.data.tls\\.crt}' | base64 -d | sudo tee ${cert_file}"
-    line "  sudo systemctl restart docker"
-    manifest_complete_component "docker_registry_trust" "dry-run" "$registry_host"
-    return
-  fi
-
-  run_cmd "Creating Docker cert directory ${cert_dir}" sudo mkdir -p "$cert_dir"
-  kubectl_k3s get secret registry-tls -n registry -o jsonpath='{.data.tls\.crt}' | base64 -d | sudo tee "$cert_file" >/dev/null
-
-  if systemctl list-unit-files docker.service >/dev/null 2>&1; then
-    run_cmd "Restarting Docker" sudo systemctl restart docker
-  else
-    warn "Docker certificate installed for ${registry_host}, but docker.service was not found for automatic restart."
-  fi
-  manifest_complete_component "docker_registry_trust" "configured" "$registry_host"
-}
-
 ensure_user_kubeconfig() {
   local source_kubeconfig="/etc/rancher/k3s/k3s.yaml"
   local target_dir="${HOME}/.kube"
@@ -1123,7 +1055,7 @@ print_diagnosis_summary() {
 }
 
 print_plan_summary() {
-  local k3s_action="$1" helm_action="$2" cert_action="$3" longhorn_action="$4" rancher_action="$5" registry_action="$6" nfs_manage="$7" hosts_manage="$8" docker_trust_manage="$9"
+  local k3s_action="$1" helm_action="$2" cert_action="$3" longhorn_action="$4" rancher_action="$5" registry_action="$6" nfs_manage="$7"
   log "Planned actions"
   line "  Cluster:"
   printf '    - k3s: %s\r\n' "$k3s_action"
@@ -1134,8 +1066,51 @@ print_plan_summary() {
   printf '    - Registry: %s\r\n' "$registry_action"
   line "  Host:"
   printf '    - NFS management: %s\r\n' "$nfs_manage"
-  printf '    - /etc/hosts: %s\r\n' "$hosts_manage"
-  printf '    - Docker registry trust: %s\r\n' "$docker_trust_manage"
+}
+
+stack_addon_action_value() {
+  case "$1" in
+    cert-manager) printf '%s\n' "${CERT_MANAGER_ACTION:-skip}" ;;
+    longhorn) printf '%s\n' "${LONGHORN_ACTION:-skip}" ;;
+    rancher) printf '%s\n' "${RANCHER_ACTION:-skip}" ;;
+    registry) printf '%s\n' "${REGISTRY_ACTION:-skip}" ;;
+    *) printf 'skip\n' ;;
+  esac
+}
+
+print_stack_addon_impacts() {
+  local addon_name action impact_cluster impact_host impact_summary host_caps caps_inline
+  line "  Add-on impact preview:"
+  while IFS= read -r addon_name; do
+    [[ -n "${addon_name}" ]] || continue
+    action="$(stack_addon_action_value "${addon_name}")"
+    [[ "${action}" == "install" ]] || continue
+    impact_cluster="$(addon_source_impact_value "${addon_name}" cluster 2>/dev/null || true)"
+    impact_host="$(addon_source_impact_value "${addon_name}" host 2>/dev/null || true)"
+    impact_summary="$(addon_source_impact_value "${addon_name}" summary 2>/dev/null || true)"
+    caps_inline=""
+    if [[ "${impact_host}" == "true" ]]; then
+      while IFS= read -r host_caps; do
+        [[ -n "${host_caps}" ]] || continue
+        if [[ -n "${caps_inline}" ]]; then
+          caps_inline="${caps_inline}, ${host_caps}"
+        else
+          caps_inline="${host_caps}"
+        fi
+      done < <(addon_source_host_capabilities "${addon_name}" 2>/dev/null || true)
+    fi
+
+    printf '    - %s:' "${addon_name}"
+    if [[ "${impact_cluster}" == "true" ]]; then
+      printf ' cluster'
+    fi
+    if [[ "${impact_host}" == "true" ]]; then
+      printf '  👁 host'
+      [[ -n "${caps_inline}" ]] && printf ' [%s]' "${caps_inline}"
+    fi
+    printf '\r\n'
+    [[ -n "${impact_summary}" ]] && printf '      %s\r\n' "${impact_summary}"
+  done < <(stack_install_order_addons)
 }
 
 ensure_packages() {
@@ -1166,21 +1141,6 @@ ensure_packages() {
   log "Installing packages for ${label}..."
   run_cmd "Updating apt indexes for ${label}" sudo apt-get update -y
   run_cmd "Installing packages for ${label}" sudo apt-get install -y "${missing[@]}"
-}
-
-ensure_iscsid() {
-  if service_active iscsid; then
-    log "Service 'iscsid' already active."
-    return
-  fi
-
-  local enable_iscsid="y"
-  prompt_yesno enable_iscsid "y" "Enable and start 'iscsid' now?"
-  if [[ "$enable_iscsid" == "y" ]]; then
-    run_cmd "Enabling and starting iscsid" sudo systemctl enable --now iscsid
-  else
-    warn "Longhorn requires 'iscsid'. Skipping it may break Longhorn volumes."
-  fi
 }
 
 namespace_has_user_resources() {
@@ -1713,6 +1673,7 @@ install_longhorn_if_needed() {
   if [[ "$action" == "reuse" && "$longhorn_present" == "y" ]]; then
     track_reuse "Longhorn"
     manifest_complete_component "longhorn" "$(result_for_mode reused)"
+    manifest_complete_component "longhorn_host_prep" "$(result_for_mode reused)" "${longhorn_data_path}"
     return
   fi
 
@@ -1720,16 +1681,12 @@ install_longhorn_if_needed() {
     warn "Longhorn will not be installed."
     track_skip "Longhorn: user chose not to install"
     manifest_complete_component "longhorn" "skipped"
+    manifest_complete_component "longhorn_host_prep" "skipped"
     return
   fi
 
   track_install "Longhorn"
   preflight_longhorn_install "$longhorn_data_path" || return
-  ensure_packages "Longhorn" open-iscsi jq
-  ensure_iscsid
-  warn "Longhorn storage path '${longhorn_data_path}' will be created if missing."
-  warn "This script will not format or mount disks. Prepare dedicated mounted storage yourself if you need it."
-  run_cmd "Ensuring directory ${longhorn_data_path} exists" sudo mkdir -p "$longhorn_data_path"
 
   if ! addon_source_script_exists longhorn install.sh; then
     err "Addon source for longhorn is required but scripts/install.sh was not found."
@@ -1749,6 +1706,7 @@ install_longhorn_if_needed() {
     exit 1
   fi
   manifest_complete_component "longhorn" "$(result_for_mode installed)"
+  manifest_complete_component "longhorn_host_prep" "$(result_for_mode configured)" "${longhorn_data_path}"
 }
 
 install_rancher_if_needed() {
@@ -1764,6 +1722,7 @@ install_rancher_if_needed() {
   if [[ "$action" == "reuse" && "$rancher_present" == "y" ]]; then
     track_reuse "Rancher"
     manifest_complete_component "rancher" "$(result_for_mode reused)"
+    manifest_complete_component "rancher_host_local" "skipped"
     return
   fi
 
@@ -1771,6 +1730,7 @@ install_rancher_if_needed() {
     warn "Rancher will not be installed."
     track_skip "Rancher: user chose not to install"
     manifest_complete_component "rancher" "skipped"
+    manifest_complete_component "rancher_host_local" "skipped"
     return
   fi
 
@@ -1786,6 +1746,8 @@ install_rancher_if_needed() {
     PK3S_RANCHER_VERSION="${PRODUCTIVE_K3S_RANCHER_VERSION}" \
     PK3S_RANCHER_HOST="${rancher_host}" \
     PK3S_RANCHER_BOOTSTRAP_PASSWORD="${admin_pass}" \
+    PK3S_RANCHER_MANAGE_LOCAL_HOSTS="${RANCHER_MANAGE_LOCAL_HOSTS:-n}" \
+    PK3S_NODE_PRIMARY_IP="${NODE_IP:-}" \
     PK3S_TLS_SOURCE="$( [[ "${tls_choice}" == "1" ]] && echo letsencrypt || echo secret )" \
     PK3S_CLUSTER_ISSUER="${issuer_name}" \
     PK3S_LETSENCRYPT_EMAIL="${le_email}" \
@@ -1812,6 +1774,8 @@ install_registry_if_needed() {
   if [[ "$action" == "reuse" && "$registry_present" == "y" ]]; then
     track_reuse "Registry"
     manifest_complete_component "registry" "$(result_for_mode reused)"
+    manifest_complete_component "registry_host_local" "skipped"
+    manifest_complete_component "registry_docker_trust" "skipped"
     return
   fi
 
@@ -1819,6 +1783,8 @@ install_registry_if_needed() {
     warn "Registry will not be installed."
     track_skip "Registry: user chose not to install"
     manifest_complete_component "registry" "skipped"
+    manifest_complete_component "registry_host_local" "skipped"
+    manifest_complete_component "registry_docker_trust" "skipped"
     return
   fi
 
@@ -1834,6 +1800,9 @@ install_registry_if_needed() {
     PK3S_REGISTRY_HOST="${registry_host}" \
     PK3S_REGISTRY_PVC_SIZE="${registry_size}" \
     PK3S_REGISTRY_STORAGE_CLASS="${registry_storage_class}" \
+    PK3S_REGISTRY_MANAGE_LOCAL_HOSTS="${REGISTRY_MANAGE_LOCAL_HOSTS:-n}" \
+    PK3S_REGISTRY_TRUST_DOCKER="${REGISTRY_TRUST_DOCKER:-n}" \
+    PK3S_NODE_PRIMARY_IP="${NODE_IP:-}" \
     PK3S_TLS_SOURCE="$( [[ "${tls_choice}" == "1" ]] && echo letsencrypt || echo secret )" \
     PK3S_CLUSTER_ISSUER="${issuer_name}" \
     PK3S_REGISTRY_AUTH_ENABLED="${registry_auth_enabled}" \
@@ -2036,8 +2005,9 @@ main() {
   local ISSUER_NAME="selfsigned"
   local NFS_EXPORT_PATH="/srv/nfs/k8s-share"
   local NFS_ALLOWED_NETWORK="192.168.0.0/24"
-  local MANAGE_LOCAL_HOSTS="y"
-  local TRUST_REGISTRY_IN_DOCKER="n"
+  local RANCHER_MANAGE_LOCAL_HOSTS="y"
+  local REGISTRY_MANAGE_LOCAL_HOSTS="y"
+  local REGISTRY_TRUST_DOCKER="n"
   local REGISTRY_AUTH_ENABLED="n"
   local REGISTRY_AUTH_USER="registry"
   local REGISTRY_AUTH_PASSWORD="change-me"
@@ -2190,12 +2160,6 @@ main() {
     manifest_record_component "nfs" "missing" "$NFS_ACTION"
   fi
 
-  if mode_runs_host_local; then
-    prompt_yesno MANAGE_LOCAL_HOSTS "y" "Do you want this script to add/update local /etc/hosts entries for Rancher and Registry on this machine? [optional]"
-  else
-    MANAGE_LOCAL_HOSTS="n"
-  fi
-
   if mode_runs_stack && [[ "$RANCHER_ACTION" == "install" || "$REGISTRY_ACTION" == "install" ]]; then
     prompt DOMAIN "$DOMAIN" "Base domain (used to build hostnames)"
 
@@ -2221,7 +2185,11 @@ main() {
 
   if mode_runs_stack && [[ "$RANCHER_ACTION" == "install" ]]; then
     RANCHER_HOST="${rancher_existing_host:-rancher.${DOMAIN}}"
-    run_addon_source_configure_hook "rancher" "details" "${addon_config_file}"
+    local allow_host_local_changes="n"
+    if mode_runs_host_local; then
+      allow_host_local_changes="y"
+    fi
+    PK3S_ALLOW_HOST_LOCAL_CHANGES="${allow_host_local_changes}" run_addon_source_configure_hook "rancher" "details" "${addon_config_file}"
     apply_addon_config_file "${addon_config_file}"
   fi
 
@@ -2232,12 +2200,14 @@ main() {
     elif storageclass_exists longhorn; then
       REGISTRY_STORAGE_CLASS="longhorn"
     fi
-    run_addon_source_configure_hook "registry" "details" "${addon_config_file}"
+    local allow_host_local_changes="n"
+    if mode_runs_host_local; then
+      allow_host_local_changes="y"
+    fi
+    PK3S_ALLOW_HOST_LOCAL_CHANGES="${allow_host_local_changes}" \
+      PK3S_TLS_SOURCE="$( [[ "${TLS_CHOICE}" == "1" ]] && echo letsencrypt || echo secret )" \
+      run_addon_source_configure_hook "registry" "details" "${addon_config_file}"
     apply_addon_config_file "${addon_config_file}"
-  fi
-
-  if mode_runs_host_local && [[ "$TLS_CHOICE" == "2" ]]; then
-    prompt_yesno TRUST_REGISTRY_IN_DOCKER "y" "Do you want this script to trust the registry certificate in local Docker on this machine? [optional]"
   fi
 
   manifest_set_setting "agent_server_url" "$AGENT_SERVER_URL"
@@ -2259,8 +2229,9 @@ main() {
   manifest_set_setting "nfs_manage" "$ENABLE_NFS"
   manifest_set_setting "nfs_export_path" "$NFS_EXPORT_PATH"
   manifest_set_setting "nfs_allowed_network" "$NFS_ALLOWED_NETWORK"
-  manifest_set_setting "manage_local_hosts" "$MANAGE_LOCAL_HOSTS"
-  manifest_set_setting "trust_registry_in_docker" "$TRUST_REGISTRY_IN_DOCKER"
+  manifest_set_setting "rancher_manage_local_hosts" "$RANCHER_MANAGE_LOCAL_HOSTS"
+  manifest_set_setting "registry_manage_local_hosts" "$REGISTRY_MANAGE_LOCAL_HOSTS"
+  manifest_set_setting "registry_trust_docker" "$REGISTRY_TRUST_DOCKER"
 
   MANIFEST_PLANNED["k3s"]="$K3S_ACTION"
   MANIFEST_PLANNED["helm"]="$HELM_ACTION"
@@ -2269,10 +2240,14 @@ main() {
   MANIFEST_PLANNED["rancher"]="$RANCHER_ACTION"
   MANIFEST_PLANNED["registry"]="$REGISTRY_ACTION"
   MANIFEST_PLANNED["nfs"]="$NFS_ACTION"
-  MANIFEST_DETECTED["local_hosts"]="unknown"
-  MANIFEST_PLANNED["local_hosts"]="$( [[ "$MANAGE_LOCAL_HOSTS" == "y" ]] && echo update || echo skip )"
-  MANIFEST_DETECTED["docker_registry_trust"]="unknown"
-  MANIFEST_PLANNED["docker_registry_trust"]="$( [[ "$TLS_CHOICE" == "2" && "$TRUST_REGISTRY_IN_DOCKER" == "y" ]] && echo install || echo skip )"
+  MANIFEST_DETECTED["longhorn_host_prep"]="$( [[ "$longhorn_present" == "y" ]] && echo present || echo missing )"
+  MANIFEST_PLANNED["longhorn_host_prep"]="$( [[ "$LONGHORN_ACTION" == "install" ]] && echo configure || echo skip )"
+  MANIFEST_DETECTED["rancher_host_local"]="unknown"
+  MANIFEST_PLANNED["rancher_host_local"]="$( [[ "$RANCHER_ACTION" == "install" && "$RANCHER_MANAGE_LOCAL_HOSTS" == "y" ]] && echo configure || echo skip )"
+  MANIFEST_DETECTED["registry_host_local"]="unknown"
+  MANIFEST_PLANNED["registry_host_local"]="$( [[ "$REGISTRY_ACTION" == "install" && "$REGISTRY_MANAGE_LOCAL_HOSTS" == "y" ]] && echo configure || echo skip )"
+  MANIFEST_DETECTED["registry_docker_trust"]="unknown"
+  MANIFEST_PLANNED["registry_docker_trust"]="$( [[ "$REGISTRY_ACTION" == "install" && "$TLS_CHOICE" == "2" && "$REGISTRY_TRUST_DOCKER" == "y" ]] && echo configure || echo skip )"
   if mode_runs_stack && [[ "$RANCHER_ACTION" == "install" || "$REGISTRY_ACTION" == "install" ]]; then
     MANIFEST_DETECTED["clusterissuer"]="$( clusterissuer_exists "$ISSUER_NAME" && echo present || echo missing )"
     MANIFEST_PLANNED["clusterissuer"]="ensure"
@@ -2289,9 +2264,8 @@ main() {
     "$LONGHORN_ACTION" \
     "$RANCHER_ACTION" \
     "$REGISTRY_ACTION" \
-    "$NFS_ACTION" \
-    "$( [[ "$MANAGE_LOCAL_HOSTS" == "y" ]] && echo update || echo skip )" \
-    "$( [[ "$TLS_CHOICE" == "2" && "$TRUST_REGISTRY_IN_DOCKER" == "y" ]] && echo install || echo skip )"
+    "$NFS_ACTION"
+  print_stack_addon_impacts
 
   prompt_yesno PROCEED_WITH_PLAN "y" "Proceed with this plan?"
   rm -f "${addon_config_file}"
@@ -2332,24 +2306,6 @@ main() {
     CURRENT_STEP="nfs"
     install_nfs_if_needed "$nfs_present" "$nfs_export_present" "$NFS_ACTION" "$NFS_EXPORT_PATH" "$NFS_ALLOWED_NETWORK"
   fi
-  if mode_runs_host_local && [[ "$MANAGE_LOCAL_HOSTS" == "y" ]]; then
-    CURRENT_STEP="local_hosts"
-    ensure_local_hosts_entries "$NODE_IP" "$RANCHER_HOST" "$REGISTRY_HOST"
-  elif mode_runs_host_local; then
-    track_skip "/etc/hosts: user chose not to manage local host entries"
-    manifest_complete_component "local_hosts" "skipped"
-  else
-    manifest_complete_component "local_hosts" "skipped"
-  fi
-  if mode_runs_host_local && [[ "$TLS_CHOICE" == "2" && "$TRUST_REGISTRY_IN_DOCKER" == "y" ]]; then
-    CURRENT_STEP="docker_registry_trust"
-    ensure_local_docker_registry_trust "$REGISTRY_HOST"
-  elif mode_runs_host_local && [[ "$TLS_CHOICE" == "2" ]]; then
-    track_skip "Docker trust: user chose not to install local registry certificate trust"
-    manifest_complete_component "docker_registry_trust" "skipped"
-  else
-    manifest_complete_component "docker_registry_trust" "skipped"
-  fi
   CURRENT_STEP="completed"
 
   log "DONE. Quick checks:"
@@ -2375,16 +2331,18 @@ main() {
     line "  Ensure these resolve to your VM IP:"
     line "    ${RANCHER_HOST}"
     line "    ${REGISTRY_HOST}"
-    if mode_runs_host_local && [[ "$MANAGE_LOCAL_HOSTS" == "y" ]]; then
+    if mode_runs_host_local && [[ "$RANCHER_MANAGE_LOCAL_HOSTS" == "y" || "$REGISTRY_MANAGE_LOCAL_HOSTS" == "y" ]]; then
       if [[ "$DRY_RUN" == "1" ]]; then
-        line "  Local /etc/hosts entries would be updated on this machine:"
+        line "  Local /etc/hosts entries would be updated on this machine by the selected add-ons:"
       else
-        line "  Local /etc/hosts entries were updated on this machine:"
+        line "  Local /etc/hosts entries were updated on this machine by the selected add-ons:"
       fi
-      line "    ${NODE_IP} ${RANCHER_HOST} ${REGISTRY_HOST}"
+      [[ "$RANCHER_MANAGE_LOCAL_HOSTS" == "y" ]] && line "    ${NODE_IP} ${RANCHER_HOST}"
+      [[ "$REGISTRY_MANAGE_LOCAL_HOSTS" == "y" ]] && line "    ${NODE_IP} ${REGISTRY_HOST}"
     else
       line "  For local testing on the VM itself, you can add to /etc/hosts:"
-      line "    <VM-IP> ${RANCHER_HOST} ${REGISTRY_HOST}"
+      [[ "$RANCHER_ACTION" == "install" ]] && line "    <VM-IP> ${RANCHER_HOST}"
+      [[ "$REGISTRY_ACTION" == "install" ]] && line "    <VM-IP> ${REGISTRY_HOST}"
     fi
     nl
   fi
@@ -2392,11 +2350,11 @@ main() {
   if mode_runs_stack && [[ "$TLS_CHOICE" == "2" ]]; then
     warn "Self-signed TLS:"
     line "  - Your browser and Docker clients may not trust the cert by default."
-    if mode_runs_host_local && [[ "$TRUST_REGISTRY_IN_DOCKER" == "y" ]]; then
+    if mode_runs_host_local && [[ "$REGISTRY_TRUST_DOCKER" == "y" ]]; then
       if [[ "$DRY_RUN" == "1" ]]; then
-        line "  - Local Docker trust would be installed for ${REGISTRY_HOST} on this machine."
+        line "  - Local Docker trust would be installed for ${REGISTRY_HOST} on this machine by the registry add-on."
       else
-        line "  - Local Docker trust was installed for ${REGISTRY_HOST} on this machine."
+        line "  - Local Docker trust was installed for ${REGISTRY_HOST} on this machine by the registry add-on."
       fi
     else
       line "  - To use the registry with docker push/pull from a machine, you typically need to trust the CA/cert."

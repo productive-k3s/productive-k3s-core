@@ -28,10 +28,12 @@ Describe 'bootstrap dry-run main flows'
       helm_release_exists() { return 1; }
       nfs_export_exists() { return 1; }
       mount_exists() { return 1; }
+      addon_source_script_exists() { return 0; }
+      run_addon_source_hook() { printf "hook:%s|" "$1"; return 0; }
       confirm_preflight() { return 0; }
       prompt_yesno() {
         case "$1" in
-          INSTALL_K3S|INSTALL_HELM|INSTALL_LONGHORN|INSTALL_RANCHER|INSTALL_REGISTRY|INSTALL_CERT_MANAGER|ENABLE_NFS|MANAGE_LOCAL_HOSTS|TRUST_REGISTRY_IN_DOCKER|PROCEED_WITH_PLAN|create_issuer|make_default_sc|install_pkgs|enable_iscsid|REGISTRY_AUTH_ENABLED)
+          INSTALL_K3S|INSTALL_HELM|INSTALL_LONGHORN|INSTALL_RANCHER|INSTALL_REGISTRY|INSTALL_CERT_MANAGER|ENABLE_NFS|RANCHER_MANAGE_LOCAL_HOSTS|REGISTRY_MANAGE_LOCAL_HOSTS|REGISTRY_TRUST_DOCKER|PROCEED_WITH_PLAN|create_issuer|make_default_sc|install_pkgs|REGISTRY_AUTH_ENABLED)
             printf -v "$1" y ;;
           REUSE_EXISTING_NFS)
             printf -v "$1" n ;;
@@ -46,8 +48,8 @@ Describe 'bootstrap dry-run main flows'
     The output should include 'Planned actions'
     The output should include '[dry-run] Installing k3s (v1.35.5+k3s1)'
     The output should include '[dry-run] Installing Helm'
-    The output should include '[dry-run] Creating ClusterIssuer selfsigned'
-    The output should include '[dry-run] Installing the in-cluster registry'
+    The output should include "Processing stack addon 'cert-manager' from stack 'base'"
+    The output should include "Processing stack addon 'registry' from stack 'base'"
     The output should include '[dry-run] Creating NFS export directory /srv/nfs/k8s-share'
   End
 

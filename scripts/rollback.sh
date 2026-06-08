@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/component-versions.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/addons-runtime.sh"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_GREEN=$'\033[1;32m'
@@ -97,6 +99,20 @@ delete_named_resources_matching() {
     log "Deleting ${name}"
     kubectl_k3s delete "$name" --ignore-not-found --wait=false || true
   done < <(kubectl_k3s get "$resource" -o name 2>/dev/null | grep -E "$pattern" || true)
+}
+
+run_addon_clean_hook() {
+  local addon_name="$1"
+  local addon_dir clean_fn
+  addon_dir="$(resolve_addon_source_dir "${addon_name}")" || return 1
+  # shellcheck source=/dev/null
+  source "${addon_dir}/scripts/clean.sh"
+  clean_fn="pk3s_addon_clean"
+  if ! declare -F "${clean_fn}" >/dev/null 2>&1; then
+    err "Addon '${addon_name}' clean hook '${clean_fn}' is missing"
+    return 1
+  fi
+  "${clean_fn}"
 }
 
 usage() {
@@ -268,24 +284,6 @@ current_state() {
         echo missing
       fi
       ;;
-    local_hosts)
-      local host_line
-      host_line="$(component_field local_hosts note)"
-      if [[ -n "$host_line" ]] && grep -qxF "$host_line" /etc/hosts 2>/dev/null; then
-        echo present
-      else
-        echo missing
-      fi
-      ;;
-    docker_registry_trust)
-      local registry_host
-      registry_host="$(component_field docker_registry_trust note)"
-      if [[ -n "$registry_host" && -f "/etc/docker/certs.d/${registry_host}/ca.crt" ]]; then
-        echo present
-      else
-        echo missing
-      fi
-      ;;
     *)
       echo unknown
       ;;
@@ -367,20 +365,6 @@ build_plan() {
     fi
   fi
 
-  planned="$(component_field local_hosts planned_action)"
-  result="$(component_field local_hosts result)"
-  now="$(current_state local_hosts)"
-  if [[ "$planned" == "update" && "$result" == "configured" && "$now" == "present" ]]; then
-    add_plan_item "local_hosts" "Remove apply-managed /etc/hosts line: '$(component_field local_hosts note)'" "safe" "remove_hosts_line"
-  fi
-
-  planned="$(component_field docker_registry_trust planned_action)"
-  result="$(component_field docker_registry_trust result)"
-  now="$(current_state docker_registry_trust)"
-  if [[ "$planned" == "install" && "$result" == "configured" && "$now" == "present" ]]; then
-    add_plan_item "docker_registry_trust" "Remove local Docker trust for registry '$(component_field docker_registry_trust note)'" "moderate" "remove_docker_trust"
-  fi
-
   detected="$(component_field k3s detected_before)"
   planned="$(component_field k3s planned_action)"
   result="$(component_field k3s result)"
@@ -443,19 +427,13 @@ delete_longhorn_cluster_artifacts() {
 
 apply_helm_uninstall_longhorn() {
   helm uninstall longhorn -n longhorn-system || true
-  sudo k3s kubectl delete namespace longhorn-system --ignore-not-found --wait=false || true
-  delete_longhorn_cluster_artifacts
+  run_addon_clean_hook longhorn || true
   force_finalize_namespace_if_present longhorn-system
 }
 
 apply_helm_uninstall_rancher() {
   helm uninstall rancher -n cattle-system || true
-  delete_rancher_cluster_artifacts
-  sudo k3s kubectl delete namespace cattle-turtles-system --ignore-not-found --wait=false || true
-  sudo k3s kubectl delete namespace cattle-capi-system --ignore-not-found --wait=false || true
-  sudo k3s kubectl delete namespace cattle-fleet-local-system --ignore-not-found --wait=false || true
-  sudo k3s kubectl delete namespace cattle-fleet-system --ignore-not-found --wait=false || true
-  sudo k3s kubectl delete namespace cattle-system --ignore-not-found --wait=false || true
+  run_addon_clean_hook rancher || true
   force_finalize_namespace_if_present cattle-turtles-system
   force_finalize_namespace_if_present cattle-capi-system
   force_finalize_namespace_if_present cattle-fleet-local-system
@@ -464,7 +442,7 @@ apply_helm_uninstall_rancher() {
 }
 
 apply_kubectl_delete_registry() {
-  sudo k3s kubectl delete namespace registry --ignore-not-found --wait=false || true
+  run_addon_clean_hook registry || true
   force_finalize_namespace_if_present registry
 }
 
@@ -474,23 +452,6 @@ apply_remove_nfs_export() {
   [[ -n "$export_path" ]] || return 0
   sudo sed -i "\|^[[:space:]]*${export_path//\//\\/}[[:space:]]|d" /etc/exports
   sudo exportfs -ra
-}
-
-apply_remove_hosts_line() {
-  local host_line
-  host_line="$(component_field local_hosts note)"
-  [[ -n "$host_line" ]] || return 0
-  sudo sed -i "\|^$(printf '%s' "$host_line" | sed 's/[.[\\*^$()+?{|]/\\&/g')$|d" /etc/hosts
-}
-
-apply_remove_docker_trust() {
-  local registry_host
-  registry_host="$(component_field docker_registry_trust note)"
-  [[ -n "$registry_host" ]] || return 0
-  sudo rm -rf "/etc/docker/certs.d/${registry_host}"
-  if systemctl list-unit-files docker.service >/dev/null 2>&1; then
-    sudo systemctl restart docker
-  fi
 }
 
 apply_plan() {

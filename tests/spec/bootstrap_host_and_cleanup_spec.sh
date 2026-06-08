@@ -47,41 +47,6 @@ EOF
     The output should include 'manifest='
   End
 
-  It 'tracks local hosts changes in dry-run mode'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      DRY_RUN=1
-      ensure_local_hosts_entries "10.0.0.10" rancher.home.arpa registry.home.arpa
-      printf "track=%s|result=%s|note=%s" "${DRY_RUN_INSTALL[0]}" "${MANIFEST_RESULT[local_hosts]}" "${MANIFEST_NOTES[local_hosts]}"'
-    The status should equal 0
-    The output should include 'Adding/updating local /etc/hosts entries'
-    The output should include '10.0.0.10 rancher.home.arpa registry.home.arpa'
-    The output should include 'track=local /etc/hosts entries'
-    The output should include 'result=dry-run'
-  End
-
-  It 'warns when docker trust cannot be configured without docker'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      need_cmd() { return 1; }
-      ensure_local_docker_registry_trust registry.home.arpa'
-    The status should equal 0
-    The output should include 'docker is not installed on this machine'
-  End
-
-  It 'prints docker trust steps in dry-run mode'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      DRY_RUN=1
-      need_cmd() { [[ "$1" == "docker" ]]; }
-      secret_exists() { return 0; }
-      ensure_local_docker_registry_trust registry.home.arpa
-      printf "track=%s|result=%s|note=%s" "${DRY_RUN_INSTALL[0]}" "${MANIFEST_RESULT[docker_registry_trust]}" "${MANIFEST_NOTES[docker_registry_trust]}"'
-    The status should equal 0
-    The output should include 'Installing Docker trust for registry.home.arpa'
-    The output should include 'sudo mkdir -p /etc/docker/certs.d/registry.home.arpa'
-    The output should include 'sudo systemctl restart docker'
-    The output should include 'track=Docker registry trust for registry.home.arpa'
-    The output should include 'result=dry-run'
-  End
-
   It 'reuses an existing NFS server and export'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
       DRY_RUN=1

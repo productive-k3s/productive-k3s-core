@@ -205,8 +205,6 @@ build_plan() {
   add_plan_item "Delete Rancher/Fleet/Turtles webhook configurations if present"
   add_plan_item "Delete cattle/fleet-related APIService and CRD objects if present"
   add_plan_item "Delete Longhorn StorageClasses, CSIDriver, and CRDs if present"
-  add_plan_item "Remove /etc/hosts entries containing '${DEFAULT_RANCHER_HOST}' or '${DEFAULT_REGISTRY_HOST}'"
-  add_plan_item "Remove Docker trust directory '/etc/docker/certs.d/${DEFAULT_REGISTRY_HOST}' if present"
   add_plan_item "Remove NFS export '${DEFAULT_NFS_EXPORT}' from /etc/exports and reload exports if present"
 }
 
@@ -307,9 +305,7 @@ apply_cleanup() {
   log "Deleting cluster-level resources"
   run_stack_addon_clean_hooks
 
-  log "Removing local host integrations"
-  remove_hosts_entries
-  remove_docker_trust
+  log "Removing local host integrations owned by the engine"
   remove_nfs_export
 
   log "Uninstalling k3s and removing local k3s state"
@@ -317,9 +313,7 @@ apply_cleanup() {
 
   log "Cleanup completed"
   line "  Manual review recommended:"
-  line "  - verify /etc/hosts"
   line "  - verify /etc/exports"
-  line "  - verify Docker trust directory cleanup"
   line "  - verify no k3s processes remain"
 }
 

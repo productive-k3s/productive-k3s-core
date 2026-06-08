@@ -102,3 +102,39 @@ run_addon_source_hook() {
   fi
   "${function_name}" "$@"
 }
+
+resolve_addon_source_manifest() {
+  local addon_name="$1"
+  local addon_dir manifest
+  addon_dir="$(resolve_addon_source_dir "${addon_name}")" || return 1
+  manifest="$(find "${addon_dir}" -type f -name 'addon.yaml' | head -n1)"
+  [[ -n "${manifest}" ]] || return 1
+  printf '%s\n' "${manifest}"
+}
+
+addon_source_impact_value() {
+  local addon_name="$1"
+  local field_name="$2"
+  local manifest
+  manifest="$(resolve_addon_source_manifest "${addon_name}")" || return 1
+  awk -v field="${field_name}" '
+    /^spec:/ { in_spec=1; next }
+    in_spec && /^  impact:/ { in_impact=1; next }
+    in_impact && $0 ~ ("^    " field ":") { sub("^    " field ":[[:space:]]*", "", $0); print; exit }
+    in_impact && /^[^ ]/ { exit }
+  ' "${manifest}"
+}
+
+addon_source_host_capabilities() {
+  local addon_name="$1"
+  local manifest
+  manifest="$(resolve_addon_source_manifest "${addon_name}")" || return 1
+  awk '
+    /^spec:/ { in_spec=1; next }
+    in_spec && /^  impact:/ { in_impact=1; next }
+    in_impact && /^    hostCapabilities:/ { in_caps=1; next }
+    in_caps && /^      - / { sub(/^      - /, "", $0); print; next }
+    in_caps && !/^      - / { exit }
+    in_impact && /^[^ ]/ { exit }
+  ' "${manifest}"
+}

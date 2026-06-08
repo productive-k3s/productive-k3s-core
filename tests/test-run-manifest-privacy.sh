@@ -57,10 +57,12 @@ manifest_set_setting "nfs_export_path" "/srv/nfs/k8s-share"
 manifest_set_setting "nfs_allowed_network" "10.0.0.0/24"
 manifest_record_component "clusterissuer" "missing" "ensure"
 manifest_complete_component "clusterissuer" "installed" "selfsigned"
-manifest_record_component "local_hosts" "unknown" "update"
-manifest_complete_component "local_hosts" "configured" "10.0.0.10 rancher.example.local registry.example.local"
-manifest_record_component "docker_registry_trust" "unknown" "install"
-manifest_complete_component "docker_registry_trust" "configured" "registry.example.local"
+manifest_record_component "rancher_host_local" "unknown" "configure"
+manifest_complete_component "rancher_host_local" "configured" "10.0.0.10 rancher.example.local"
+manifest_record_component "registry_host_local" "unknown" "configure"
+manifest_complete_component "registry_host_local" "configured" "10.0.0.10 registry.example.local"
+manifest_record_component "registry_docker_trust" "unknown" "configure"
+manifest_complete_component "registry_docker_trust" "configured" "registry.example.local"
 manifest_record_component "nfs" "missing" "install"
 manifest_complete_component "nfs" "configured" "/srv/nfs/k8s-share 10.0.0.0/24"
 init_run_manifest
@@ -96,13 +98,18 @@ if [[ "$(setting nfs_export_path)" != "/srv/nfs/k8s-share" ]]; then
   exit 1
 fi
 
-if [[ "$(component_field local_hosts note)" != "10.0.0.10 rancher.example.local registry.example.local" ]]; then
-  printf '[FAIL] rollback did not read local_hosts note from private context\n' >&2
+if [[ "$(component_field rancher_host_local note)" != "10.0.0.10 rancher.example.local" ]]; then
+  printf '[FAIL] rollback did not read rancher_host_local note from private context\n' >&2
   exit 1
 fi
 
-if [[ "$(component_field docker_registry_trust note)" != "registry.example.local" ]]; then
-  printf '[FAIL] rollback did not read docker_registry_trust note from private context\n' >&2
+if [[ "$(component_field registry_host_local note)" != "10.0.0.10 registry.example.local" ]]; then
+  printf '[FAIL] rollback did not read registry_host_local note from private context\n' >&2
+  exit 1
+fi
+
+if [[ "$(component_field registry_docker_trust note)" != "registry.example.local" ]]; then
+  printf '[FAIL] rollback did not read registry_docker_trust note from private context\n' >&2
   exit 1
 fi
 

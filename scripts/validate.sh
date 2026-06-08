@@ -468,51 +468,6 @@ run_stack_addon_validations() {
   done < <(stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}")
 }
 
-check_dns_and_http() {
-  info "Checking local DNS and HTTPS access"
-  local rancher_present="n" registry_present="n"
-  if k get ingress rancher -n cattle-system >/dev/null 2>&1; then
-    rancher_present="y"
-  fi
-  if k get ingress registry -n registry >/dev/null 2>&1; then
-    registry_present="y"
-  fi
-
-  if [[ "$rancher_present" == "y" ]]; then
-    if getent hosts rancher.home.arpa >/dev/null 2>&1; then
-      record_ok "rancher.home.arpa resolves locally"
-    else
-      record_warn "rancher.home.arpa does not resolve locally"
-    fi
-    local rancher_code
-    rancher_code="$(curl -k -s -o /dev/null -w '%{http_code}' --max-time 10 https://rancher.home.arpa || true)"
-    if [[ "$rancher_code" =~ ^(200|302|401|403)$ ]]; then
-      record_ok "Rancher HTTPS endpoint responds with HTTP ${rancher_code}"
-    else
-      record_warn "Rancher HTTPS endpoint did not return an expected code (got '${rancher_code:-none}')"
-    fi
-  else
-    info "Rancher ingress is not present; skipping Rancher DNS/HTTPS checks"
-  fi
-
-  if [[ "$registry_present" == "y" ]]; then
-    if getent hosts registry.home.arpa >/dev/null 2>&1; then
-      record_ok "registry.home.arpa resolves locally"
-    else
-      record_warn "registry.home.arpa does not resolve locally"
-    fi
-    local registry_code
-    registry_code="$(curl -k -s -o /dev/null -w '%{http_code}' --max-time 10 https://registry.home.arpa/v2/ || true)"
-    if [[ "$registry_code" =~ ^(200|401)$ ]]; then
-      record_ok "Registry HTTPS endpoint responds with HTTP ${registry_code}"
-    else
-      record_warn "Registry HTTPS endpoint did not return an expected code (got '${registry_code:-none}')"
-    fi
-  else
-    info "Registry ingress is not present; skipping Registry DNS/HTTPS checks"
-  fi
-}
-
 check_nfs() {
   info "Checking NFS exports"
   local service_name="nfs-kernel-server"
@@ -537,80 +492,6 @@ check_nfs() {
   else
     record_warn "expected NFS export '/srv/nfs/k8s-share' is not present"
   fi
-}
-
-check_docker_registry_flow() {
-  (( DOCKER_REGISTRY_TEST == 1 )) || return 0
-
-  info "Checking registry with docker push/pull"
-
-  if ! need_cmd docker; then
-    record_fail "docker command is not available"
-    return
-  fi
-
-  local upstream_image="busybox:1.36"
-  local test_image="registry.home.arpa/validate/busybox:1.36"
-  local did_login="n"
-
-  if [[ -n "${REGISTRY_USER:-}" || -n "${REGISTRY_PASSWORD:-}" ]]; then
-    if [[ -z "${REGISTRY_USER:-}" || -z "${REGISTRY_PASSWORD:-}" ]]; then
-      record_fail "set both REGISTRY_USER and REGISTRY_PASSWORD, or neither"
-      return
-    fi
-
-    if ! printf '%s' "$REGISTRY_PASSWORD" | docker login registry.home.arpa -u "$REGISTRY_USER" --password-stdin >/dev/null 2>&1; then
-      record_fail "docker login to registry.home.arpa failed"
-      return
-    fi
-
-    did_login="y"
-    record_ok "docker login to registry.home.arpa succeeded"
-  fi
-
-  if ! docker pull "$upstream_image" >/dev/null 2>&1; then
-    record_fail "docker pull ${upstream_image} failed"
-    if [[ "$did_login" == "y" ]]; then
-      docker logout registry.home.arpa >/dev/null 2>&1 || true
-    fi
-    return
-  fi
-
-  if ! docker tag "$upstream_image" "$test_image" >/dev/null 2>&1; then
-    record_fail "docker tag for registry validation image failed"
-    if [[ "$did_login" == "y" ]]; then
-      docker logout registry.home.arpa >/dev/null 2>&1 || true
-    fi
-    return
-  fi
-
-  if ! docker push "$test_image" >/dev/null 2>&1; then
-    record_fail "docker push to registry.home.arpa failed"
-    if [[ "$did_login" == "y" ]]; then
-      docker logout registry.home.arpa >/dev/null 2>&1 || true
-    fi
-    docker image rm -f "$test_image" >/dev/null 2>&1 || true
-    return
-  fi
-
-  docker image rm -f "$test_image" >/dev/null 2>&1 || true
-
-  if ! docker pull "$test_image" >/dev/null 2>&1; then
-    record_fail "docker pull from registry.home.arpa failed after push"
-    if [[ "$did_login" == "y" ]]; then
-      docker logout registry.home.arpa >/dev/null 2>&1 || true
-    fi
-    docker image rm -f "$test_image" >/dev/null 2>&1 || true
-    return
-  fi
-
-  if [[ "$did_login" == "y" ]]; then
-    docker logout registry.home.arpa >/dev/null 2>&1 || true
-    record_ok "docker push/pull against authenticated registry.home.arpa succeeded"
-  else
-    record_ok "docker push/pull against anonymous registry.home.arpa succeeded"
-  fi
-  docker image rm -f "$test_image" >/dev/null 2>&1 || true
 }
 
 print_summary() {
@@ -664,9 +545,7 @@ main() {
   check_storage_classes
   check_ingress
   run_stack_addon_validations
-  check_dns_and_http
   check_nfs
-  check_docker_registry_flow
   print_summary
 }
 
