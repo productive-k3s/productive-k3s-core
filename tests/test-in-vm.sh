@@ -584,11 +584,11 @@ assert_in_vm_with_retries() {
 }
 
 smoke_answers() {
-  printf '%s' $'y\ny\nn\nn\nn\nn\nn\nn\ny\ny\n'
+  printf '%s' $'y\ny\nn\nn\nn\nn\ny\n'
 }
 
 core_answers() {
-  printf '%s' $'y\ny\nn\nn\nn\nn\nn\nn\ny\ny\n'
+  printf '%s' $'y\ny\nn\nn\nn\nn\ny\n'
 }
 
 full_answers() {
