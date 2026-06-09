@@ -282,7 +282,7 @@ fi
 grep -q "does not declare basic public ingress exposure support" /tmp/productive-k3s-core-addon-public.out || fail "missing public ingress validation message"
 pass "addon tgz install rejects public host when addon lacks public ingress support"
 
-if (cd "$REPO_DIR" && HOME="${ADDON_TMP_DIR}/missing-home" PRODUCTIVE_K3S_SYSTEM_KUBECONFIG_PATH="${ADDON_TMP_DIR}/missing-system-kubeconfig" ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" >/tmp/productive-k3s-core-addon-target.out 2>&1); then
+if (cd "$REPO_DIR" && env -u KUBECONFIG HOME="${ADDON_TMP_DIR}/missing-home" PRODUCTIVE_K3S_SYSTEM_KUBECONFIG_PATH="${ADDON_TMP_DIR}/missing-system-kubeconfig" ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" >/tmp/productive-k3s-core-addon-target.out 2>&1); then
   fail "addon install without a local kubeconfig unexpectedly succeeded"
 fi
 grep -q "could not find a readable local kubeconfig" /tmp/productive-k3s-core-addon-target.out || fail "addon install local kubeconfig validation message missing"
