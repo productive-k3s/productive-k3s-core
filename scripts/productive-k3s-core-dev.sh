@@ -119,6 +119,7 @@ run_suite_with_artifact() {
 
 main() {
   local command="${1:-help}"
+  local local_suite_needs_addons="n"
 
   case "$command" in
     -h|--help|help)
@@ -174,6 +175,12 @@ main() {
       ;;
     test-local-all)
       shift
+      if [[ -n "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" || -n "${PRODUCTIVE_K3S_ADDONS_REPO_URL:-}" ]]; then
+        local_suite_needs_addons="y"
+      fi
+      if [[ "${local_suite_needs_addons}" == "y" ]]; then
+        prepare_addons_repo_checkout
+      fi
       clean_suite_category_artifacts local
       run_suite_with_artifact local test-unit make -C "${REPO_DIR}" test-unit
       run_suite_with_artifact local test-lint make -C "${REPO_DIR}" test-lint
