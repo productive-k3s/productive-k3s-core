@@ -21,11 +21,11 @@ REMOTE_DIR="/home/ubuntu/productive-k3s-core"
 escaped_answers="'y\n'"
 
 PRODUCTIVE_K3S_ENGINE="k3sup"
-command_with_engine="$(bootstrap_command_in_vm "--dry-run" "$escaped_answers")"
+command_with_engine="$(core_cli_command_in_vm "apply" "--dry-run" "$escaped_answers")"
 printf '%s\n' "$command_with_engine" | grep -q "PRODUCTIVE_K3S_ENGINE=k3sup" || fail "engine env was not propagated into VM bootstrap command"
-pass "VM bootstrap command includes PRODUCTIVE_K3S_ENGINE when configured"
+pass "VM core CLI command includes PRODUCTIVE_K3S_ENGINE when configured"
 
 unset PRODUCTIVE_K3S_ENGINE
-command_without_engine="$(bootstrap_command_in_vm "--dry-run" "$escaped_answers")"
+command_without_engine="$(core_cli_command_in_vm "apply" "--dry-run" "$escaped_answers")"
 printf '%s\n' "$command_without_engine" | grep -q "PRODUCTIVE_K3S_ENGINE=" && fail "engine env should not be injected when unset"
-pass "VM bootstrap command leaves engine unset by default"
+pass "VM core CLI command leaves engine unset by default"
