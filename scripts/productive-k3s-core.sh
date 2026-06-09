@@ -578,12 +578,13 @@ run_addon_validate() {
 }
 
 resolve_local_cluster_kubeconfig() {
+  local system_kubeconfig_path="${PRODUCTIVE_K3S_SYSTEM_KUBECONFIG_PATH:-/etc/rancher/k3s/k3s.yaml}"
   local candidate
   for candidate in \
     "${KUBECONFIG:-}" \
     "${HOME}/.kube/k3s.yaml" \
     "${HOME}/.kube/config" \
-    "/etc/rancher/k3s/k3s.yaml"
+    "${system_kubeconfig_path}"
   do
     [[ -n "${candidate}" && -r "${candidate}" ]] || continue
     printf '%s\n' "${candidate}"
