@@ -52,13 +52,23 @@ main() {
   need_cmd jq
 
   local results=()
+  declare -A latest_results=()
   local artifact line
   while IFS= read -r -d '' artifact; do
     line="$(format_result_line "$artifact")"
     if [[ -n "$line" ]]; then
-      results+=("$line")
+      IFS=$'\t' read -r _status description _path <<< "$line"
+      latest_results["$description"]="$line"
     fi
   done < <(collect_result_artifacts)
+
+  local description
+  for description in "${!latest_results[@]}"; do
+    results+=("${latest_results[$description]}")
+  done
+
+  IFS=$'\n' results=($(printf '%s\n' "${results[@]}" | sort))
+  unset IFS
 
   if (( ${#results[@]} == 0 )); then
     echo "[WARN] No test result artifacts found in ${ARTIFACTS_DIR}" >&2
