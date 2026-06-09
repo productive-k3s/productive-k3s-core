@@ -13,22 +13,28 @@ La idea es simple:
 Para el desarrollo diario, usá esta secuencia desde la raíz del repositorio:
 
 ```bash
-make test-clean
+make test-clean-artifacts
 make <test-target>
-make test-checkstatus
+make test-checkstatus-matrix
 ```
 
-Ejemplo:
+Ejemplos:
 
 ```bash
-make test-clean
+make test-clean-artifacts
 make test-matrix-all
-make test-checkstatus
+make test-checkstatus-matrix
+```
+
+```bash
+make test-clean-artifacts
+make test-local-all
+make test-checkstatus-local
 ```
 
 ## Qué hace cada target
 
-### `make test-clean`
+### `make test-clean-artifacts`
 
 Elimina los archivos locales que este repositorio usa como estado de tests:
 
@@ -37,9 +43,9 @@ Elimina los archivos locales que este repositorio usa como estado de tests:
 - `runs/telemetry-outbox/bootstrap-*.json` locales
 - `runs/telemetry-outbox/bootstrap-*.status` locales
 
-Usalo antes de empezar un nuevo ciclo de validación cuando querés que `make test-checkstatus` describa sólo la corrida actual.
+Usalo antes de empezar un nuevo ciclo de validación cuando querés que los comandos de estado describan sólo la corrida actual.
 
-### `make test-checkstatus`
+### `make test-checkstatus-matrix`
 
 Recorre los artifacts de resultados actuales bajo `test-artifacts/` e imprime un resumen corto de los estados registrados.
 
@@ -53,7 +59,7 @@ Ignora a propósito archivos que no son el resultado top-level real del test:
 - manifests copiados de bootstrap como `*-apply-manifest.json`
 - artifacts públicos saneados como `*-public.json`
 
-Si al menos un resultado registrado está en fallo, `make test-checkstatus` termina con exit code no cero.
+Si al menos un resultado registrado de la matriz está en fallo, `make test-checkstatus-matrix` termina con exit code no cero.
 
 Si no hay artifacts de resultado, también termina con exit code no cero e indica que no pudo determinar el estado.
 
@@ -64,6 +70,8 @@ Estos son los targets root que más suelen usarse:
 | Target | Propósito |
 | --- | --- |
 | `make test-smoke` | Validación rápida smoke basada en Docker |
+| `make test-local-all` | Suite local completa sin servicios de terceros |
+| `make test-external-all` | Suites que pueden tocar endpoints externos, hoy telemetría |
 | `make test-core` | Validación VM del perfil core sobre Ubuntu `24.04` |
 | `make test-core-debian12` | Validación VM del perfil core sobre Debian `12` |
 | `make test-core-debian13` | Validación VM del perfil core sobre Debian `13` |
@@ -81,19 +89,21 @@ Los perfiles de matriz bajo `tests/Makefile` siguen validando cada perfil por se
 Eso permite que este workflow funcione como esperás:
 
 ```bash
-make test-clean
+make test-clean-artifacts
 make test-matrix-all
-make test-checkstatus
+make test-checkstatus-matrix
 ```
 
-Al final de esa secuencia, `test-checkstatus` todavía puede ver los artifacts acumulados de la corrida completa de matriz, en lugar de quedarse sólo con el último perfil.
+Al final de esa secuencia, `test-checkstatus-matrix` todavía puede ver los artifacts acumulados de la corrida completa de matriz, en lugar de quedarse sólo con el último perfil.
 
 ## Cuando un test falla
 
 Arrancá por:
 
 ```bash
-make test-checkstatus
+make test-checkstatus-matrix
+make test-checkstatus-local
+make test-checkstatus-external
 ```
 
 Después inspeccioná los archivos de artifact correspondientes en `test-artifacts/`.
@@ -123,7 +133,7 @@ sudo k3s kubectl get pods -A -o wide
 ## Notas
 
 !!! note
-    `make test-checkstatus` resume resultados registrados. No reemplaza leer el JSON completo del artifact cuando necesitás contexto detallado de debugging.
+    `make test-checkstatus-matrix`, `make test-checkstatus-local` y `make test-checkstatus-external` resumen resultados registrados por categoría. No reemplazan leer el JSON completo del artifact cuando necesitás contexto detallado de debugging.
 
 !!! note
-    `make test-clean` elimina sólo el estado local de tests de este repositorio. No borra VMs de Multipass preservadas. Para eso usá `./tests/test-in-vm-cleanup.sh`.
+    `make test-clean` ahora es un alias seguro para limpiar sólo artifacts. Usá `make test-clean-vms` o `make test-clean-all` cuando quieras borrar explícitamente también las VMs de test de Productive K3S.

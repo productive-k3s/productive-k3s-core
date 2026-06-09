@@ -25,7 +25,7 @@ MODE="plan"
 SUDO_KA_PID=""
 AUTO_APPROVE="n"
 FORCE_CONFIRM="n"
-PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-base}"
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-}"
 DEFAULT_NFS_EXPORT="/srv/nfs/k8s-share"
 DEFAULT_REGISTRY_HOST="registry.home.arpa"
 DEFAULT_RANCHER_HOST="rancher.home.arpa"
@@ -243,6 +243,7 @@ remove_nfs_export() {
 
 run_stack_addon_clean_hooks() {
   local addon_name addon_dir clean_fn
+  [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]] || return 0
   if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
     err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
     exit 1

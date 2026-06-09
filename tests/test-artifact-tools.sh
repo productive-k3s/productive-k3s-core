@@ -82,6 +82,24 @@ cat > "${ARTIFACTS_DIR}/hosted-validation-summary.json" <<'EOF'
 }
 EOF
 
+cat > "${ARTIFACTS_DIR}/test-local-20260508-000001-test-unit.json" <<'EOF'
+{
+  "test_type": "local-suite",
+  "suite_category": "local",
+  "suite": "test-unit",
+  "status": "success"
+}
+EOF
+
+cat > "${ARTIFACTS_DIR}/test-external-20260508-000001-test-telemetry.json" <<'EOF'
+{
+  "test_type": "external-suite",
+  "suite_category": "external",
+  "suite": "test-telemetry",
+  "status": "failed"
+}
+EOF
+
 printf '{}\n' > "${RUNS_DIR}/bootstrap-20260508-000001.json"
 printf '{}\n' > "${RUNS_DIR}/telemetry-outbox/bootstrap-20260508-000001-attempt-1.json"
 printf 'delivered\n' > "${RUNS_DIR}/telemetry-outbox/bootstrap-20260508-000001-attempt-1.status"
@@ -111,7 +129,7 @@ set +e
 status_output="$(
   TEST_ARTIFACTS_DIR="${ARTIFACTS_DIR}" \
   TEST_RUNS_DIR="${RUNS_DIR}" \
-  bash "${REPO_DIR}/tests/check-test-status.sh" 2>&1
+  bash "${REPO_DIR}/tests/check-test-status.sh" --category matrix 2>&1
 )"
 status_rc=$?
 set -e
@@ -121,6 +139,24 @@ assert_contains "$status_output" "[OK] vm profile=core platform=ubuntu image=24.
 assert_contains "$status_output" "[FAIL] vm profile=full platform=debian12"
 assert_contains "$status_output" "[OK] github-hosted runner_os=ubuntu-24.04"
 assert_contains "$status_output" "Summary: 2 success, 1 failed, 0 unknown"
+
+local_status_output="$(
+  TEST_ARTIFACTS_DIR="${ARTIFACTS_DIR}" \
+  bash "${REPO_DIR}/tests/check-test-status.sh" --category local 2>&1
+)"
+assert_contains "$local_status_output" "[OK] local suite=test-unit"
+assert_contains "$local_status_output" "Summary: 1 success, 0 failed, 0 unknown"
+
+set +e
+external_status_output="$(
+  TEST_ARTIFACTS_DIR="${ARTIFACTS_DIR}" \
+  bash "${REPO_DIR}/tests/check-test-status.sh" --category external 2>&1
+)"
+external_status_rc=$?
+set -e
+[[ "$external_status_rc" -ne 0 ]] || fail "external status should fail when one external suite failed"
+assert_contains "$external_status_output" "[FAIL] external suite=test-telemetry"
+assert_contains "$external_status_output" "Summary: 0 success, 1 failed, 0 unknown"
 
 TEST_ARTIFACTS_DIR="${ARTIFACTS_DIR}" \
 TEST_RUNS_DIR="${RUNS_DIR}" \
@@ -139,8 +175,32 @@ assert_contains "$(cat "${MULTIPASS_LOG}")" "purge"
 root_clean_recipe="$(make -C "${REPO_DIR}" -n test-clean)"
 assert_contains "$root_clean_recipe" "./scripts/productive-k3s-core-dev.sh test-clean"
 
+root_clean_artifacts_recipe="$(make -C "${REPO_DIR}" -n test-clean-artifacts)"
+assert_contains "$root_clean_artifacts_recipe" "./scripts/productive-k3s-core-dev.sh test-clean-artifacts"
+
+root_clean_vms_recipe="$(make -C "${REPO_DIR}" -n test-clean-vms)"
+assert_contains "$root_clean_vms_recipe" "./scripts/productive-k3s-core-dev.sh test-clean-vms"
+
+root_clean_all_recipe="$(make -C "${REPO_DIR}" -n test-clean-all)"
+assert_contains "$root_clean_all_recipe" "./scripts/productive-k3s-core-dev.sh test-clean-all"
+
 root_checkstatus_recipe="$(make -C "${REPO_DIR}" -n test-checkstatus)"
 assert_contains "$root_checkstatus_recipe" "./scripts/productive-k3s-core-dev.sh test-checkstatus"
+
+root_checkstatus_matrix_recipe="$(make -C "${REPO_DIR}" -n test-checkstatus-matrix)"
+assert_contains "$root_checkstatus_matrix_recipe" "./scripts/productive-k3s-core-dev.sh test-checkstatus-matrix"
+
+root_checkstatus_local_recipe="$(make -C "${REPO_DIR}" -n test-checkstatus-local)"
+assert_contains "$root_checkstatus_local_recipe" "./scripts/productive-k3s-core-dev.sh test-checkstatus-local"
+
+root_checkstatus_external_recipe="$(make -C "${REPO_DIR}" -n test-checkstatus-external)"
+assert_contains "$root_checkstatus_external_recipe" "./scripts/productive-k3s-core-dev.sh test-checkstatus-external"
+
+root_local_all_recipe="$(make -C "${REPO_DIR}" -n test-local-all)"
+assert_contains "$root_local_all_recipe" "./scripts/productive-k3s-core-dev.sh test-local-all"
+
+root_external_all_recipe="$(make -C "${REPO_DIR}" -n test-external-all)"
+assert_contains "$root_external_all_recipe" "./scripts/productive-k3s-core-dev.sh test-external-all"
 
 root_tag_release_recipe="$(make -C "${REPO_DIR}" -n tag-release VERSION=1.2.3)"
 assert_contains "$root_tag_release_recipe" "./scripts/create-release-tag.sh 1.2.3"

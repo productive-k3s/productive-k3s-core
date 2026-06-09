@@ -25,10 +25,15 @@ sudo k3s kubectl get pvc -A
 sudo k3s kubectl get ingress -A
 ```
 
-## Managed validator
+## Managed validators
 
 ```bash
 ./scripts/validate.sh
 ./scripts/validate.sh --strict
 ./scripts/validate.sh --json | jq
+./productive-k3s-core.sh stack validate base --strict
 ```
+
+Use `validate.sh` when you want to check the local core installation only.
+
+Use `stack validate <name>` when you want to validate an explicit stack such as `base`.

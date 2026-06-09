@@ -16,7 +16,15 @@ Development commands:
   docs-down
   docs-clean
   test-clean
+  test-clean-artifacts
+  test-clean-vms
+  test-clean-all
   test-checkstatus
+  test-checkstatus-matrix
+  test-checkstatus-local
+  test-checkstatus-external
+  test-local-all
+  test-external-all
   test-preflight-host
   test-arm-support-docs
   test-bootstrap-modes
@@ -87,6 +95,28 @@ run_tests_make() {
   exec make -C "${REPO_DIR}/tests" "$@"
 }
 
+run_checkstatus() {
+  local category="$1"
+  shift
+  exec bash "${REPO_DIR}/tests/check-test-status.sh" --category "${category}" "$@"
+}
+
+artifacts_dir() {
+  printf '%s\n' "${TEST_ARTIFACTS_DIR:-${REPO_DIR}/test-artifacts}"
+}
+
+clean_suite_category_artifacts() {
+  local suite_category="$1"
+  rm -f "$(artifacts_dir)"/test-"${suite_category}"-*.json
+}
+
+run_suite_with_artifact() {
+  local suite_category="$1"
+  local suite_name="$2"
+  shift 2
+  "${REPO_DIR}/tests/run-suite-with-artifact.sh" "${suite_category}" "${suite_name}" "$@"
+}
+
 main() {
   local command="${1:-help}"
 
@@ -112,11 +142,59 @@ main() {
       ;;
     test-clean)
       shift
+      exec bash "${REPO_DIR}/tests/clean-test-artifacts.sh" "$@"
+      ;;
+    test-clean-artifacts)
+      shift
+      exec bash "${REPO_DIR}/tests/clean-test-artifacts.sh" "$@"
+      ;;
+    test-clean-vms)
+      shift
+      exec bash "${REPO_DIR}/tests/clean-test-vms.sh" "$@"
+      ;;
+    test-clean-all)
+      shift
       run_tests_make clean-test-state "$@"
       ;;
     test-checkstatus)
       shift
-      run_tests_make check-test-status "$@"
+      run_checkstatus matrix "$@"
+      ;;
+    test-checkstatus-matrix)
+      shift
+      run_checkstatus matrix "$@"
+      ;;
+    test-checkstatus-local)
+      shift
+      run_checkstatus local "$@"
+      ;;
+    test-checkstatus-external)
+      shift
+      run_checkstatus external "$@"
+      ;;
+    test-local-all)
+      shift
+      clean_suite_category_artifacts local
+      run_suite_with_artifact local test-unit make -C "${REPO_DIR}" test-unit
+      run_suite_with_artifact local test-lint make -C "${REPO_DIR}" test-lint
+      run_suite_with_artifact local test-format make -C "${REPO_DIR}" test-format
+      run_suite_with_artifact local test-spell make -C "${REPO_DIR}" test-spell
+      run_suite_with_artifact local test-preflight-host bash "${REPO_DIR}/tests/test-preflight-host.sh"
+      run_suite_with_artifact local test-arm-support-docs bash "${REPO_DIR}/tests/test-arm-support-docs.sh"
+      run_suite_with_artifact local test-bootstrap-modes bash "${REPO_DIR}/tests/test-bootstrap-modes.sh"
+      run_suite_with_artifact local test-artifact-tools bash "${REPO_DIR}/tests/test-artifact-tools.sh"
+      run_suite_with_artifact local test-in-vm-cleanup-timeout bash "${REPO_DIR}/tests/test-in-vm-cleanup-timeout.sh"
+      run_suite_with_artifact local test-productive-k3s-core-cli bash "${REPO_DIR}/tests/test-productive-k3s-core-cli.sh"
+      run_suite_with_artifact local test-in-vm-engine-propagation bash "${REPO_DIR}/tests/test-in-vm-engine-propagation.sh"
+      exec "${REPO_DIR}/tests/run-suite-with-artifact.sh" local test-agent-smoke bash "${REPO_DIR}/tests/test-agent-in-docker.sh" "$@"
+      ;;
+    test-external-all)
+      shift
+      clean_suite_category_artifacts external
+      run_suite_with_artifact external test-telemetry-consent bash "${REPO_DIR}/tests/test-telemetry-consent.sh"
+      run_suite_with_artifact external test-telemetry-delivery bash "${REPO_DIR}/tests/test-telemetry-delivery.sh"
+      run_suite_with_artifact external test-telemetry-default-endpoint bash "${REPO_DIR}/tests/test-telemetry-default-endpoint.sh"
+      exec "${REPO_DIR}/tests/run-suite-with-artifact.sh" external test-bootstrap-telemetry-events bash "${REPO_DIR}/tests/test-bootstrap-telemetry-events.sh" "$@"
       ;;
     test-preflight-host)
       shift
@@ -137,10 +215,7 @@ main() {
       ;;
     test-telemetry)
       shift
-      bash "${REPO_DIR}/tests/test-telemetry-consent.sh" "$@"
-      bash "${REPO_DIR}/tests/test-telemetry-delivery.sh" "$@"
-      bash "${REPO_DIR}/tests/test-telemetry-default-endpoint.sh" "$@"
-      exec bash "${REPO_DIR}/tests/test-bootstrap-telemetry-events.sh" "$@"
+      exec "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-external-all "$@"
       ;;
     test-productive-k3s-core-cli)
       shift

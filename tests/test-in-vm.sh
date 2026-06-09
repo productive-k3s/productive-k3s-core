@@ -476,15 +476,18 @@ bootstrap_engine_env_prefix() {
   printf '%s' "${prefix}"
 }
 
-bootstrap_command_in_vm() {
-  local mode_args="$1"
+core_cli_command_in_vm() {
+  local subcommand="$1"
+  local extra_args="$2"
+  local stdin_payload="$3"
   local engine_prefix
   engine_prefix="$(bootstrap_engine_env_prefix)"
-  printf "cd '%s' && bootstrap_answers_file=\"\$(mktemp)\" && printf '%%s' %s > \"\${bootstrap_answers_file}\" && %s./scripts/apply.sh --mode single-node %s < \"\${bootstrap_answers_file}\"; bootstrap_rc=\$?; rm -f \"\${bootstrap_answers_file}\"; test \"\${bootstrap_rc}\" -eq 0" \
+  printf "cd '%s' && bootstrap_answers_file=\"\$(mktemp)\" && printf '%%s' %s > \"\${bootstrap_answers_file}\" && %s./productive-k3s-core.sh %s %s < \"\${bootstrap_answers_file}\"; bootstrap_rc=\$?; rm -f \"\${bootstrap_answers_file}\"; test \"\${bootstrap_rc}\" -eq 0" \
     "$REMOTE_DIR" \
-    "$2" \
+    "$stdin_payload" \
     "$engine_prefix" \
-    "$mode_args"
+    "$subcommand" \
+    "$extra_args"
 }
 
 capture_bootstrap_manifest() {
@@ -501,18 +504,19 @@ capture_bootstrap_manifest() {
   fi
 }
 
-run_bootstrap_with_answers() {
-  local mode="$1"
-  local answers="$2"
+run_core_cli_with_answers() {
+  local subcommand="$1"
+  local extra_args="$2"
+  local answers="$3"
   local escaped_answers
   local wrapped_cmd
   escaped_answers=$(printf '%q' "$answers")
-  wrapped_cmd="$(bootstrap_command_in_vm "$mode" "$escaped_answers")"
+  wrapped_cmd="$(core_cli_command_in_vm "$subcommand" "$extra_args" "$escaped_answers")"
   if ! run_remote_command_with_status "$wrapped_cmd" 3600; then
     if [[ "${REMOTE_COMMAND_STATUS:-}" == "124" || -z "${REMOTE_COMMAND_STATUS:-}" ]]; then
-      err "Timed out waiting for remote apply completion marker."
+      err "Timed out waiting for remote core CLI completion marker."
     else
-      err "Remote apply exited with status ${REMOTE_COMMAND_STATUS}."
+      err "Remote core CLI command exited with status ${REMOTE_COMMAND_STATUS}."
     fi
     capture_bootstrap_manifest
     return 1
@@ -524,18 +528,19 @@ run_validate_with_retries() {
   local validate_mode="${1:-strict}"
   local timeout_secs="${2:-600}"
   local sleep_secs="${3:-15}"
+  local validate_command
   local start_ts now_ts
   start_ts=$(date +%s)
 
+  if [[ "$validate_mode" == "strict" ]]; then
+    validate_command="cd '$REMOTE_DIR' && ./scripts/validate.sh --strict"
+  else
+    validate_command="cd '$REMOTE_DIR' && ./scripts/validate.sh"
+  fi
+
   while true; do
-    if [[ "$validate_mode" == "strict" ]]; then
-      if run_remote_command_with_status "cd '$REMOTE_DIR' && ./scripts/validate.sh --strict" 1200; then
-        return 0
-      fi
-    else
-      if run_remote_command_with_status "cd '$REMOTE_DIR' && ./scripts/validate.sh" 1200; then
-        return 0
-      fi
+    if run_remote_command_with_status "${validate_command}" 1200; then
+      return 0
     fi
 
     now_ts=$(date +%s)
@@ -545,6 +550,31 @@ run_validate_with_retries() {
     fi
 
     log "Validation is not clean yet; waiting ${sleep_secs}s before retrying"
+    sleep "$sleep_secs"
+  done
+}
+
+run_stack_validate_with_retries() {
+  local stack_name="$1"
+  local timeout_secs="${2:-900}"
+  local sleep_secs="${3:-15}"
+  local start_ts now_ts
+  local validate_command
+  start_ts=$(date +%s)
+  validate_command="cd '$REMOTE_DIR' && ./productive-k3s-core.sh stack validate '${stack_name}' --strict"
+
+  while true; do
+    if run_remote_command_with_status "${validate_command}" 1200; then
+      return 0
+    fi
+
+    now_ts=$(date +%s)
+    if (( now_ts - start_ts >= timeout_secs )); then
+      err "Stack validation for '${stack_name}' did not converge within ${timeout_secs}s"
+      return 1
+    fi
+
+    log "Stack validation for '${stack_name}' is not clean yet; waiting ${sleep_secs}s before retrying"
     sleep "$sleep_secs"
   done
 }
@@ -584,11 +614,11 @@ assert_in_vm_with_retries() {
 }
 
 smoke_answers() {
-  printf '%s' $'y\ny\nn\nn\nn\nn\ny\n'
+  printf '%s' $'y\ny\ny\n'
 }
 
 core_answers() {
-  printf '%s' $'y\ny\nn\nn\nn\nn\ny\n'
+  printf '%s' $'y\ny\ny\n'
 }
 
 full_answers() {
@@ -597,11 +627,6 @@ y
 y
 y
 y
-y
-y
-y
-
-
 home.arpa
 2
 
@@ -614,20 +639,19 @@ admin
 
 
 
-n
-y
+
 y
 EOF
 }
 
 run_smoke() {
   log "Running smoke profile in VM"
-  run_bootstrap_with_answers "--dry-run" "$(smoke_answers)"
+  run_core_cli_with_answers "apply" "--dry-run" "$(smoke_answers)"
 }
 
 run_core() {
   log "Running core profile in VM"
-  run_bootstrap_with_answers "" "$(core_answers)"
+  run_core_cli_with_answers "apply" "" "$(core_answers)"
   run_validate_with_retries non-strict 300 10
 }
 
@@ -638,19 +662,20 @@ run_full() {
   if [[ -z "${PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS:-}" ]]; then
     export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true
   fi
-  run_bootstrap_with_answers "" "$(full_answers)"
+  run_core_cli_with_answers "apply" "" "$(core_answers)"
+  run_core_cli_with_answers "stack install" "base" "$(full_answers)"
   if [[ -n "${previous_auto_approve}" ]]; then
     export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS="${previous_auto_approve}"
   else
     unset PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS || true
   fi
-  run_validate_with_retries strict 900 15
+  run_stack_validate_with_retries "base" 1200 15
 }
 
 run_full_clean() {
   run_full
   log "Running destructive clean profile inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && ./scripts/cleanup.sh --apply --yes --confirm-clean"
+  run_in_vm "cd '$REMOTE_DIR' && ./productive-k3s-core.sh stack cleanup base --apply --yes --confirm-clean"
   assert_in_vm "systemctl is-active --quiet k3s && exit 1 || exit 0" "k3s service is no longer active after clean"
 }
 

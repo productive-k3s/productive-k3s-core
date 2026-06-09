@@ -65,6 +65,15 @@ Common prompted values include:
 - whether the `registry` add-on may manage local `/etc/hosts`
 - whether the `registry` add-on may install self-signed trust into local Docker
 
+The important public split now is:
+
+- `./productive-k3s-core.sh apply`
+  installs the local core only
+- `./productive-k3s-core.sh stack install <name>`
+  installs an explicit stack such as `base`
+- `./productive-k3s-core.sh addon install`
+  operates on the local host and local cluster, not on an external kubeconfig target
+
 ### Telemetry-related environment variables
 
 The bootstrap script reads these environment variables:
@@ -137,6 +146,9 @@ The bootstrap manifest records settings such as:
 | `-h`, `--help` | Show CLI help |
 
 ### Related environment variables
+
+- `PRODUCTIVE_K3S_STACK_NAME`
+  When set, validation also runs the selected stack add-on validations. When unset, `validate.sh` behaves as a core-only validator.
 
 The validator still accepts `--docker-registry-test`, but the actual registry push/pull check now lives in the `registry` add-on validation hook. For that optional Docker login path, the validator can consume:
 

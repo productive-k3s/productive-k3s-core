@@ -2,15 +2,22 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/addons-runtime.sh"
 
 STRICT=0
 JSON_OUTPUT=0
 DOCKER_REGISTRY_TEST=0
-PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-base}"
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-}"
 FAILURES=0
 WARNINGS=0
 CHECK_RESULTS=()
+RUNS_DIR="${PRODUCTIVE_K3S_RUNS_DIR:-${REPO_DIR}/runs}"
+APPLY_MANIFEST_PATH="${PRODUCTIVE_K3S_APPLY_MANIFEST_PATH:-}"
+APPLY_SETTING_NFS_MANAGE=""
+APPLY_SETTING_RANCHER_MANAGE_LOCAL_HOSTS=""
+APPLY_SETTING_REGISTRY_MANAGE_LOCAL_HOSTS=""
+APPLY_SETTING_REGISTRY_TRUST_DOCKER=""
 
 json_escape() {
   local s="$1"
@@ -90,6 +97,43 @@ EOF
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+latest_apply_manifest() {
+  if [[ -n "${APPLY_MANIFEST_PATH}" && -f "${APPLY_MANIFEST_PATH}" ]]; then
+    printf '%s\n' "${APPLY_MANIFEST_PATH}"
+    return 0
+  fi
+
+  ls -1t "${RUNS_DIR}"/apply-*.json 2>/dev/null | head -1
+}
+
+manifest_setting() {
+  local key="$1"
+  local manifest_path
+
+  manifest_path="$(latest_apply_manifest)"
+  [[ -n "${manifest_path}" && -f "${manifest_path}" ]] || return 0
+
+  python3 - "$manifest_path" "$key" <<'PY'
+import json
+import sys
+
+path, key = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+value = data.get("settings", {}).get(key, "")
+if value is None:
+    value = ""
+sys.stdout.write(str(value))
+PY
+}
+
+load_apply_settings() {
+  APPLY_SETTING_NFS_MANAGE="$(manifest_setting "nfs_manage")"
+  APPLY_SETTING_RANCHER_MANAGE_LOCAL_HOSTS="$(manifest_setting "rancher_manage_local_hosts")"
+  APPLY_SETTING_REGISTRY_MANAGE_LOCAL_HOSTS="$(manifest_setting "registry_manage_local_hosts")"
+  APPLY_SETTING_REGISTRY_TRUST_DOCKER="$(manifest_setting "registry_trust_docker")"
 }
 
 record_ok() {
@@ -445,6 +489,7 @@ check_namespace_rollup() {
 
 run_stack_addon_validations() {
   local addon_name addon_dir validate_fn
+  [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]] || return 0
   if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
     record_fail "stack source '${PRODUCTIVE_K3S_STACK_NAME}' could not be resolved for validation"
     return
@@ -471,26 +516,46 @@ run_stack_addon_validations() {
 check_nfs() {
   info "Checking NFS exports"
   local service_name="nfs-kernel-server"
+  local export_path="/srv/nfs/k8s-share"
+  local service_active="n"
+  local export_present="n"
   if systemctl list-unit-files nfs-server.service >/dev/null 2>&1; then
     service_name="nfs-server"
   fi
 
   if sudo systemctl is-active --quiet "$service_name"; then
+    service_active="y"
+  fi
+
+  local exports
+  if ! exports="$(safe_run sudo exportfs -v)"; then
+    if [[ "${APPLY_SETTING_NFS_MANAGE}" == "y" ]]; then
+      record_warn "unable to query NFS exports"
+    else
+      info "unable to query NFS exports; skipping optional NFS checks"
+    fi
+    return
+  fi
+
+  if printf '%s\n' "$exports" | grep -q "^${export_path}"; then
+    export_present="y"
+  fi
+
+  if [[ "${APPLY_SETTING_NFS_MANAGE}" != "y" && "${service_active}" != "y" && "${export_present}" != "y" ]]; then
+    info "NFS management was not enabled; skipping optional NFS checks"
+    return
+  fi
+
+  if [[ "${service_active}" == "y" ]]; then
     record_ok "NFS service '${service_name}' is active"
   else
     record_warn "NFS service '${service_name}' is not active"
   fi
 
-  local exports
-  if ! exports="$(safe_run sudo exportfs -v)"; then
-    record_warn "unable to query NFS exports"
-    return
-  fi
-
-  if printf '%s\n' "$exports" | grep -q '^/srv/nfs/k8s-share'; then
-    record_ok "expected NFS export '/srv/nfs/k8s-share' is present"
+  if [[ "${export_present}" == "y" ]]; then
+    record_ok "expected NFS export '${export_path}' is present"
   else
-    record_warn "expected NFS export '/srv/nfs/k8s-share' is not present"
+    record_warn "expected NFS export '${export_path}' is not present"
   fi
 }
 
@@ -537,6 +602,7 @@ print_summary() {
 
 main() {
   parse_args "$@"
+  load_apply_settings
   sudo_keepalive
   check_cmds
   check_k3s_service

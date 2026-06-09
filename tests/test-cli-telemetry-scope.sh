@@ -18,6 +18,7 @@ WORK_DIR="${TMP_DIR}/core"
 mkdir -p "${WORK_DIR}/scripts"
 cp "${ROOT_DIR}/scripts/productive-k3s-core.sh" "${WORK_DIR}/scripts/"
 cp "${ROOT_DIR}/scripts/component-versions.sh" "${WORK_DIR}/scripts/"
+cp "${ROOT_DIR}/scripts/addons-runtime.sh" "${WORK_DIR}/scripts/"
 cat > "${WORK_DIR}/bundle-info.json" <<'EOF'
 {
   "schema_version": "1",
@@ -73,15 +74,16 @@ EOF
 chmod +x "${ADDON_DIR}/scripts/install.sh"
 ADDON_TGZ="${TMP_DIR}/telemetry-addon.tgz"
 tar -czf "${ADDON_TGZ}" -C "${ADDON_DIR}" .
-KUBECONFIG_PATH="${TMP_DIR}/kubeconfig"
-printf 'apiVersion: v1\nkind: Config\ncurrent-context: default\n' > "${KUBECONFIG_PATH}"
+HOME_DIR="${TMP_DIR}/home"
+mkdir -p "${HOME_DIR}/.kube"
+printf 'apiVersion: v1\nkind: Config\ncurrent-context: default\n' > "${HOME_DIR}/.kube/k3s.yaml"
 
 rm -f "${SENDER_MARKER}"
-TELEMETRY_ENABLED=true TELEMETRY_SESSION_ID=test-session TELEMETRY_RUN_ID=test-run bash "${WORK_DIR}/scripts/productive-k3s-core.sh" addon install --tgz "${ADDON_TGZ}" --kubeconfig "${KUBECONFIG_PATH}" >/dev/null
+HOME="${HOME_DIR}" TELEMETRY_ENABLED=true TELEMETRY_SESSION_ID=test-session TELEMETRY_RUN_ID=test-run bash "${WORK_DIR}/scripts/productive-k3s-core.sh" addon install --tgz "${ADDON_TGZ}" >/dev/null
 [[ -e "${SENDER_MARKER}" ]] || fail "telemetry sender was not called for addon install"
 pass "mutating core addon install emits telemetry"
 
 rm -f "${SENDER_MARKER}"
-TELEMETRY_ENABLED=true TELEMETRY_SESSION_ID=test-session bash "${WORK_DIR}/scripts/productive-k3s-core.sh" addon install --tgz "${ADDON_TGZ}" --kubeconfig "${KUBECONFIG_PATH}" >/dev/null
+HOME="${HOME_DIR}" TELEMETRY_ENABLED=true TELEMETRY_SESSION_ID=test-session bash "${WORK_DIR}/scripts/productive-k3s-core.sh" addon install --tgz "${ADDON_TGZ}" >/dev/null
 [[ -e "${SENDER_MARKER}" ]] || fail "telemetry sender was not called for addon install without run id"
 pass "mutating core addon install tolerates missing telemetry run id"

@@ -19,6 +19,7 @@ printf '%s\n' "$cli_help" | grep -q "apply" || fail "public CLI help does not li
 printf '%s\n' "$cli_help" | grep -q "preflight" || fail "public CLI help does not list preflight"
 printf '%s\n' "$cli_help" | grep -q "validate" || fail "public CLI help does not list validate"
 printf '%s\n' "$cli_help" | grep -q "bundle" || fail "public CLI help does not list bundle"
+printf '%s\n' "$cli_help" | grep -q "stack" || fail "public CLI help does not list stack"
 printf '%s\n' "$root_cli_help" | grep -q "apply" || fail "root public CLI help does not list apply"
 pass "public CLI help lists operational commands"
 
@@ -35,7 +36,7 @@ printf '%s\n' "$validate_help" | grep -q -- '--strict' || fail "validate help wa
 pass "validate subcommand forwards CLI help"
 
 printf '%s\n' "$cli_help" | grep -q "addon" || fail "public CLI help does not list addon"
-pass "public CLI help lists addon commands"
+pass "public CLI help lists addon and stack commands"
 
 local_bundle_info="$(cd "$REPO_DIR" && ./productive-k3s-core.sh bundle info --json)"
 printf '%s\n' "$local_bundle_info" | jq -e '
@@ -149,12 +150,13 @@ ADDON_TMP_DIR="$(mktemp -d)"
 ADDON_PKG_DIR="${ADDON_TMP_DIR}/pkg"
 ADDON_ARCHIVE="${ADDON_TMP_DIR}/demo-addon.tgz"
 ADDON_MARKER="${ADDON_TMP_DIR}/installed.txt"
-ADDON_KUBECONFIG="${ADDON_TMP_DIR}/kubeconfig"
 ADDON_INGRESS_CAPTURE="${ADDON_TMP_DIR}/ingress.yaml"
 ADDON_BIN_DIR="${ADDON_TMP_DIR}/bin"
+ADDON_HOME="${ADDON_TMP_DIR}/home"
 mkdir -p "${ADDON_PKG_DIR}/scripts"
 mkdir -p "${ADDON_BIN_DIR}"
-printf 'apiVersion: v1\nkind: Config\ncurrent-context: default\n' > "${ADDON_KUBECONFIG}"
+mkdir -p "${ADDON_HOME}/.kube"
+printf 'apiVersion: v1\nkind: Config\ncurrent-context: default\n' > "${ADDON_HOME}/.kube/k3s.yaml"
 cat >"${ADDON_PKG_DIR}/addon.yaml" <<'EOF'
 apiVersion: addons.productive-k3s.io/v1
 kind: Addon
@@ -234,13 +236,16 @@ fi
 grep -q "spec.addons must include at least one addon" /tmp/productive-k3s-core-stack-validate.out || fail "stack validation error message missing"
 pass "stack source validation rejects empty addon lists"
 
-(cd "$REPO_DIR" && ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" --kubeconfig "${ADDON_KUBECONFIG}")
+(
+  cd "$REPO_DIR" &&
+  HOME="${ADDON_HOME}" ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}"
+)
 [[ -f "${ADDON_MARKER}" ]] || fail "addon install did not execute the packaged installer"
-pass "addon tgz install executes packaged installer"
+pass "addon tgz install executes packaged installer against the local host target"
 
 (
   cd "$REPO_DIR"
-  PATH="${ADDON_BIN_DIR}:$PATH" ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" --kubeconfig "${ADDON_KUBECONFIG}" --public-host demo.k3s.lab.internal
+  HOME="${ADDON_HOME}" PATH="${ADDON_BIN_DIR}:$PATH" ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" --public-host demo.k3s.lab.internal
 )
 [[ -f "${ADDON_INGRESS_CAPTURE}" ]] || fail "addon public install did not apply ingress manifest"
 grep -q "host: demo.k3s.lab.internal" "${ADDON_INGRESS_CAPTURE}" || fail "public ingress host missing from applied manifest"
@@ -270,18 +275,83 @@ chmod +x "${ADDON_NO_PUBLIC_PKG_DIR}/scripts/install.sh"
 tar -czf "${ADDON_NO_PUBLIC_ARCHIVE}" -C "${ADDON_NO_PUBLIC_PKG_DIR}" .
 if (
   cd "$REPO_DIR" &&
-  PATH="${ADDON_BIN_DIR}:$PATH" ./productive-k3s-core.sh addon install --tgz "${ADDON_NO_PUBLIC_ARCHIVE}" --kubeconfig "${ADDON_KUBECONFIG}" --public-host demo-no-public.k3s.lab.internal >/tmp/productive-k3s-core-addon-public.out 2>&1
+  HOME="${ADDON_HOME}" PATH="${ADDON_BIN_DIR}:$PATH" ./productive-k3s-core.sh addon install --tgz "${ADDON_NO_PUBLIC_ARCHIVE}" --public-host demo-no-public.k3s.lab.internal >/tmp/productive-k3s-core-addon-public.out 2>&1
 ); then
   fail "addon install with public host unexpectedly succeeded for addon without public ingress metadata"
 fi
 grep -q "does not declare basic public ingress exposure support" /tmp/productive-k3s-core-addon-public.out || fail "missing public ingress validation message"
 pass "addon tgz install rejects public host when addon lacks public ingress support"
 
-if (cd "$REPO_DIR" && ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" >/tmp/productive-k3s-core-addon-target.out 2>&1); then
-  fail "addon install without explicit target unexpectedly succeeded"
+if (cd "$REPO_DIR" && HOME="${ADDON_TMP_DIR}/missing-home" ./productive-k3s-core.sh addon install --tgz "${ADDON_ARCHIVE}" >/tmp/productive-k3s-core-addon-target.out 2>&1); then
+  fail "addon install without a local kubeconfig unexpectedly succeeded"
 fi
-grep -q "explicit target" /tmp/productive-k3s-core-addon-target.out || fail "addon install target validation message missing"
-pass "addon tgz install requires an explicit target"
+grep -q "could not find a readable local kubeconfig" /tmp/productive-k3s-core-addon-target.out || fail "addon install local kubeconfig validation message missing"
+pass "addon tgz install requires a local kubeconfig on the host"
+
+STACK_DISPATCH_DIR="${ADDON_TMP_DIR}/stack-dispatch"
+STACK_ADDONS_DIR="${ADDON_TMP_DIR}/stack-addons"
+STACK_APPLY_CAPTURE="${ADDON_TMP_DIR}/stack-apply.txt"
+STACK_VALIDATE_CAPTURE="${ADDON_TMP_DIR}/stack-validate.txt"
+STACK_CLEANUP_CAPTURE="${ADDON_TMP_DIR}/stack-cleanup.txt"
+mkdir -p "${STACK_DISPATCH_DIR}/scripts" "${STACK_ADDONS_DIR}/addons/nginx" "${STACK_ADDONS_DIR}/stacks/base"
+cp "${REPO_DIR}/productive-k3s-core.sh" "${STACK_DISPATCH_DIR}/"
+cp "${REPO_DIR}/scripts/productive-k3s-core.sh" "${STACK_DISPATCH_DIR}/scripts/"
+cp "${REPO_DIR}/scripts/component-versions.sh" "${STACK_DISPATCH_DIR}/scripts/"
+cp "${REPO_DIR}/scripts/addons-runtime.sh" "${STACK_DISPATCH_DIR}/scripts/"
+cat > "${STACK_DISPATCH_DIR}/scripts/apply.sh" <<EOF
+#!/usr/bin/env bash
+printf 'stack=%s repo=%s args=%s\n' "\${PRODUCTIVE_K3S_STACK_NAME:-}" "\${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" "\$*" > "${STACK_APPLY_CAPTURE}"
+EOF
+cat > "${STACK_DISPATCH_DIR}/scripts/validate.sh" <<EOF
+#!/usr/bin/env bash
+printf 'stack=%s args=%s\n' "\${PRODUCTIVE_K3S_STACK_NAME:-}" "\$*" > "${STACK_VALIDATE_CAPTURE}"
+EOF
+cat > "${STACK_DISPATCH_DIR}/scripts/cleanup.sh" <<EOF
+#!/usr/bin/env bash
+printf 'stack=%s args=%s\n' "\${PRODUCTIVE_K3S_STACK_NAME:-}" "\$*" > "${STACK_CLEANUP_CAPTURE}"
+EOF
+chmod +x "${STACK_DISPATCH_DIR}/scripts/apply.sh" "${STACK_DISPATCH_DIR}/scripts/validate.sh" "${STACK_DISPATCH_DIR}/scripts/cleanup.sh"
+cat > "${STACK_ADDONS_DIR}/stacks/base/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: base
+  version: 0.1.0
+spec:
+  addons:
+    - nginx
+EOF
+(
+  cd "${STACK_DISPATCH_DIR}" &&
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack install base --dry-run
+)
+grep -q "stack=base" "${STACK_APPLY_CAPTURE}" || fail "stack install did not forward the selected stack name"
+grep -q -- "--mode stack --dry-run" "${STACK_APPLY_CAPTURE}" || fail "stack install did not invoke apply in stack mode"
+pass "stack install dispatches to apply in explicit stack mode"
+
+(
+  cd "${STACK_DISPATCH_DIR}" &&
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh addon install nginx --dry-run
+)
+grep -q "stack=addon-nginx" "${STACK_APPLY_CAPTURE}" || fail "addon install by source name did not synthesize a stack wrapper"
+grep -q -- "--mode stack --dry-run" "${STACK_APPLY_CAPTURE}" || fail "addon install by source name did not invoke apply in stack mode"
+pass "addon install by source name dispatches through a temporary stack wrapper"
+
+(
+  cd "${STACK_DISPATCH_DIR}" &&
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack validate base --strict
+)
+grep -q "stack=base" "${STACK_VALIDATE_CAPTURE}" || fail "stack validate did not scope validation to the selected stack"
+grep -q -- "--strict" "${STACK_VALIDATE_CAPTURE}" || fail "stack validate did not forward validator flags"
+pass "stack validate scopes the validator to an explicit stack"
+
+(
+  cd "${STACK_DISPATCH_DIR}" &&
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack cleanup base --apply --yes --confirm-clean
+)
+grep -q "stack=base" "${STACK_CLEANUP_CAPTURE}" || fail "stack cleanup did not scope cleanup to the selected stack"
+grep -q -- "--apply --yes --confirm-clean" "${STACK_CLEANUP_CAPTURE}" || fail "stack cleanup did not forward cleanup flags"
+pass "stack cleanup scopes cleanup to an explicit stack"
 
 if (cd "$REPO_DIR" && ./productive-k3s-core.sh unsupported >/tmp/productive-k3s-core-cli-unsupported.out 2>&1); then
   fail "unsupported public CLI command unexpectedly succeeded"

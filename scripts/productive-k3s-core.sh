@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/component-versions.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/addons-runtime.sh"
 BUNDLE_INFO_PATH="${SCRIPT_DIR}/../bundle-info.json"
 TELEMETRY_EVENT_SENDER="${SCRIPT_DIR}/send-telemetry-event.sh"
 TELEMETRY_MARKER="${TELEMETRY_MARKER:-pk3s-public-v1}"
@@ -12,8 +14,10 @@ usage() {
   cat <<'EOF'
 Usage:
   ./productive-k3s-core.sh <command> [args...]
-  ./productive-k3s-core.sh addon <validate|install> --tgz <file>
-  ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)
+  ./productive-k3s-core.sh addon validate --tgz <file>
+  ./productive-k3s-core.sh addon install (--tgz <file> | <name>) [--public-host <fqdn>]
+  ./productive-k3s-core.sh stack <install|validate|backup|cleanup> <name> [args...]
+  ./productive-k3s-core.sh stack install --tgz <file> [args...]
   ./productive-k3s-core.sh dev addon validate --source <dir>
   ./productive-k3s-core.sh dev stack validate --source <dir>
   ./productive-k3s-core.sh [apply args...]
@@ -22,10 +26,11 @@ Operational commands:
   bundle      Show bundle metadata for automation
   bom         Show a JSON bill of materials for this CLI/runtime
   preflight   Run host compatibility checks before apply
-  apply       Run the interactive apply flow
+  apply       Install the local Productive K3S core only
   backup      Capture a host and cluster backup snapshot
   validate    Run the post-apply validator
-  addon       Validate or install packaged add-ons
+  addon       Validate or install add-ons on the local host/cluster
+  stack       Install or manage named stacks on the local host/cluster
   dev         Development-oriented source-based addon workflows
   help        Show this help
 
@@ -35,10 +40,12 @@ Examples:
   ./productive-k3s-core.sh preflight
   ./productive-k3s-core.sh preflight --strict
   ./productive-k3s-core.sh apply --dry-run
+  ./productive-k3s-core.sh stack install base
+  ./productive-k3s-core.sh stack validate base --strict
   ./productive-k3s-core.sh validate --strict
   ./productive-k3s-core.sh addon validate --tgz ./longhorn-addon.tgz
-  ./productive-k3s-core.sh addon install --tgz ./longhorn-addon.tgz --cluster-context default
-  ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal --cluster-context default
+  ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal
+  ./productive-k3s-core.sh addon install nginx
 
 If no command is provided, or the first argument is an option, the wrapper
 defaults to `apply` for release-installer compatibility.
@@ -167,6 +174,10 @@ core_command_emits_telemetry() {
       [[ "${1:-}" == "install" ]]
       return
       ;;
+    stack)
+      [[ "${1:-}" == "install" || "${1:-}" == "cleanup" ]]
+      return
+      ;;
     -*)
       return 0
       ;;
@@ -187,6 +198,10 @@ run_apply() {
 
 run_backup() {
   "${SCRIPT_DIR}/backup.sh" "$@"
+}
+
+run_cleanup() {
+  "${SCRIPT_DIR}/cleanup.sh" "$@"
 }
 
 resolve_bundle_version_fallback() {
@@ -562,45 +577,31 @@ run_addon_validate() {
   rm -rf "${tmp_dir}"
 }
 
-run_addon_install() {
-  local tgz_path=""
-  local kubeconfig_path="${KUBECONFIG:-}"
-  local cluster_context="${PK3S_KUBE_CONTEXT:-}"
-  local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
-  while (($# > 0)); do
-    case "$1" in
-      --tgz)
-        tgz_path="${2:-}"
-        shift 2
-        ;;
-      --kubeconfig)
-        kubeconfig_path="${2:-}"
-        shift 2
-        ;;
-      --cluster-context)
-        cluster_context="${2:-}"
-        shift 2
-        ;;
-      --public-host)
-        public_host="${2:-}"
-        shift 2
-        ;;
-      *)
-        printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)\n' >&2
-        return 2
-        ;;
-    esac
+resolve_local_cluster_kubeconfig() {
+  local candidate
+  for candidate in \
+    "${KUBECONFIG:-}" \
+    "${HOME}/.kube/k3s.yaml" \
+    "${HOME}/.kube/config" \
+    "/etc/rancher/k3s/k3s.yaml"
+  do
+    [[ -n "${candidate}" && -r "${candidate}" ]] || continue
+    printf '%s\n' "${candidate}"
+    return 0
   done
-  [[ -n "${tgz_path}" ]] || {
-    printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)\n' >&2
-    return 2
-  }
-  [[ -n "${kubeconfig_path}" || -n "${cluster_context}" ]] || {
-    printf 'addon install requires an explicit target; use --kubeconfig <file> or --cluster-context <name>\n' >&2
-    return 2
+  return 1
+}
+
+run_packaged_addon_install() {
+  local tgz_path="$1"
+  local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
+  local target_kubeconfig=""
+  target_kubeconfig="$(resolve_local_cluster_kubeconfig)" || {
+    printf 'addon install could not find a readable local kubeconfig. Run apply first or set KUBECONFIG.\n' >&2
+    return 4
   }
 
-  local tmp_dir manifest metadata install_script manifest_dir install_path target_kubeconfig cleanup_kubeconfig=""
+  local tmp_dir manifest metadata install_script manifest_dir install_path
   tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
   manifest="$(resolve_addon_manifest "${tmp_dir}")" || {
     local rc=$?
@@ -620,36 +621,6 @@ run_addon_install() {
     printf 'addon package install script not found: %s\n' "${install_script}" >&2
     return 4
   }
-  if [[ -n "${cluster_context}" ]]; then
-    local source_kubeconfig
-    source_kubeconfig="${kubeconfig_path:-${KUBECONFIG:-${HOME}/.kube/config}}"
-    [[ -f "${source_kubeconfig}" ]] || {
-      rm -rf "${tmp_dir}"
-      printf 'kubeconfig not found for requested cluster context: %s\n' "${source_kubeconfig}" >&2
-      return 4
-    }
-    command -v kubectl >/dev/null 2>&1 || {
-      rm -rf "${tmp_dir}"
-      printf 'kubectl is required to resolve cluster contexts for addon installs\n' >&2
-      return 4
-    }
-    cleanup_kubeconfig="$(mktemp)"
-    cp "${source_kubeconfig}" "${cleanup_kubeconfig}"
-    if ! kubectl --kubeconfig "${cleanup_kubeconfig}" config use-context "${cluster_context}" >/dev/null 2>&1; then
-      rm -rf "${tmp_dir}"
-      rm -f "${cleanup_kubeconfig}"
-      printf 'cluster context not found in kubeconfig: %s\n' "${cluster_context}" >&2
-      return 4
-    fi
-    target_kubeconfig="${cleanup_kubeconfig}"
-  else
-    [[ -f "${kubeconfig_path}" ]] || {
-      rm -rf "${tmp_dir}"
-      printf 'kubeconfig not found: %s\n' "${kubeconfig_path}" >&2
-      return 4
-    }
-    target_kubeconfig="${kubeconfig_path}"
-  fi
 
   printf 'Executing packaged addon installer: %s\n' "${install_script}"
   (
@@ -661,8 +632,149 @@ run_addon_install() {
   if (( rc == 0 )) && [[ -n "${public_host}" ]]; then
     apply_addon_public_ingress "${manifest}" "$(printf '%s\n' "${metadata}" | sed -n '1p')" "${target_kubeconfig}" "${public_host}" || rc=$?
   fi
-  rm -f "${cleanup_kubeconfig}"
   rm -rf "${tmp_dir}"
+  return "${rc}"
+}
+
+with_stack_source_env() {
+  local repo_dir="$1"
+  local stack_name="$2"
+  shift 2
+  (
+    export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${repo_dir}"
+    export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
+    "$@"
+  )
+}
+
+create_overlay_repo_for_stack_manifest() {
+  local manifest_path="$1"
+  local overlay_root real_repo metadata stack_name
+  real_repo="$(resolve_addons_repo_dir)" || {
+    printf 'could not resolve productive-k3s-addons source repository. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR.\n' >&2
+    return 4
+  }
+  metadata="$(validate_stack_manifest "${manifest_path}")" || return $?
+  stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
+
+  overlay_root="$(mktemp -d)"
+  mkdir -p "${overlay_root}/stacks/${stack_name}"
+  ln -s "${real_repo}/addons" "${overlay_root}/addons"
+  cp "${manifest_path}" "${overlay_root}/stacks/${stack_name}/stack.yaml"
+
+  printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
+}
+
+create_overlay_repo_for_stack_tgz() {
+  local tgz_path="$1"
+  local tmp_dir manifest overlay_result
+  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
+  manifest="$(resolve_stack_manifest "${tmp_dir}")" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  overlay_result="$(create_overlay_repo_for_stack_manifest "${manifest}")" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  rm -rf "${tmp_dir}"
+  printf '%s\n' "${overlay_result}"
+}
+
+create_overlay_repo_for_addon_name() {
+  local addon_name="$1"
+  local real_repo overlay_root stack_name
+  real_repo="$(resolve_addons_repo_dir)" || {
+    printf 'could not resolve productive-k3s-addons source repository. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR.\n' >&2
+    return 4
+  }
+  resolve_addon_source_dir "${addon_name}" >/dev/null || {
+    printf 'addon source not found: %s\n' "${addon_name}" >&2
+    return 4
+  }
+
+  overlay_root="$(mktemp -d)"
+  stack_name="addon-${addon_name}"
+  mkdir -p "${overlay_root}/stacks/${stack_name}"
+  ln -s "${real_repo}/addons" "${overlay_root}/addons"
+  {
+    printf 'apiVersion: addons.productive-k3s.io/v1\n'
+    printf 'kind: Stack\n'
+    printf 'metadata:\n'
+    printf '  name: %s\n' "${stack_name}"
+    printf '  version: 0.1.0\n'
+    printf 'spec:\n'
+    printf '  addons:\n'
+    case "${addon_name}" in
+      rancher|registry)
+        printf '    - cert-manager\n'
+        ;;
+    esac
+    printf '    - %s\n' "${addon_name}"
+  } > "${overlay_root}/stacks/${stack_name}/stack.yaml"
+
+  printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
+}
+
+run_stack_install_from_overlay() {
+  local overlay_repo="$1"
+  local stack_name="$2"
+  shift 2
+  with_stack_source_env "${overlay_repo}" "${stack_name}" "${SCRIPT_DIR}/apply.sh" --mode stack "$@"
+}
+
+run_addon_install() {
+  local tgz_path=""
+  local addon_name=""
+  local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
+  while (($# > 0)); do
+    case "$1" in
+      --tgz)
+        tgz_path="${2:-}"
+        shift 2
+        ;;
+      --public-host)
+        public_host="${2:-}"
+        shift 2
+        ;;
+      *)
+        if [[ -n "${addon_name}" ]]; then
+          printf 'Usage: ./productive-k3s-core.sh addon install (--tgz <file> | <name>) [--public-host <fqdn>]\n' >&2
+          return 2
+        fi
+        if [[ "$1" == -* ]]; then
+          break
+        fi
+        addon_name="$1"
+        shift
+        break
+        ;;
+    esac
+  done
+
+  if [[ -n "${tgz_path}" ]]; then
+    PK3S_ADDON_PUBLIC_HOST="${public_host}" run_packaged_addon_install "${tgz_path}"
+    return $?
+  fi
+
+  [[ -n "${addon_name}" ]] || {
+    printf 'Usage: ./productive-k3s-core.sh addon install (--tgz <file> | <name>) [--public-host <fqdn>]\n' >&2
+    return 2
+  }
+
+  local overlay_repo stack_name
+  mapfile -t _addon_overlay < <(create_overlay_repo_for_addon_name "${addon_name}") || return $?
+  overlay_repo="${_addon_overlay[0]:-}"
+  stack_name="${_addon_overlay[1]:-}"
+  [[ -n "${overlay_repo}" && -n "${stack_name}" ]] || {
+    printf 'failed to build a temporary stack overlay for addon install\n' >&2
+    return 4
+  }
+  local rc=0
+  run_stack_install_from_overlay "${overlay_repo}" "${stack_name}" "$@" || rc=$?
+  rm -rf "${overlay_repo}"
   return "${rc}"
 }
 
@@ -736,6 +848,88 @@ run_addon() {
       ;;
     *)
       printf 'Usage: ./productive-k3s-core.sh addon <validate|install> [flags]\n' >&2
+      return 2
+      ;;
+  esac
+}
+
+run_stack() {
+  local action="${1:-}"
+  shift || true
+  local stack_name="" tgz_path=""
+  case "${action}" in
+    install)
+      while (($# > 0)); do
+        case "$1" in
+          --tgz)
+            tgz_path="${2:-}"
+            shift 2
+            ;;
+          -*)
+            break
+            ;;
+          *)
+            if [[ -z "${stack_name}" ]]; then
+              stack_name="$1"
+              shift
+            else
+              break
+            fi
+            ;;
+        esac
+      done
+
+      if [[ -n "${tgz_path}" ]]; then
+        local overlay_repo_tgz stack_name_tgz
+        mapfile -t _stack_overlay < <(create_overlay_repo_for_stack_tgz "${tgz_path}") || return $?
+        overlay_repo_tgz="${_stack_overlay[0]:-}"
+        stack_name_tgz="${_stack_overlay[1]:-}"
+        [[ -n "${overlay_repo_tgz}" && -n "${stack_name_tgz}" ]] || {
+          printf 'failed to build a temporary stack overlay for stack install\n' >&2
+          return 4
+        }
+        local rc=0
+        run_stack_install_from_overlay "${overlay_repo_tgz}" "${stack_name_tgz}" "$@" || rc=$?
+        rm -rf "${overlay_repo_tgz}"
+        return "${rc}"
+      fi
+
+      [[ -n "${stack_name}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack install <name> [apply args...]\n' >&2
+        printf '   or: ./productive-k3s-core.sh stack install --tgz <file> [apply args...]\n' >&2
+        return 2
+      }
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/apply.sh" --mode stack "$@"
+      ;;
+    validate)
+      stack_name="${1:-}"
+      [[ -n "${stack_name}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack validate <name> [validate args...]\n' >&2
+        return 2
+      }
+      shift
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/validate.sh" "$@"
+      ;;
+    backup)
+      stack_name="${1:-}"
+      [[ -n "${stack_name}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack backup <name> [backup args...]\n' >&2
+        return 2
+      }
+      shift
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/backup.sh" "$@"
+      ;;
+    cleanup)
+      stack_name="${1:-}"
+      [[ -n "${stack_name}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack cleanup <name> [cleanup args...]\n' >&2
+        return 2
+      }
+      shift
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/cleanup.sh" "$@"
+      ;;
+    *)
+      printf 'Usage: ./productive-k3s-core.sh stack <install|validate|backup|cleanup> ...\n' >&2
       return 2
       ;;
   esac
@@ -838,6 +1032,10 @@ main() {
     addon)
       shift
       run_addon "$@" || rc=$?
+      ;;
+    stack)
+      shift
+      run_stack "$@" || rc=$?
       ;;
     dev)
       shift

@@ -1,6 +1,6 @@
 # Productive K3S Core
 
-`productive-k3s-core` is the bootstrap, validation, and operations engine for a production-oriented `k3s` stack on a supported single host or VM.
+`productive-k3s-core` is the bootstrap, validation, and operations engine for a production-oriented `k3s` platform on a supported single host or VM.
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-yellow.svg)](./LICENSE)
 ![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04%20LTS-E95420?logo=ubuntu&logoColor=white)
@@ -8,20 +8,25 @@
 ![Debian 13](https://img.shields.io/badge/Debian-13%20trixie-A81D33?logo=debian&logoColor=white)
 ![Debian 12](https://img.shields.io/badge/Debian-12%20bookworm-A81D33?logo=debian&logoColor=white)
 
-The stack includes:
+The engine manages:
+
+- `k3s`
+- `helm`
+- validation, backup, cleanup, and rollback lifecycle operations
+
+The default `base` stack lives outside this repository and currently includes:
 
 - `cert-manager`
 - `Longhorn`
 - `Rancher`
 - internal registry
-- host NFS export
 
 Bootstrap modes:
 
-- `single-node`: install the base node and optionally the full stack on the same machine
-- `server`: install only the base server bootstrap components
+- `single-node`: legacy all-in-one path that installs the core and the default stack together
+- `server`: install only the base server bootstrap components and no stack
 - `agent`: join a node to an existing K3S server
-- `stack`: install or reuse stack components on top of an existing cluster
+- `stack`: install or reuse an explicit stack on top of an existing cluster
 
 Optional install engine:
 
@@ -119,13 +124,23 @@ The versions pinned for the managed stack components live in [scripts/component-
 
 Telemetry consent is only relevant for mutating public CLI flows such as `apply` and `addon install`. Read-only commands like `help`, `bundle info --json`, and `bom --json` do not prompt for telemetry and do not emit command-level telemetry events.
 
-`addon install` also supports an optional basic public exposure contract:
+Practical CLI examples:
 
 ```bash
-./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal --cluster-context default
+./productive-k3s-core.sh apply
+./productive-k3s-core.sh stack install base
+./productive-k3s-core.sh stack validate base --strict
+./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal
 ```
 
-Core's responsibility is intentionally narrow here:
+Contract summary:
+
+- `apply` installs the local core only
+- `stack install <name>` installs an explicit stack such as `base`
+- `addon install` runs on the local host against the local cluster
+- packaged add-ons can still request a basic public ingress via `--public-host`
+
+Core's responsibility is intentionally narrow for add-on public exposure:
 
 - validate that the add-on declares basic public ingress support
 - create a standard Traefik ingress for one host routed to one service and port

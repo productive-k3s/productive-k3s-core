@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/addons-runtime.sh"
-PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-base}"
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-}"
 
 log(){ printf "\n\033[1;32m[+] %s\033[0m\n" "$*"; }
 warn(){ printf "\n\033[1;33m[!] %s\033[0m\n" "$*"; }
@@ -51,6 +51,7 @@ safe_write_cmd() {
 run_stack_addon_backup_hooks() {
   local output_dir="$1"
   local addon_name addon_dir backup_fn
+  [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]] || return 0
   if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
     err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
     exit 1

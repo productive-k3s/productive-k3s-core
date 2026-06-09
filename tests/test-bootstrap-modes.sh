@@ -25,7 +25,7 @@ fi
 grep -q "Unsupported mode" /tmp/productive-k3s-invalid-mode.out || fail "unsupported mode error message missing"
 pass "unsupported mode is rejected"
 
-if (cd "$REPO_DIR" && PRODUCTIVE_K3S_ENGINE=unsupported ./scripts/apply.sh --help >/tmp/productive-k3s-invalid-engine.out 2>&1); then
+if (cd "$REPO_DIR" && PRODUCTIVE_K3S_ENGINE=unsupported ./scripts/apply.sh --dry-run >/tmp/productive-k3s-invalid-engine.out 2>&1); then
   fail "unsupported engine unexpectedly succeeded"
 fi
 grep -q "Unsupported k3s installation engine" /tmp/productive-k3s-invalid-engine.out || fail "unsupported engine error message missing"

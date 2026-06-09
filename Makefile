@@ -1,4 +1,4 @@
-.PHONY: preflight preflight-strict apply dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test test-unit test-lint test-format test-spell test-coverage test-clean test-checkstatus test-preflight-host test-arm-support-docs test-bootstrap-modes test-artifact-tools test-telemetry test-productive-k3s-core-cli test-in-vm-engine-propagation test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all tag-release
+.PHONY: preflight preflight-strict apply dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test test-unit test-lint test-format test-spell test-coverage test-clean test-clean-artifacts test-clean-vms test-clean-all test-checkstatus test-checkstatus-matrix test-checkstatus-local test-checkstatus-external test-local-all test-external-all test-preflight-host test-arm-support-docs test-bootstrap-modes test-artifact-tools test-telemetry test-productive-k3s-core-cli test-in-vm-engine-propagation test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all tag-release
 
 preflight:
 	./productive-k3s-core.sh preflight
@@ -56,8 +56,32 @@ test-coverage:
 test-clean:
 	./scripts/productive-k3s-core-dev.sh test-clean
 
+test-clean-artifacts:
+	./scripts/productive-k3s-core-dev.sh test-clean-artifacts
+
+test-clean-vms:
+	./scripts/productive-k3s-core-dev.sh test-clean-vms
+
+test-clean-all:
+	./scripts/productive-k3s-core-dev.sh test-clean-all
+
 test-checkstatus:
 	./scripts/productive-k3s-core-dev.sh test-checkstatus
+
+test-checkstatus-matrix:
+	./scripts/productive-k3s-core-dev.sh test-checkstatus-matrix
+
+test-checkstatus-local:
+	./scripts/productive-k3s-core-dev.sh test-checkstatus-local
+
+test-checkstatus-external:
+	./scripts/productive-k3s-core-dev.sh test-checkstatus-external
+
+test-local-all:
+	./scripts/productive-k3s-core-dev.sh test-local-all
+
+test-external-all:
+	./scripts/productive-k3s-core-dev.sh test-external-all
 
 test-preflight-host:
 	./scripts/productive-k3s-core-dev.sh test-preflight-host

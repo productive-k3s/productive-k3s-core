@@ -41,8 +41,8 @@ json_escape() {
 }
 
 DRY_RUN=0
-MODE="single-node"
-PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-base}"
+MODE="server"
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-}"
 PRODUCTIVE_K3S_ENGINE="${PRODUCTIVE_K3S_ENGINE:-native}"
 PRODUCTIVE_K3S_SSH_HOST="${PRODUCTIVE_K3S_SSH_HOST:-}"
 PRODUCTIVE_K3S_SSH_USER="${PRODUCTIVE_K3S_SSH_USER:-}"
@@ -85,6 +85,7 @@ declare -A MANIFEST_DETECTED=()
 declare -A MANIFEST_PLANNED=()
 declare -A MANIFEST_RESULT=()
 declare -A MANIFEST_NOTES=()
+declare -A STACK_SELECTED_ADDONS=()
 MANIFEST_COMPONENT_ORDER=(k3s helm cert_manager clusterissuer longhorn longhorn_host_prep rancher rancher_host_local registry registry_host_local registry_docker_trust nfs)
 PUBLIC_MANIFEST_SETTINGS=(
   host_os_id
@@ -213,10 +214,10 @@ mode_uses_single_node_defaults() {
 mode_description() {
   case "$MODE" in
     single-node)
-      printf '%s' "single-node installation"
+      printf '%s' "single-node installation (core + default stack)"
       ;;
     server)
-      printf '%s' "server apply installation"
+      printf '%s' "core-only installation"
       ;;
     agent)
       printf '%s' "agent join installation"
@@ -233,6 +234,45 @@ result_for_mode() {
   else
     printf '%s' "$1"
   fi
+}
+
+resolve_default_stack_name() {
+  if [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]]; then
+    return 0
+  fi
+
+  case "${MODE}" in
+    single-node|stack)
+      PRODUCTIVE_K3S_STACK_NAME="base"
+      ;;
+    *)
+      PRODUCTIVE_K3S_STACK_NAME=""
+      ;;
+  esac
+}
+
+stack_addon_selected() {
+  local addon_name="$1"
+  [[ -n "${STACK_SELECTED_ADDONS[${addon_name}]:-}" ]]
+}
+
+load_selected_stack_addons() {
+  STACK_SELECTED_ADDONS=()
+  if ! mode_runs_stack; then
+    return 0
+  fi
+
+  resolve_default_stack_name
+  if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
+    err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
+    exit 1
+  fi
+
+  local addon_name
+  while IFS= read -r addon_name; do
+    [[ -n "${addon_name}" ]] || continue
+    STACK_SELECTED_ADDONS["${addon_name}"]=1
+  done < <(stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}")
 }
 
 validate_k3s_engine() {
@@ -807,10 +847,10 @@ parse_args() {
 Usage: $0 [--dry-run] [--mode <single-node|server|agent|stack>]
 
 Modes:
-  single-node  Default. Bootstraps a single-node installation and can install the local stack.
-  server       Bootstraps only the base server node components.
+  single-node  Legacy combined flow. Installs the core and the default stack in one pass.
+  server       Default. Installs only the base server node components.
   agent        Reserved for future agent node join support.
-  stack        Installs or reuses stack components on top of an existing cluster.
+  stack        Installs or reuses the selected stack on top of an existing cluster.
 
 Environment:
   PRODUCTIVE_K3S_ENGINE=native|k3sup  Select the base k3s installation engine (default: native).
@@ -1877,8 +1917,10 @@ install_nfs_if_needed() {
 }
 
 main() {
-  validate_k3s_engine
   parse_args "$@"
+  validate_k3s_engine
+  resolve_default_stack_name
+  load_selected_stack_addons
   init_run_manifest
   trap cleanup_exit EXIT
   detect_host_platform
@@ -2083,19 +2125,39 @@ main() {
   addon_config_file="$(mktemp)"
 
   if mode_runs_stack; then
-    PK3S_ADDON_PRESENT="$longhorn_present" run_addon_source_configure_hook "longhorn" "action" "${addon_config_file}"
-    apply_addon_config_file "${addon_config_file}"
+    if stack_addon_selected "longhorn"; then
+      PK3S_ADDON_PRESENT="$longhorn_present" run_addon_source_configure_hook "longhorn" "action" "${addon_config_file}"
+      apply_addon_config_file "${addon_config_file}"
+    else
+      LONGHORN_ACTION="skip"
+      MANIFEST_RESULT["longhorn"]="skipped"
+    fi
 
-    PK3S_ADDON_PRESENT="$rancher_present" run_addon_source_configure_hook "rancher" "action" "${addon_config_file}"
-    apply_addon_config_file "${addon_config_file}"
+    if stack_addon_selected "rancher"; then
+      PK3S_ADDON_PRESENT="$rancher_present" run_addon_source_configure_hook "rancher" "action" "${addon_config_file}"
+      apply_addon_config_file "${addon_config_file}"
+    else
+      RANCHER_ACTION="skip"
+      MANIFEST_RESULT["rancher"]="skipped"
+    fi
 
-    PK3S_ADDON_PRESENT="$registry_present" run_addon_source_configure_hook "registry" "action" "${addon_config_file}"
-    apply_addon_config_file "${addon_config_file}"
+    if stack_addon_selected "registry"; then
+      PK3S_ADDON_PRESENT="$registry_present" run_addon_source_configure_hook "registry" "action" "${addon_config_file}"
+      apply_addon_config_file "${addon_config_file}"
+    else
+      REGISTRY_ACTION="skip"
+      MANIFEST_RESULT["registry"]="skipped"
+    fi
 
-    PK3S_ADDON_PRESENT="$cert_manager_present" PK3S_CERT_MANAGER_REQUIRED="$( [[ "$RANCHER_ACTION" == "install" || "$REGISTRY_ACTION" == "install" ]] && echo y || echo n )" \
-      run_addon_source_configure_hook "cert-manager" "action" "${addon_config_file}"
-    apply_addon_config_file "${addon_config_file}"
-    [[ "${CERT_MANAGER_ACTION}" != "skip" ]] || MANIFEST_RESULT["cert_manager"]="skipped"
+    if stack_addon_selected "cert-manager"; then
+      PK3S_ADDON_PRESENT="$cert_manager_present" PK3S_CERT_MANAGER_REQUIRED="$( [[ "$RANCHER_ACTION" == "install" || "$REGISTRY_ACTION" == "install" ]] && echo y || echo n )" \
+        run_addon_source_configure_hook "cert-manager" "action" "${addon_config_file}"
+      apply_addon_config_file "${addon_config_file}"
+      [[ "${CERT_MANAGER_ACTION}" != "skip" ]] || MANIFEST_RESULT["cert_manager"]="skipped"
+    else
+      CERT_MANAGER_ACTION="skip"
+      MANIFEST_RESULT["cert_manager"]="skipped"
+    fi
   else
     CERT_MANAGER_ACTION="skip"
     LONGHORN_ACTION="skip"
@@ -2175,7 +2237,7 @@ main() {
     fi
   fi
 
-  if mode_runs_stack && [[ "$LONGHORN_ACTION" == "install" ]]; then
+  if mode_runs_stack && stack_addon_selected "longhorn" && [[ "$LONGHORN_ACTION" == "install" ]]; then
     if mode_uses_single_node_defaults && [[ "$SINGLE_NODE_LONGHORN_MODE" == "y" ]]; then
       LONGHORN_MAKE_DEFAULT="y"
     fi
@@ -2183,7 +2245,7 @@ main() {
     apply_addon_config_file "${addon_config_file}"
   fi
 
-  if mode_runs_stack && [[ "$RANCHER_ACTION" == "install" ]]; then
+  if mode_runs_stack && stack_addon_selected "rancher" && [[ "$RANCHER_ACTION" == "install" ]]; then
     RANCHER_HOST="${rancher_existing_host:-rancher.${DOMAIN}}"
     local allow_host_local_changes="n"
     if mode_runs_host_local; then
@@ -2193,7 +2255,7 @@ main() {
     apply_addon_config_file "${addon_config_file}"
   fi
 
-  if mode_runs_stack && [[ "$REGISTRY_ACTION" == "install" ]]; then
+  if mode_runs_stack && stack_addon_selected "registry" && [[ "$REGISTRY_ACTION" == "install" ]]; then
     REGISTRY_HOST="${registry_existing_host:-registry.${DOMAIN}}"
     if mode_uses_single_node_defaults && [[ "$SINGLE_NODE_LONGHORN_MODE" == "y" ]]; then
       REGISTRY_STORAGE_CLASS="longhorn-single"

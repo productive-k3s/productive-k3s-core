@@ -3,7 +3,7 @@ Describe 'bootstrap dry-run main flows'
   SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/apply.sh"
   RUNNER="$SHELLSPEC_PROJECT_ROOT/tests/helpers/run-bootstrap-lib.sh"
 
-  It 'runs a full single-node dry-run bootstrap plan'
+  It 'runs a default core-only dry-run bootstrap plan'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
       temp_runs="$(mktemp -d)"
       RUNS_DIR="${temp_runs}"
@@ -44,10 +44,57 @@ Describe 'bootstrap dry-run main flows'
       prompt() { printf -v "$1" "%s" "$2"; }
       main --dry-run'
     The status should equal 0
-    The output should include 'Mode: single-node'
+    The output should include 'Mode: server'
     The output should include 'Planned actions'
     The output should include '[dry-run] Installing k3s (v1.35.5+k3s1)'
     The output should include '[dry-run] Installing Helm'
+    The output should not include "Processing stack addon 'cert-manager' from stack 'base'"
+    The output should not include "Processing stack addon 'registry' from stack 'base'"
+    The output should not include '[dry-run] Creating NFS export directory /srv/nfs/k8s-share'
+  End
+
+  It 'runs an explicit single-node dry-run bootstrap plan'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      temp_runs="$(mktemp -d)"
+      RUNS_DIR="${temp_runs}"
+      bind_stdin_to_tty() { :; }
+      sudo_keepalive() { :; }
+      resolve_telemetry_enabled() { TELEMETRY_ENABLED=false; }
+      emit_bootstrap_lifecycle_event() { :; }
+      maybe_send_telemetry() { return 0; }
+      pkg_installed() { return 1; }
+      service_active() { return 1; }
+      need_cmd() {
+        case "$1" in
+          helm|kubectl|docker) return 1 ;;
+          *) command -v "$1" >/dev/null 2>&1 ;;
+        esac
+      }
+      namespace_exists() { return 1; }
+      deployment_exists() { return 1; }
+      secret_exists() { return 1; }
+      storageclass_exists() { [[ "$1" == "local-path" ]] && return 0; return 1; }
+      clusterissuer_exists() { return 1; }
+      helm_release_exists() { return 1; }
+      nfs_export_exists() { return 1; }
+      mount_exists() { return 1; }
+      addon_source_script_exists() { return 0; }
+      run_addon_source_hook() { printf "hook:%s|" "$1"; return 0; }
+      confirm_preflight() { return 0; }
+      prompt_yesno() {
+        case "$1" in
+          INSTALL_K3S|INSTALL_HELM|INSTALL_LONGHORN|INSTALL_RANCHER|INSTALL_REGISTRY|INSTALL_CERT_MANAGER|ENABLE_NFS|RANCHER_MANAGE_LOCAL_HOSTS|REGISTRY_MANAGE_LOCAL_HOSTS|REGISTRY_TRUST_DOCKER|PROCEED_WITH_PLAN|create_issuer|make_default_sc|install_pkgs|REGISTRY_AUTH_ENABLED)
+            printf -v "$1" y ;;
+          REUSE_EXISTING_NFS)
+            printf -v "$1" n ;;
+          *)
+            printf -v "$1" "$2" ;;
+        esac
+      }
+      prompt() { printf -v "$1" "%s" "$2"; }
+      main --dry-run --mode single-node'
+    The status should equal 0
+    The output should include 'Mode: single-node'
     The output should include "Processing stack addon 'cert-manager' from stack 'base'"
     The output should include "Processing stack addon 'registry' from stack 'base'"
     The output should include '[dry-run] Creating NFS export directory /srv/nfs/k8s-share'

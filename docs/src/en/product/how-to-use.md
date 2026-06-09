@@ -51,9 +51,9 @@ The bootstrap is expected to run on the target machine itself. It can:
 - install missing OS packages with `apt-get`
 - install or reuse `k3s`
 - install or reuse `helm`
-- configure the local single-node stack components
+- later install explicit stacks or add-ons on top of that local core installation
 
-By default, the practical target is a single supported VM or Linux host.
+By default, the practical target is a single supported VM or Linux host, and the public `apply` contract is core-only.
 
 This is not intended for an arbitrary Linux distribution. The target must match the [supported platforms](supported-platforms.md) page, whether it is a real host or a VM.
 
@@ -93,6 +93,12 @@ curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y
 ```
 
 That installer downloads the matching release bundle and runs the public `productive-k3s-core` CLI on the host.
+
+If you also want the default stack after the core is ready:
+
+```bash
+curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- stack install base
+```
 
 ## After install
 

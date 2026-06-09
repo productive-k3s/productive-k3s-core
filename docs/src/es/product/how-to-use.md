@@ -51,9 +51,9 @@ El bootstrap está pensado para correr directamente sobre la máquina de destino
 - instalar paquetes faltantes del sistema con `apt-get`
 - instalar o reutilizar `k3s`
 - instalar o reutilizar `helm`
-- configurar los componentes del stack local de nodo único
+- luego instalar stacks o add-ons explícitos sobre esa instalación local del core
 
-Por defecto, el destino práctico es una única VM soportada o un host Linux soportado.
+Por defecto, el destino práctico es una única VM soportada o un host Linux soportado, y el contrato público de `apply` es core-only.
 
 Esto no está pensado para cualquier distribución Linux. El destino tiene que coincidir con la página de [plataformas soportadas](supported-platforms.md), ya sea como host real o como VM.
 
@@ -93,6 +93,12 @@ curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y
 ```
 
 Ese instalador descarga el bundle correspondiente a ese release y ejecuta sobre el host el CLI público de `productive-k3s-core`.
+
+Si además querés el stack default una vez que el core está listo:
+
+```bash
+curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- stack install base
+```
 
 ## Después de instalar
 

@@ -65,6 +65,15 @@ Valores preguntados habitualmente:
 - si el add-on `registry` puede administrar `/etc/hosts` local
 - si el add-on `registry` puede instalar confianza self-signed en Docker local
 
+La separación pública importante ahora es:
+
+- `./productive-k3s-core.sh apply`
+  instala sólo el core local
+- `./productive-k3s-core.sh stack install <name>`
+  instala un stack explícito como `base`
+- `./productive-k3s-core.sh addon install`
+  opera sobre el host local y el clúster local, no sobre un target externo vía kubeconfig
+
 ### Variables de entorno relacionadas con telemetría
 
 El script de bootstrap lee estas variables de entorno:
@@ -137,6 +146,9 @@ El manifest de bootstrap registra settings como:
 | `-h`, `--help` | Mostrar ayuda CLI |
 
 ### Variables de entorno relacionadas
+
+- `PRODUCTIVE_K3S_STACK_NAME`
+  Cuando está seteada, la validación también corre los checks de add-ons del stack seleccionado. Cuando no está seteada, `validate.sh` se comporta como un validador core-only.
 
 El validador sigue aceptando `--docker-registry-test`, pero la validación real de push/pull del registry ahora vive en el hook de validación del add-on `registry`. Para el camino opcional de Docker login, el validador puede consumir:
 

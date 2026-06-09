@@ -4,6 +4,7 @@ This directory now exposes two complementary test layers:
 
 - existing live and VM-oriented validation scripts under `tests/*.sh`
 - fast local unit-style checks under `tests/spec/` using `ShellSpec`
+- suite-level artifact summaries for `matrix`, `local`, and `external` runs
 
 The goal is to keep the public bootstrap scripts maintainable without forcing every change through a full VM or Docker cycle.
 
@@ -35,9 +36,36 @@ make test-lint
 make test-format
 make test-spell
 make test-coverage
+make test-clean-artifacts
+make test-clean-vms
+make test-clean-all
+make test-local-all
+make test-external-all
+make test-checkstatus-local
+make test-checkstatus-external
 ```
 
 These commands are intentionally local-maintainer oriented. They do not redefine the existing live matrix or CI contract.
+
+The VM matrix stays separate:
+
+```bash
+make test-matrix-all
+make test-checkstatus-matrix
+```
+
+Category intent:
+
+- `matrix`: VM-backed integration profiles (`smoke`, `core`, `full`, `full-rollback`, `full-clean`)
+- `local`: non-matrix suites that run locally without third-party services
+- `external`: suites that may hit external endpoints, currently telemetry-related checks
+
+Cleanup intent:
+
+- `test-clean`: safe alias for artifact cleanup only
+- `test-clean-artifacts`: remove local test artifacts and run metadata
+- `test-clean-vms`: remove Productive K3S test VMs from Multipass and purge deleted instances
+- `test-clean-all`: perform both VM cleanup and artifact cleanup
 
 ## Current ShellSpec Focus
 
