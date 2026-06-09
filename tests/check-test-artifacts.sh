@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ARTIFACTS_DIR="${REPO_DIR}/test-artifacts"
+ARTIFACTS_DIR="${TEST_ARTIFACTS_DIR:-${REPO_DIR}/test-artifacts}"
 
 PROFILE=""
 declare -a EXPECTED=()
@@ -68,16 +68,32 @@ parse_args() {
 }
 
 collect_artifacts() {
-  find "$ARTIFACTS_DIR" -maxdepth 1 -type f -name "test-in-vm-*.json" ! -name "*-apply-manifest.json" ! -name "*-public.json" -print0 \
-    | xargs -0 -r jq -r --arg profile "$PROFILE" 'select(.profile == $profile) | input_filename' \
-    | sort
+  [[ -d "$ARTIFACTS_DIR" ]] || return 0
+  local artifact artifact_profile artifact_platform artifact_image artifact_key artifact_mtime
+  declare -A latest_path=()
+  declare -A latest_mtime=()
+
+  while IFS= read -r -d '' artifact; do
+    artifact_profile="$(jq -r '.profile // empty' "$artifact")"
+    [[ "$artifact_profile" == "$PROFILE" ]] || continue
+    artifact_platform="$(jq -r '.platform // "unknown"' "$artifact")"
+    artifact_image="$(jq -r '.image // "unknown"' "$artifact")"
+    artifact_key="${artifact_platform}|${artifact_image}"
+    artifact_mtime="$(stat -c '%Y' "$artifact")"
+    if [[ -z "${latest_mtime[$artifact_key]:-}" || "$artifact_mtime" -ge "${latest_mtime[$artifact_key]}" ]]; then
+      latest_mtime["$artifact_key"]="$artifact_mtime"
+      latest_path["$artifact_key"]="$artifact"
+    fi
+  done < <(find "$ARTIFACTS_DIR" -maxdepth 1 -type f -name "test-in-vm-*.json" ! -name "*-apply-manifest.json" ! -name "*-public.json" -print0)
+
+  local key
+  for key in "${!latest_path[@]}"; do
+    printf '%s\n' "${latest_path[$key]}"
+  done | sort
 }
 
 collect_manifests() {
-  find "$ARTIFACTS_DIR" -maxdepth 1 -type f -name "test-in-vm-*.json" ! -name "*-apply-manifest.json" ! -name "*-public.json" -print0 \
-    | xargs -0 -r jq -r --arg profile "$PROFILE" 'select(.profile == $profile) | input_filename' \
-    | sed 's/\.json$/-apply-manifest.json/' \
-    | sort
+  collect_artifacts | sed 's/\.json$/-apply-manifest.json/' | sort
 }
 
 main() {
