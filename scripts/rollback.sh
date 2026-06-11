@@ -103,6 +103,7 @@ delete_named_resources_matching() {
 
 run_addon_clean_hook() {
   local addon_name="$1"
+  shift || true
   local addon_dir clean_fn
   addon_dir="$(resolve_addon_source_dir "${addon_name}")" || return 1
   # shellcheck source=/dev/null
@@ -112,7 +113,7 @@ run_addon_clean_hook() {
     err "Addon '${addon_name}' clean hook '${clean_fn}' is missing"
     return 1
   fi
-  "${clean_fn}"
+  "${clean_fn}" "$@"
 }
 
 usage() {
@@ -298,6 +299,45 @@ add_plan_item() {
   PLAN_APPLY_KIND["$id"]="$kind"
 }
 
+plan_remove_hosts_entry_if_managed() {
+  local id_prefix="$1" host_key="$2" manage_key="$3" label="$4"
+  local host manage
+  host="$(setting "${host_key}")"
+  manage="$(setting "${manage_key}")"
+  if [[ "${manage}" == "y" && -n "${host}" ]]; then
+    add_plan_item "${id_prefix}_hosts" "Remove local /etc/hosts entry for ${label} hostname '${host}'" "safe" "remove_hosts_line"
+  fi
+}
+
+plan_remove_docker_trust_if_managed() {
+  local id_prefix="$1" host_key="$2" manage_key="$3"
+  local host manage
+  host="$(setting "${host_key}")"
+  manage="$(setting "${manage_key}")"
+  if [[ "${manage}" == "y" && -n "${host}" ]]; then
+    add_plan_item "${id_prefix}_docker_trust" "Remove local Docker trust material for registry hostname '${host}'" "safe" "remove_docker_trust"
+  fi
+}
+
+apply_remove_hosts_line() {
+  local host
+  host="$(setting rancher_host)"
+  if [[ -n "${host}" ]]; then
+    pk3s_remove_local_hosts_entry "${host}"
+  fi
+  host="$(setting registry_host)"
+  if [[ -n "${host}" ]]; then
+    pk3s_remove_local_hosts_entry "${host}"
+  fi
+}
+
+apply_remove_docker_trust() {
+  local host
+  host="$(setting registry_host)"
+  [[ -n "${host}" ]] || return 0
+  pk3s_remove_local_docker_trust "${host}"
+}
+
 build_plan() {
   local mode status
   mode="$(manifest_mode)"
@@ -343,6 +383,7 @@ build_plan() {
   result="$(component_field rancher result)"
   now="$(current_state rancher)"
   if [[ "$detected" == "missing" && "$planned" == "install" && "$result" == "installed" && "$now" == "present" ]]; then
+    plan_remove_hosts_entry_if_managed "rancher" "rancher_host" "rancher_manage_local_hosts" "Rancher"
     add_plan_item "rancher" "Uninstall Rancher release and cattle-system/Fleet/Turtles resources" "moderate" "helm_uninstall_rancher"
   fi
 
@@ -351,6 +392,8 @@ build_plan() {
   result="$(component_field registry result)"
   now="$(current_state registry)"
   if [[ "$detected" == "missing" && "$planned" == "install" && "$result" == "installed" && "$now" == "present" ]]; then
+    plan_remove_hosts_entry_if_managed "registry" "registry_host" "registry_manage_local_hosts" "registry"
+    plan_remove_docker_trust_if_managed "registry" "registry_host" "registry_trust_docker"
     add_plan_item "registry" "Delete registry namespace resources created by the bootstrap run" "moderate" "kubectl_delete_registry"
   fi
 
@@ -432,8 +475,10 @@ apply_helm_uninstall_longhorn() {
 }
 
 apply_helm_uninstall_rancher() {
+  local rancher_host
+  rancher_host="$(setting rancher_host)"
+  run_addon_clean_hook rancher "${rancher_host}" || true
   helm uninstall rancher -n cattle-system || true
-  run_addon_clean_hook rancher || true
   force_finalize_namespace_if_present cattle-turtles-system
   force_finalize_namespace_if_present cattle-capi-system
   force_finalize_namespace_if_present cattle-fleet-local-system
@@ -442,7 +487,9 @@ apply_helm_uninstall_rancher() {
 }
 
 apply_kubectl_delete_registry() {
-  run_addon_clean_hook registry || true
+  local registry_host
+  registry_host="$(setting registry_host)"
+  run_addon_clean_hook registry "${registry_host}" || true
   force_finalize_namespace_if_present registry
 }
 
