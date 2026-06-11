@@ -237,6 +237,9 @@ remove_docker_trust() {
 }
 
 remove_nfs_export() {
+  if [[ ! -f /etc/exports ]]; then
+    return 0
+  fi
   sudo sed -i "\|^[[:space:]]*${DEFAULT_NFS_EXPORT//\//\\/}[[:space:]]|d" /etc/exports
   sudo exportfs -ra || true
 }
