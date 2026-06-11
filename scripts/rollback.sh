@@ -6,6 +6,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/component-versions.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/addons-runtime.sh"
+ADDONS_REPO_DIR="$(resolve_addons_repo_dir || true)"
+if [[ -n "${ADDONS_REPO_DIR}" && -f "${ADDONS_REPO_DIR}/scripts/addon-host-runtime.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${ADDONS_REPO_DIR}/scripts/addon-host-runtime.sh"
+fi
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_GREEN=$'\033[1;32m'
