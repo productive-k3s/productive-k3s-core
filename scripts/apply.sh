@@ -1734,6 +1734,11 @@ install_stack_addon_record() {
       err "Bundled addon package not found: ${addon_source}"
       exit 1
     }
+    if [[ "${DRY_RUN}" == "1" ]]; then
+      log "[dry-run] Would install bundled addon package '${addon_source}' for stack '${PRODUCTIVE_K3S_STACK_NAME}'"
+      track_install "bundled-addon:${addon_name}"
+      return
+    fi
     log "Installing bundled addon package '${addon_source}' for stack '${PRODUCTIVE_K3S_STACK_NAME}'"
     "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
     return
