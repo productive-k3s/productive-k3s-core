@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/runtime-contract.sh"
 source "${SCRIPT_DIR}/addons-runtime.sh"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
@@ -21,6 +22,7 @@ log(){ printf "\n%s[INFO]%s %s\n" "$COLOR_GREEN" "$COLOR_RESET" "$*"; }
 warn(){ printf "\n%s[WARN]%s %s\n" "$COLOR_YELLOW" "$COLOR_RESET" "$*"; }
 err(){ printf "\n%s[ERROR]%s %s\n" "$COLOR_RED" "$COLOR_RESET" "$*"; }
 
+PRODUCTIVE_K3S_DISTRO="${PRODUCTIVE_K3S_DISTRO:-k3s}"
 MODE="plan"
 SUDO_KA_PID=""
 AUTO_APPROVE="n"
@@ -106,7 +108,7 @@ Options:
   --confirm-clean  Auto-approve the typed CLEAN confirmation
 
 What it removes:
-  - k3s cluster components and local k3s state
+  - cluster runtime components and local runtime state
   - apply-managed namespaces: cert-manager, longhorn-system, cattle-system, cattle-fleet-system, cattle-fleet-local-system, cattle-capi-system, cattle-turtles-system, registry
   - common bootstrap ClusterIssuers: selfsigned, letsencrypt-staging, letsencrypt-production
   - Rancher/Fleet/Turtles webhook configurations and cattle-related CRDs/APIService objects when present
@@ -151,7 +153,7 @@ parse_args() {
   done
 }
 
-kubectl_k3s() { sudo k3s kubectl "$@"; }
+kubectl_k3s() { pk3s_runtime_kubectl "$@"; }
 namespace_exists() { kubectl_k3s get namespace "$1" >/dev/null 2>&1; }
 clusterissuer_exists() { kubectl_k3s get clusterissuer "$1" >/dev/null 2>&1; }
 
@@ -165,7 +167,7 @@ delete_named_resources_matching() {
 }
 
 delete_rancher_cluster_artifacts() {
-  if ! service_active k3s; then
+  if ! pk3s_runtime_server_active; then
     return
   fi
   delete_named_resources_matching validatingwebhookconfigurations 'rancher|fleet|cattle'
@@ -175,7 +177,7 @@ delete_rancher_cluster_artifacts() {
 }
 
 delete_longhorn_cluster_artifacts() {
-  if ! service_active k3s; then
+  if ! pk3s_runtime_server_active; then
     return
   fi
   delete_named_resources_matching validatingwebhookconfigurations 'longhorn'
@@ -190,7 +192,7 @@ add_plan_item() {
 }
 
 build_plan() {
-  add_plan_item "Uninstall k3s and remove local k3s state directories if present"
+  add_plan_item "Uninstall $(pk3s_runtime_cluster_label) and remove local runtime state directories if present"
 
   local ns
   for ns in cert-manager longhorn-system cattle-system cattle-fleet-system cattle-fleet-local-system cattle-capi-system cattle-turtles-system registry; do
@@ -211,7 +213,7 @@ build_plan() {
 print_warning_block() {
   err "DESTRUCTIVE CLEANUP"
   line "  This script is intended to remove the local productive-k3s-core stack completely."
-  line "  It can uninstall k3s and delete cluster namespaces and local host integrations."
+  line "  It can uninstall $(pk3s_runtime_cluster_label) and delete cluster namespaces and local host integrations."
   line "  It does not try to preserve cluster state."
   line "  It does not remove arbitrary user files under storage paths, but Longhorn-backed data may become unreachable once the stack is removed."
 }
@@ -271,19 +273,19 @@ run_stack_addon_clean_hooks() {
 }
 
 uninstall_k3s() {
-  if [[ -x /usr/local/bin/k3s-uninstall.sh ]]; then
-    sudo /usr/local/bin/k3s-uninstall.sh || true
-  elif [[ -x /usr/local/bin/k3s-killall.sh ]]; then
-    sudo /usr/local/bin/k3s-killall.sh || true
+  local uninstall_script killall_script runtime_path
+  uninstall_script="$(pk3s_runtime_uninstall_script_path)"
+  killall_script="$(pk3s_runtime_killall_script_path)"
+  if [[ -x "${uninstall_script}" ]]; then
+    sudo "${uninstall_script}" || true
+  elif [[ -x "${killall_script}" ]]; then
+    sudo "${killall_script}" || true
   fi
 
-  sudo rm -rf /etc/rancher/k3s
-  sudo rm -rf /var/lib/rancher/k3s
-  sudo rm -rf /var/lib/kubelet
-  sudo rm -rf /etc/cni/net.d
-  sudo rm -rf /var/lib/cni
-  sudo rm -rf /run/flannel
-  sudo rm -rf /run/k3s
+  while IFS= read -r runtime_path; do
+    [[ -n "${runtime_path}" ]] || continue
+    sudo rm -rf "${runtime_path}"
+  done < <(pk3s_runtime_state_dirs)
 }
 
 apply_cleanup() {
@@ -312,17 +314,18 @@ apply_cleanup() {
   log "Removing local host integrations owned by the engine"
   remove_nfs_export
 
-  log "Uninstalling k3s and removing local k3s state"
+  log "Uninstalling $(pk3s_runtime_cluster_label) and removing local runtime state"
   uninstall_k3s
 
   log "Cleanup completed"
   line "  Manual review recommended:"
   line "  - verify /etc/exports"
-  line "  - verify no k3s processes remain"
+  line "  - verify no $(pk3s_runtime_cluster_label) processes remain"
 }
 
 main() {
   parse_args "$@"
+  pk3s_runtime_validate_selection || { err "Unsupported cluster distro/engine selection."; exit 1; }
   bind_stdin_to_tty
   trap cleanup_exit EXIT
   build_plan

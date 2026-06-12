@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/component-versions.sh"
 # shellcheck disable=SC1091
+source "${SCRIPT_DIR}/runtime-contract.sh"
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/addons-runtime.sh"
 BUNDLE_INFO_PATH="${SCRIPT_DIR}/../bundle-info.json"
 TELEMETRY_EVENT_SENDER="${SCRIPT_DIR}/send-telemetry-event.sh"
@@ -520,7 +522,7 @@ metadata:
     app.kubernetes.io/managed-by: productive-k3s-core
     addons.productive-k3s.io/name: ${addon_name}
 spec:
-  ingressClassName: traefik
+  ingressClassName: ${PK3S_INGRESS_CLASS_NAME:-$(pk3s_runtime_default_ingress_class)}
   rules:
     - host: ${public_host}
       http:
@@ -578,11 +580,13 @@ run_addon_validate() {
 }
 
 resolve_local_cluster_kubeconfig() {
-  local system_kubeconfig_path="${PRODUCTIVE_K3S_SYSTEM_KUBECONFIG_PATH:-/etc/rancher/k3s/k3s.yaml}"
+  local system_kubeconfig_path="${PRODUCTIVE_K3S_SYSTEM_KUBECONFIG_PATH:-$(pk3s_runtime_system_kubeconfig_path)}"
+  local distro_user_kubeconfig
+  distro_user_kubeconfig="$(pk3s_runtime_default_user_kubeconfig_path)"
   local candidate
   for candidate in \
     "${KUBECONFIG:-}" \
-    "${HOME}/.kube/k3s.yaml" \
+    "${distro_user_kubeconfig}" \
     "${HOME}/.kube/config" \
     "${system_kubeconfig_path}"
   do
@@ -627,6 +631,7 @@ run_packaged_addon_install() {
   (
     cd "${manifest_dir}"
     export KUBECONFIG="${target_kubeconfig}"
+    export PK3S_INGRESS_CLASS_NAME="${PK3S_INGRESS_CLASS_NAME:-$(pk3s_runtime_default_ingress_class)}"
     bash "${install_path}"
   )
   local rc=$?

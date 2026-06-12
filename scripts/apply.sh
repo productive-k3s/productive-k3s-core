@@ -10,6 +10,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/component-versions.sh"
 # shellcheck disable=SC1091
+source "${SCRIPT_DIR}/runtime-contract.sh"
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/addons-runtime.sh"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
@@ -43,6 +45,7 @@ json_escape() {
 DRY_RUN=0
 MODE="server"
 PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-}"
+PRODUCTIVE_K3S_DISTRO="${PRODUCTIVE_K3S_DISTRO:-k3s}"
 PRODUCTIVE_K3S_ENGINE="${PRODUCTIVE_K3S_ENGINE:-native}"
 PRODUCTIVE_K3S_SSH_HOST="${PRODUCTIVE_K3S_SSH_HOST:-}"
 PRODUCTIVE_K3S_SSH_USER="${PRODUCTIVE_K3S_SSH_USER:-}"
@@ -184,8 +187,8 @@ emit_bootstrap_lifecycle_event() {
   TELEMETRY_RUN_ID="${RUN_ID}" TELEMETRY_MARKER="${TELEMETRY_MARKER}" bash "${sender_script}" "${event_file}" >/dev/null 2>&1 || true
   rm -f "${event_file}"
 }
-k3s_server_active() { service_active k3s; }
-k3s_agent_active() { service_active k3s-agent; }
+k3s_server_active() { service_active "$(pk3s_runtime_server_service)"; }
+k3s_agent_active() { service_active "$(pk3s_runtime_agent_service)"; }
 
 k3s_component_active() {
   if [[ "$MODE" == "agent" ]]; then
@@ -284,6 +287,10 @@ validate_k3s_engine() {
       exit 1
       ;;
   esac
+  if ! pk3s_runtime_validate_selection; then
+    err "Unsupported cluster distro/engine selection: ${PRODUCTIVE_K3S_DISTRO}/${PRODUCTIVE_K3S_ENGINE}"
+    exit 1
+  fi
 }
 
 json_escape() {
@@ -575,7 +582,7 @@ sudo_keepalive() {
   SUDO_KA_PID=$!
 }
 
-kubectl_k3s() { sudo k3s kubectl "$@"; }
+kubectl_k3s() { pk3s_runtime_kubectl "$@"; }
 
 namespace_exists() { kubectl_k3s get namespace "$1" >/dev/null 2>&1; }
 deployment_exists() { kubectl_k3s get deployment "$2" -n "$1" >/dev/null 2>&1; }
@@ -787,7 +794,7 @@ ensure_rancher_private_ca_secret() {
 
   if [[ "$DRY_RUN" == "1" ]]; then
     log "[dry-run] Creating Rancher CA secret ${source_secret_ns}/${target_secret_name} from ${source_secret_name}"
-    echo "  sudo k3s kubectl create secret generic ${target_secret_name} --from-literal=cacerts.pem=<ca.crt from ${source_secret_name}>"
+    echo "  $(pk3s_runtime_kubectl_hint) create secret generic ${target_secret_name} --from-literal=cacerts.pem=<ca.crt from ${source_secret_name}>"
     return 0
   fi
 
@@ -803,9 +810,11 @@ ensure_rancher_private_ca_secret() {
 }
 
 ensure_user_kubeconfig() {
-  local source_kubeconfig="/etc/rancher/k3s/k3s.yaml"
+  local source_kubeconfig
+  source_kubeconfig="$(pk3s_runtime_system_kubeconfig_path)"
   local target_dir="${HOME}/.kube"
-  local target_kubeconfig="${target_dir}/k3s.yaml"
+  local target_kubeconfig
+  target_kubeconfig="$(pk3s_runtime_default_user_kubeconfig_path)"
 
   if [[ "$DRY_RUN" == "1" ]]; then
     log "[dry-run] Preparing user kubeconfig at ${target_kubeconfig}"
@@ -817,7 +826,7 @@ ensure_user_kubeconfig() {
   fi
 
   if [[ ! -f "$source_kubeconfig" ]]; then
-    err "k3s kubeconfig was not found at ${source_kubeconfig}."
+    err "$(pk3s_runtime_distro_label) kubeconfig was not found at ${source_kubeconfig}."
     exit 1
   fi
 
@@ -853,7 +862,8 @@ Modes:
   stack        Installs or reuses the selected stack on top of an existing cluster.
 
 Environment:
-  PRODUCTIVE_K3S_ENGINE=native|k3sup  Select the base k3s installation engine (default: native).
+  PRODUCTIVE_K3S_DISTRO=k3s|rke2      Select the cluster distro (default: k3s).
+  PRODUCTIVE_K3S_ENGINE=native|k3sup  Select the base installation engine (default: native; k3sup is k3s-only).
 EOF
         exit 0
         ;;
@@ -996,28 +1006,31 @@ wait_service_endpoints() {
 }
 
 wait_k3s_ready() {
+  local server_service distro_label
   local timeout="${1:-180}"
   local start now ready_nodes
+  server_service="$(pk3s_runtime_server_service)"
+  distro_label="$(pk3s_runtime_distro_label)"
   if [[ "$DRY_RUN" == "1" ]]; then
-    log "[dry-run] Skipping wait for k3s API readiness."
+    log "[dry-run] Skipping wait for ${distro_label} API readiness."
     return 0
   fi
 
-  log "Waiting for k3s API and node readiness (timeout ${timeout}s)..."
+  log "Waiting for ${distro_label} API and node readiness (timeout ${timeout}s)..."
   start="$(date +%s)"
   while true; do
-    if service_active k3s && kubectl_k3s get nodes >/dev/null 2>&1; then
+    if service_active "${server_service}" && kubectl_k3s get nodes >/dev/null 2>&1; then
       ready_nodes="$(kubectl_k3s get nodes --no-headers 2>/dev/null | awk '$2=="Ready"{count++} END{print count+0}')"
       if (( ready_nodes > 0 )); then
-        log "k3s API is reachable and at least one node is Ready."
+        log "${distro_label} API is reachable and at least one node is Ready."
         return 0
       fi
     fi
 
     now="$(date +%s)"
     if (( now - start > timeout )); then
-      err "Timed out waiting for k3s API readiness."
-      sudo systemctl status k3s --no-pager || true
+      err "Timed out waiting for ${distro_label} API readiness."
+      sudo systemctl status "${server_service}" --no-pager || true
       kubectl_k3s get nodes -o wide || true
       return 1
     fi
@@ -1053,9 +1066,9 @@ ensure_helm_repo() {
 }
 
 print_detection_summary() {
-  local k3s_state="$1" helm_state="$2" cert_state="$3" longhorn_state="$4" rancher_state="$5" registry_state="$6" nfs_state="$7"
+  local cluster_state="$1" helm_state="$2" cert_state="$3" longhorn_state="$4" rancher_state="$5" registry_state="$6" nfs_state="$7"
   log "Detected environment"
-  printf '  - k3s: %s\r\n' "$k3s_state"
+  printf '  - %s: %s\r\n' "$(pk3s_runtime_cluster_label)" "$cluster_state"
   printf '  - helm: %s\r\n' "$helm_state"
   printf '  - cert-manager: %s\r\n' "$cert_state"
   printf '  - Longhorn: %s\r\n' "$longhorn_state"
@@ -1065,10 +1078,10 @@ print_detection_summary() {
 }
 
 print_diagnosis_summary() {
-  local k3s_state="$1" helm_state="$2" cert_state="$3" longhorn_state="$4" rancher_state="$5" registry_state="$6" nfs_state="$7"
+  local cluster_state="$1" helm_state="$2" cert_state="$3" longhorn_state="$4" rancher_state="$5" registry_state="$6" nfs_state="$7"
   log "Diagnosis"
-  if [[ "$k3s_state" == "missing" ]]; then
-    line "  - k3s is missing."
+  if [[ "$cluster_state" == "missing" ]]; then
+    line "  - $(pk3s_runtime_cluster_label) is missing."
   fi
   if [[ "$helm_state" == "missing" ]]; then
     line "  - helm is missing."
@@ -1089,16 +1102,16 @@ print_diagnosis_summary() {
   if [[ "$nfs_state" == "missing" ]]; then
     line "  - NFS server is missing."
   fi
-  if [[ "$k3s_state" == "present" && "$helm_state" == "present" && "$cert_state" == "present" && "$longhorn_state" == "present" && "$rancher_state" == "present" && "$registry_state" == "present" && "$nfs_state" == "present" ]]; then
+  if [[ "$cluster_state" == "present" && "$helm_state" == "present" && "$cert_state" == "present" && "$longhorn_state" == "present" && "$rancher_state" == "present" && "$registry_state" == "present" && "$nfs_state" == "present" ]]; then
     line "  - Core stack components are already present."
   fi
 }
 
 print_plan_summary() {
-  local k3s_action="$1" helm_action="$2" cert_action="$3" longhorn_action="$4" rancher_action="$5" registry_action="$6" nfs_manage="$7"
+  local cluster_action="$1" helm_action="$2" cert_action="$3" longhorn_action="$4" rancher_action="$5" registry_action="$6" nfs_manage="$7"
   log "Planned actions"
   line "  Cluster:"
-  printf '    - k3s: %s\r\n' "$k3s_action"
+  printf '    - %s: %s\r\n' "$(pk3s_runtime_cluster_label)" "$cluster_action"
   printf '    - helm: %s\r\n' "$helm_action"
   printf '    - cert-manager: %s\r\n' "$cert_action"
   printf '    - Longhorn: %s\r\n' "$longhorn_action"
@@ -1227,9 +1240,9 @@ confirm_preflight() {
 preflight_cert_manager_install() {
   local warnings_found=0
 
-  if ! service_active k3s; then
-    warn "k3s is not active, so cert-manager preflight can only be partial."
-    track_warning "cert-manager: k3s is not active, preflight is partial"
+  if ! k3s_server_active; then
+    warn "$(pk3s_runtime_cluster_label) is not active, so cert-manager preflight can only be partial."
+    track_warning "cert-manager: $(pk3s_runtime_cluster_label) is not active, preflight is partial"
     ((warnings_found+=1))
     confirm_preflight "cert-manager" "$warnings_found"
     return
@@ -1249,9 +1262,9 @@ preflight_longhorn_install() {
   local warnings_found=0
   local default_sc_count=0
 
-  if ! service_active k3s; then
-    warn "k3s is not active, so Longhorn preflight can only be partial."
-    track_warning "Longhorn: k3s is not active, preflight is partial"
+  if ! k3s_server_active; then
+    warn "$(pk3s_runtime_cluster_label) is not active, so Longhorn preflight can only be partial."
+    track_warning "Longhorn: $(pk3s_runtime_cluster_label) is not active, preflight is partial"
     ((warnings_found+=1))
     confirm_preflight "Longhorn" "$warnings_found"
     return
@@ -1296,9 +1309,9 @@ preflight_rancher_install() {
   local conflicts=""
   local warnings_found=0
 
-  if ! service_active k3s; then
-    warn "k3s is not active, so Rancher preflight can only be partial."
-    track_warning "Rancher: k3s is not active, preflight is partial"
+  if ! k3s_server_active; then
+    warn "$(pk3s_runtime_cluster_label) is not active, so Rancher preflight can only be partial."
+    track_warning "Rancher: $(pk3s_runtime_cluster_label) is not active, preflight is partial"
     ((warnings_found+=1))
     confirm_preflight "Rancher" "$warnings_found"
     return
@@ -1327,9 +1340,9 @@ preflight_registry_install() {
   local conflicts=""
   local warnings_found=0
 
-  if ! service_active k3s; then
-    warn "k3s is not active, so registry preflight can only be partial."
-    track_warning "Registry: k3s is not active, preflight is partial"
+  if ! k3s_server_active; then
+    warn "$(pk3s_runtime_cluster_label) is not active, so registry preflight can only be partial."
+    track_warning "Registry: $(pk3s_runtime_cluster_label) is not active, preflight is partial"
     ((warnings_found+=1))
     confirm_preflight "Registry" "$warnings_found"
     return
@@ -1386,34 +1399,65 @@ preflight_nfs_install() {
 
 install_k3s_if_needed() {
   local action="$1"
+  local cluster_label
+  cluster_label="$(pk3s_runtime_cluster_label)"
   if [[ "$action" == "reuse" ]]; then
     if [[ "$MODE" == "agent" ]]; then
-      track_reuse "k3s agent"
+      track_reuse "${cluster_label} agent"
     else
-      track_reuse "k3s"
+      track_reuse "${cluster_label}"
     fi
     manifest_complete_component "k3s" "$(result_for_mode reused)"
     return
   fi
   if [[ "$action" != "install" ]]; then
-    err "k3s is required for the remaining steps."
+    err "${cluster_label} is required for the remaining steps."
     exit 1
   fi
 
-  local install_label="k3s"
+  local install_label="${cluster_label}"
   if [[ "$MODE" == "agent" ]]; then
-    install_label="k3s agent"
+    install_label="${cluster_label} agent"
   fi
 
   track_install "$install_label"
-  ensure_packages "k3s installation" curl ca-certificates
-  if [[ "$PRODUCTIVE_K3S_ENGINE" == "k3sup" ]]; then
+  ensure_packages "${cluster_label} installation" curl ca-certificates
+  if [[ "${PRODUCTIVE_K3S_DISTRO}" == "rke2" ]]; then
+    install_rke2_with_native
+  elif [[ "$PRODUCTIVE_K3S_ENGINE" == "k3sup" ]]; then
     install_k3sup_if_needed
     install_k3s_with_k3sup
   else
     install_k3s_with_native
   fi
   manifest_complete_component "k3s" "$(result_for_mode installed)"
+}
+
+install_rke2_with_native() {
+  local config_dir="/etc/rancher/rke2"
+  local config_path="${config_dir}/config.yaml"
+  local install_cmd=""
+
+  if [[ "$MODE" == "agent" ]]; then
+    if [[ -z "${AGENT_SERVER_URL:-}" || -z "${AGENT_CLUSTER_TOKEN:-}" ]]; then
+      err "Agent mode requires both the server URL and cluster token."
+      exit 1
+    fi
+    printf -v install_cmd 'curl -sfL https://get.rke2.io | sudo env INSTALL_RKE2_VERSION=%q INSTALL_RKE2_TYPE=agent sh -' "${PRODUCTIVE_K3S_RKE2_VERSION}"
+    log "Installing rke2 agent..."
+    run_shell "Installing rke2 agent" "$install_cmd"
+    run_shell "Writing rke2 agent config" "sudo mkdir -p ${config_dir} && sudo tee ${config_path} >/dev/null <<'EOF'
+server: ${AGENT_SERVER_URL}
+token: ${AGENT_CLUSTER_TOKEN}
+EOF"
+    run_cmd "Enabling rke2-agent" sudo systemctl enable --now rke2-agent
+    return
+  fi
+
+  printf -v install_cmd 'curl -sfL https://get.rke2.io | sudo env INSTALL_RKE2_VERSION=%q sh -' "${PRODUCTIVE_K3S_RKE2_VERSION}"
+  log "Installing rke2 (${PRODUCTIVE_K3S_RKE2_VERSION})..."
+  run_shell "Installing rke2 (${PRODUCTIVE_K3S_RKE2_VERSION})" "$install_cmd"
+  run_cmd "Enabling rke2-server" sudo systemctl enable --now rke2-server
 }
 
 install_k3sup_if_needed() {
@@ -1673,7 +1717,9 @@ ensure_cert_manager() {
       exit 1
     fi
     log "Installing cert-manager from addon source..."
-    if ! PK3S_KUBECTL_MODE="k3s" \
+    if ! PK3S_KUBECTL_MODE="$(pk3s_runtime_addon_kubectl_mode)" \
+      PK3S_KUBECTL_BIN="$(pk3s_runtime_addon_kubectl_bin)" \
+      PK3S_INGRESS_CLASS_NAME="$(pk3s_runtime_default_ingress_class)" \
       PK3S_CERT_MANAGER_VERSION="${PRODUCTIVE_K3S_CERT_MANAGER_VERSION}" \
       PK3S_CLUSTER_ISSUER_ACTION="${issuer_action}" \
       PK3S_TLS_SOURCE="$( [[ "${tls_choice}" == "1" ]] && echo letsencrypt || echo secret )" \
@@ -1733,8 +1779,10 @@ install_longhorn_if_needed() {
     exit 1
   fi
   log "Installing Longhorn from addon source..."
-  if ! PK3S_KUBECTL_MODE="k3s" \
+  if ! PK3S_KUBECTL_MODE="$(pk3s_runtime_addon_kubectl_mode)" \
+    PK3S_KUBECTL_BIN="$(pk3s_runtime_addon_kubectl_bin)" \
     PK3S_HELM_BIN="helm" \
+    PK3S_INGRESS_CLASS_NAME="$(pk3s_runtime_default_ingress_class)" \
     PK3S_LONGHORN_VERSION="${PRODUCTIVE_K3S_LONGHORN_VERSION}" \
     PK3S_LONGHORN_DATA_PATH="${longhorn_data_path}" \
     PK3S_LONGHORN_REPLICA_COUNT="${replica_count}" \
@@ -1781,8 +1829,10 @@ install_rancher_if_needed() {
     exit 1
   fi
   log "Installing Rancher from addon source..."
-  if ! PK3S_KUBECTL_MODE="k3s" \
+  if ! PK3S_KUBECTL_MODE="$(pk3s_runtime_addon_kubectl_mode)" \
+    PK3S_KUBECTL_BIN="$(pk3s_runtime_addon_kubectl_bin)" \
     PK3S_HELM_BIN="helm" \
+    PK3S_INGRESS_CLASS_NAME="$(pk3s_runtime_default_ingress_class)" \
     PK3S_RANCHER_VERSION="${PRODUCTIVE_K3S_RANCHER_VERSION}" \
     PK3S_RANCHER_HOST="${rancher_host}" \
     PK3S_RANCHER_BOOTSTRAP_PASSWORD="${admin_pass}" \
@@ -1835,7 +1885,9 @@ install_registry_if_needed() {
     exit 1
   fi
   log "Installing Registry from addon source..."
-  if ! PK3S_KUBECTL_MODE="k3s" \
+  if ! PK3S_KUBECTL_MODE="$(pk3s_runtime_addon_kubectl_mode)" \
+    PK3S_KUBECTL_BIN="$(pk3s_runtime_addon_kubectl_bin)" \
+    PK3S_INGRESS_CLASS_NAME="$(pk3s_runtime_default_ingress_class)" \
     PK3S_REGISTRY_IMAGE="${PRODUCTIVE_K3S_REGISTRY_IMAGE}" \
     PK3S_REGISTRY_HOST="${registry_host}" \
     PK3S_REGISTRY_PVC_SIZE="${registry_size}" \
@@ -1945,14 +1997,20 @@ main() {
     mode_label="dry-run ${mode_label}"
   fi
 
-  log "Incremental apply: k3s + Rancher + Longhorn + Registry (${OS_PRETTY_NAME})"
+  log "Incremental apply: $(pk3s_runtime_distro_label) + Rancher + Longhorn + Registry (${OS_PRETTY_NAME})"
   log "Mode: ${MODE} (${mode_label})"
-  log "k3s installation engine: ${PRODUCTIVE_K3S_ENGINE}"
+  log "cluster distro: ${PRODUCTIVE_K3S_DISTRO}"
+  log "cluster installation engine: ${PRODUCTIVE_K3S_ENGINE}"
+  if [[ "${PRODUCTIVE_K3S_DISTRO}" == "k3s" ]]; then
+    log "k3s installation engine: ${PRODUCTIVE_K3S_ENGINE}"
+  fi
   line "  Run manifest: ${RUN_MANIFEST}"
   if [[ "$DRY_RUN" == "1" ]]; then
     warn "Running in dry-run mode. No changes will be applied."
   fi
   manifest_set_setting "bootstrap_mode" "$MODE"
+  manifest_set_setting "cluster_distro" "$PRODUCTIVE_K3S_DISTRO"
+  manifest_set_setting "cluster_installation_engine" "$PRODUCTIVE_K3S_ENGINE"
   manifest_set_setting "k3s_installation_engine" "$PRODUCTIVE_K3S_ENGINE"
   manifest_set_setting "telemetry_enabled" "$(is_truthy "${TELEMETRY_ENABLED:-false}" && printf 'y' || printf 'n')"
   manifest_set_setting "telemetry_max_retries" "${TELEMETRY_MAX_RETRIES}"
@@ -1969,7 +2027,7 @@ main() {
   fi
 
   if [[ "$MODE" == "agent" ]] && k3s_server_active; then
-    err "Agent mode cannot be used on a node where the k3s server service is already active."
+    err "Agent mode cannot be used on a node where the $(pk3s_runtime_server_service) service is already active."
     exit 1
   fi
 
@@ -2017,9 +2075,9 @@ main() {
     "$( [[ "$registry_present" == "y" ]] && echo present || echo missing )" \
     "$( [[ "$nfs_present" == "y" ]] && echo present || echo missing )"
   if need_cmd kubectl; then
-    log "Standalone kubectl detected. The managed workflow in this repository still uses 'sudo k3s kubectl' by default."
+    log "Standalone kubectl detected. Managed workflow command: $(pk3s_runtime_kubectl_hint)"
   else
-    log "Standalone kubectl was not detected. That is fine: this repository uses 'sudo k3s kubectl' for managed operations."
+    log "Standalone kubectl was not detected. Managed workflow command: $(pk3s_runtime_kubectl_hint)"
   fi
   print_diagnosis_summary \
     "$k3s_detected_state" \
@@ -2073,12 +2131,12 @@ main() {
   if mode_runs_base || [[ "$MODE" == "agent" ]]; then
     if [[ "$MODE" == "agent" ]]; then
       if k3s_agent_active; then
-        prompt_yesno CONTINUE_K3S_AGENT "y" "Existing k3s agent installation detected. Continue using it without changes? [required]"
-        [[ "$CONTINUE_K3S_AGENT" == "y" ]] || { err "k3s agent is required for agent mode."; exit 1; }
+        prompt_yesno CONTINUE_K3S_AGENT "y" "Existing $(pk3s_runtime_cluster_label) agent installation detected. Continue using it without changes? [required]"
+        [[ "$CONTINUE_K3S_AGENT" == "y" ]] || { err "$(pk3s_runtime_cluster_label) agent is required for agent mode."; exit 1; }
         K3S_ACTION="reuse"
       else
-        prompt_yesno INSTALL_K3S_AGENT "y" "k3s agent was not detected. Install it now? [required]"
-        [[ "$INSTALL_K3S_AGENT" == "y" ]] || { err "Cannot continue without k3s agent."; exit 1; }
+        prompt_yesno INSTALL_K3S_AGENT "y" "$(pk3s_runtime_cluster_label) agent was not detected. Install it now? [required]"
+        [[ "$INSTALL_K3S_AGENT" == "y" ]] || { err "Cannot continue without $(pk3s_runtime_cluster_label) agent."; exit 1; }
         K3S_ACTION="install"
         prompt AGENT_SERVER_URL "https://server.example.local:6443" "Agent server URL"
         prompt AGENT_CLUSTER_TOKEN "change-me-token" "Agent cluster token"
@@ -2089,12 +2147,12 @@ main() {
       MANIFEST_RESULT["helm"]="skipped"
     else
       if k3s_server_active; then
-        prompt_yesno CONTINUE_K3S "y" "Existing k3s installation detected. Continue using it without changes? [required]"
-        [[ "$CONTINUE_K3S" == "y" ]] || { err "k3s is required for the remaining steps."; exit 1; }
+        prompt_yesno CONTINUE_K3S "y" "Existing $(pk3s_runtime_cluster_label) installation detected. Continue using it without changes? [required]"
+        [[ "$CONTINUE_K3S" == "y" ]] || { err "$(pk3s_runtime_cluster_label) is required for the remaining steps."; exit 1; }
         K3S_ACTION="reuse"
       else
-        prompt_yesno INSTALL_K3S "y" "k3s was not detected. Install it now? [required]"
-        [[ "$INSTALL_K3S" == "y" ]] || { err "Cannot continue without k3s."; exit 1; }
+        prompt_yesno INSTALL_K3S "y" "$(pk3s_runtime_cluster_label) was not detected. Install it now? [required]"
+        [[ "$INSTALL_K3S" == "y" ]] || { err "Cannot continue without $(pk3s_runtime_cluster_label)."; exit 1; }
         K3S_ACTION="install"
       fi
 
@@ -2110,7 +2168,7 @@ main() {
     fi
   else
     if ! k3s_server_active; then
-      err "Mode '${MODE}' requires an existing k3s cluster."
+      err "Mode '${MODE}' requires an existing $(pk3s_runtime_cluster_label) cluster."
       exit 1
     fi
     if ! need_cmd helm; then
@@ -2342,18 +2400,18 @@ main() {
   fi
   if [[ "$MODE" == "agent" ]]; then
     if k3s_agent_active; then
-      log "k3s agent service is active."
+      log "$(pk3s_runtime_cluster_label) agent service is active."
     else
-      warn "k3s agent is not active yet. Agent-level checks will be partial until it is installed for real."
+      warn "$(pk3s_runtime_cluster_label) agent is not active yet. Agent-level checks will be partial until it is installed for real."
     fi
   elif k3s_server_active; then
     wait_k3s_ready 180
     CURRENT_STEP="cluster-inspection"
-    log "Inspecting k3s node..."
+    log "Inspecting $(pk3s_runtime_cluster_label) node..."
     kubectl_k3s get nodes -o wide
     ensure_user_kubeconfig
   else
-    warn "k3s is not active yet. Cluster-level checks will be partial until it is installed for real."
+    warn "$(pk3s_runtime_cluster_label) is not active yet. Cluster-level checks will be partial until it is installed for real."
   fi
   if mode_runs_stack; then
     local stack_addon_name
@@ -2372,16 +2430,16 @@ main() {
 
   log "DONE. Quick checks:"
   if [[ "$MODE" == "agent" ]]; then
-    line "  k3s agent status:     sudo systemctl status k3s-agent --no-pager"
-    line "  k3s agent logs:       sudo journalctl -u k3s-agent -n 100 --no-pager"
+    line "  agent status:         sudo systemctl status $(pk3s_runtime_agent_service) --no-pager"
+    line "  agent logs:           sudo journalctl -u $(pk3s_runtime_agent_service) -n 100 --no-pager"
   else
-    line "  k3s nodes:            sudo k3s kubectl get nodes"
+    line "  cluster nodes:        $(pk3s_runtime_kubectl_hint) get nodes"
   fi
   if mode_runs_stack; then
-    line "  cert-manager pods:    sudo k3s kubectl get pods -n cert-manager"
-    line "  longhorn pods:        sudo k3s kubectl get pods -n longhorn-system"
-    line "  rancher pods:         sudo k3s kubectl get pods -n cattle-system"
-    line "  registry pods:        sudo k3s kubectl get pods -n registry"
+    line "  cert-manager pods:    $(pk3s_runtime_kubectl_hint) get pods -n cert-manager"
+    line "  longhorn pods:        $(pk3s_runtime_kubectl_hint) get pods -n longhorn-system"
+    line "  rancher pods:         $(pk3s_runtime_kubectl_hint) get pods -n cattle-system"
+    line "  registry pods:        $(pk3s_runtime_kubectl_hint) get pods -n registry"
   fi
   if mode_runs_host_local; then
     line "  nfs exports:          sudo exportfs -v"
@@ -2424,7 +2482,7 @@ main() {
   elif mode_runs_stack; then
     log "Let's Encrypt TLS:"
     line "  - Make sure ports 80/443 are reachable from the internet and DNS points to this VM."
-    line "  - If cert issuance fails, check: sudo k3s kubectl describe certificate -A"
+    line "  - If cert issuance fails, check: $(pk3s_runtime_kubectl_hint) describe certificate -A"
   fi
 
   nl

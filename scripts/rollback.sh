@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/component-versions.sh"
 # shellcheck disable=SC1091
+source "${SCRIPT_DIR}/runtime-contract.sh"
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/addons-runtime.sh"
 ADDONS_REPO_DIR="$(resolve_addons_repo_dir || true)"
 if [[ -n "${ADDONS_REPO_DIR}" && -f "${ADDONS_REPO_DIR}/scripts/addon-host-runtime.sh" ]]; then
@@ -34,6 +36,7 @@ MANIFEST=""
 MANIFEST_PRIVATE_CONTEXT=""
 SUDO_KA_PID=""
 AUTO_APPROVE="n"
+PRODUCTIVE_K3S_DISTRO="${PRODUCTIVE_K3S_DISTRO:-k3s}"
 declare -a PLAN_IDS=()
 declare -A PLAN_DESCRIPTIONS=()
 declare -A PLAN_SAFETY=()
@@ -87,8 +90,11 @@ cleanup_exit() {
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 resolve_kubeconfig() {
+  local distro_candidate system_kubeconfig
+  system_kubeconfig="$(pk3s_runtime_system_kubeconfig_path)"
+  distro_candidate="$(pk3s_runtime_default_user_kubeconfig_path)"
   local candidate
-  for candidate in "${HOME}/.kube/k3s.yaml" "${HOME}/.kube/config" "/etc/rancher/k3s/k3s.yaml"; do
+  for candidate in "${distro_candidate}" "${HOME}/.kube/config" "${system_kubeconfig}"; do
     if [[ -r "$candidate" ]]; then
       printf '%s\n' "$candidate"
       return 0
@@ -191,6 +197,13 @@ require_prereqs() {
   elif [[ -f "${MANIFEST%.json}-private.json" ]]; then
     MANIFEST_PRIVATE_CONTEXT="${MANIFEST%.json}-private.json"
   fi
+
+  local manifest_distro
+  manifest_distro="$(jq -r '.settings.cluster_distro // empty' "$MANIFEST")"
+  if [[ -n "${manifest_distro}" ]]; then
+    PRODUCTIVE_K3S_DISTRO="${manifest_distro}"
+  fi
+  pk3s_runtime_validate_selection || { err "Manifest requested unsupported cluster distro/engine selection."; exit 1; }
 }
 
 manifest_string() {
@@ -236,7 +249,7 @@ setting() {
   private_setting "$key"
 }
 
-kubectl_k3s() { sudo k3s kubectl "$@"; }
+kubectl_k3s() { pk3s_runtime_kubectl "$@"; }
 
 ns_exists() { kubectl_k3s get ns "$1" >/dev/null 2>&1; }
 deployment_exists() { kubectl_k3s get deployment "$2" -n "$1" >/dev/null 2>&1; }
@@ -259,7 +272,7 @@ current_state() {
   local component="$1"
   case "$component" in
     k3s)
-      service_active k3s && echo present || echo missing
+      pk3s_runtime_server_active && echo present || echo missing
       ;;
     helm)
       need_cmd helm && echo present || echo missing
@@ -417,7 +430,7 @@ build_plan() {
   planned="$(component_field k3s planned_action)"
   result="$(component_field k3s result)"
   if [[ "$detected" == "missing" && "$planned" == "install" && "$result" == "installed" ]]; then
-    add_plan_item "k3s_manual" "k3s was installed by this run. Uninstalling it is high-impact and remains manual in this rollback implementation." "manual" "manual"
+    add_plan_item "k3s_manual" "$(pk3s_runtime_cluster_label) was installed by this run. Uninstalling it is high-impact and remains manual in this rollback implementation." "manual" "manual"
   fi
 
   detected="$(component_field helm detected_before)"
@@ -447,15 +460,15 @@ print_plan() {
 }
 
 apply_kubectl_delete_cert_manager() {
-  sudo k3s kubectl delete -f "https://github.com/cert-manager/cert-manager/releases/download/${PRODUCTIVE_K3S_CERT_MANAGER_VERSION:-v1.19.4}/cert-manager.yaml" || true
-  sudo k3s kubectl delete namespace cert-manager --ignore-not-found --wait=false || true
+  kubectl_k3s delete -f "https://github.com/cert-manager/cert-manager/releases/download/${PRODUCTIVE_K3S_CERT_MANAGER_VERSION:-v1.19.4}/cert-manager.yaml" || true
+  kubectl_k3s delete namespace cert-manager --ignore-not-found --wait=false || true
 }
 
 apply_kubectl_delete_clusterissuer() {
   local issuer
   issuer="$(component_field clusterissuer note)"
   [[ -n "$issuer" ]] || return 0
-  sudo k3s kubectl delete clusterissuer "$issuer" --ignore-not-found
+  kubectl_k3s delete clusterissuer "$issuer" --ignore-not-found
 }
 
 delete_rancher_cluster_artifacts() {

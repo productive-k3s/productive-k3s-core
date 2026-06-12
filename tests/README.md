@@ -54,6 +54,16 @@ make test-matrix-all
 make test-checkstatus-matrix
 ```
 
+Dedicated Ubuntu 24.04 RKE2 entrypoints are also available:
+
+```bash
+make test-rke2-core
+make test-rke2-full
+make test-rke2-full-clean
+make test-rke2-full-rollback
+make test-rke2-ubuntu-all
+```
+
 Category intent:
 
 - `matrix`: VM-backed integration profiles (`smoke`, `core`, `full`, `full-rollback`, `full-clean`)

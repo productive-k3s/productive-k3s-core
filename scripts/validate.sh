@@ -3,11 +3,13 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${SCRIPT_DIR}/runtime-contract.sh"
 source "${SCRIPT_DIR}/addons-runtime.sh"
 
 STRICT=0
 JSON_OUTPUT=0
 DOCKER_REGISTRY_TEST=0
+PRODUCTIVE_K3S_DISTRO="${PRODUCTIVE_K3S_DISTRO:-k3s}"
 PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-}"
 FAILURES=0
 WARNINGS=0
@@ -164,7 +166,7 @@ sudo_keepalive() {
 }
 
 k() {
-  sudo k3s kubectl "$@"
+  pk3s_runtime_kubectl "$@"
 }
 
 safe_run() {
@@ -319,11 +321,20 @@ check_cmds() {
   info "Checking required commands"
   local missing=()
   local cmd
-  for cmd in sudo k3s kubectl curl getent; do
+  for cmd in sudo curl getent; do
     if ! need_cmd "$cmd"; then
       missing+=("$cmd")
     fi
   done
+  if [[ "$(pk3s_runtime_addon_kubectl_mode)" == "k3s" ]]; then
+    if ! need_cmd k3s; then
+      missing+=("k3s")
+    fi
+  else
+    if [[ ! -x "$(pk3s_runtime_embedded_kubectl_bin)" ]]; then
+      missing+=("$(pk3s_runtime_embedded_kubectl_bin)")
+    fi
+  fi
 
   if ((${#missing[@]} > 0)); then
     record_fail "missing required commands: ${missing[*]}"
@@ -341,11 +352,13 @@ check_cmds() {
 }
 
 check_k3s_service() {
-  info "Checking k3s service"
-  if sudo systemctl is-active --quiet k3s; then
-    record_ok "k3s service is active"
+  local server_service
+  server_service="$(pk3s_runtime_server_service)"
+  info "Checking ${server_service} service"
+  if sudo systemctl is-active --quiet "${server_service}"; then
+    record_ok "${server_service} service is active"
   else
-    record_fail "k3s service is not active"
+    record_fail "${server_service} service is not active"
   fi
 }
 
@@ -602,6 +615,11 @@ print_summary() {
 
 main() {
   parse_args "$@"
+  if ! pk3s_runtime_validate_selection; then
+    record_fail "unsupported cluster distro/engine selection: ${PRODUCTIVE_K3S_DISTRO}/${PRODUCTIVE_K3S_ENGINE}"
+    print_summary
+    return
+  fi
   load_apply_settings
   sudo_keepalive
   check_cmds

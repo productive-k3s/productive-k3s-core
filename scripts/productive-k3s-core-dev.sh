@@ -35,6 +35,11 @@ Development commands:
   test-agent-smoke
   test-smoke
   test-core
+  test-rke2-core
+  test-rke2-full
+  test-rke2-full-clean
+  test-rke2-full-rollback
+  test-rke2-ubuntu-all
   test-core-debian12
   test-core-debian13
   test-matrix-smoke
@@ -244,6 +249,34 @@ main() {
       shift
       prepare_addons_repo_checkout
       exec "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile core "$@"
+      ;;
+    test-rke2-core)
+      shift
+      prepare_addons_repo_checkout
+      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile core "$@"
+      ;;
+    test-rke2-full)
+      shift
+      prepare_addons_repo_checkout
+      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile full "$@"
+      ;;
+    test-rke2-full-clean)
+      shift
+      prepare_addons_repo_checkout
+      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile full-clean "$@"
+      ;;
+    test-rke2-full-rollback)
+      shift
+      prepare_addons_repo_checkout
+      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile full-rollback "$@"
+      ;;
+    test-rke2-ubuntu-all)
+      shift
+      prepare_addons_repo_checkout
+      env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile core "$@" || exit $?
+      env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile full "$@" || exit $?
+      env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile full-clean "$@" || exit $?
+      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile full-rollback "$@"
       ;;
     test-core-debian12)
       shift

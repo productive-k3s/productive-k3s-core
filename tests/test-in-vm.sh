@@ -464,6 +464,9 @@ run_remote_command_with_status() {
 
 bootstrap_engine_env_prefix() {
   local prefix=""
+  if [[ -n "${PRODUCTIVE_K3S_DISTRO:-}" ]]; then
+    prefix+="PRODUCTIVE_K3S_DISTRO=$(printf '%q' "${PRODUCTIVE_K3S_DISTRO}") "
+  fi
   if [[ -n "${PRODUCTIVE_K3S_ENGINE:-}" ]]; then
     prefix+="PRODUCTIVE_K3S_ENGINE=$(printf '%q' "${PRODUCTIVE_K3S_ENGINE}") "
   fi
@@ -533,9 +536,9 @@ run_validate_with_retries() {
   start_ts=$(date +%s)
 
   if [[ "$validate_mode" == "strict" ]]; then
-    validate_command="cd '$REMOTE_DIR' && ./scripts/validate.sh --strict"
+    validate_command="cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/validate.sh --strict"
   else
-    validate_command="cd '$REMOTE_DIR' && ./scripts/validate.sh"
+    validate_command="cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/validate.sh"
   fi
 
   while true; do
@@ -561,7 +564,7 @@ run_stack_validate_with_retries() {
   local start_ts now_ts
   local validate_command
   start_ts=$(date +%s)
-  validate_command="cd '$REMOTE_DIR' && ./productive-k3s-core.sh stack validate '${stack_name}' --strict"
+  validate_command="cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack validate '${stack_name}' --strict"
 
   while true; do
     if run_remote_command_with_status "${validate_command}" 1200; then
@@ -675,8 +678,8 @@ run_full() {
 run_full_clean() {
   run_full
   log "Running destructive clean profile inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && ./productive-k3s-core.sh stack cleanup base --apply --yes --confirm-clean"
-  assert_in_vm "systemctl is-active --quiet k3s && exit 1 || exit 0" "k3s service is no longer active after clean"
+  run_in_vm "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack cleanup base --apply --yes --confirm-clean"
+  assert_in_vm "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then systemctl is-active --quiet rke2-server && exit 1 || exit 0; else systemctl is-active --quiet k3s && exit 1 || exit 0; fi" "cluster service is no longer active after clean"
 }
 
 run_full_rollback() {
@@ -690,16 +693,16 @@ run_full_rollback() {
   fi
 
   log "Running rollback plan inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && ./scripts/rollback.sh --to '$manifest' --plan"
+  run_in_vm "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --plan"
 
   log "Applying rollback inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && ./scripts/rollback.sh --to '$manifest' --apply --yes"
+  run_in_vm "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --apply --yes"
 
-  assert_in_vm_with_retries "! sudo k3s kubectl get namespace cert-manager >/dev/null 2>&1" "cert-manager namespace was removed by rollback" 600 15
-  assert_in_vm_with_retries "! sudo k3s kubectl get namespace longhorn-system >/dev/null 2>&1" "longhorn-system namespace was removed by rollback" 600 15
-  assert_in_vm_with_retries "! sudo k3s kubectl get namespace cattle-system >/dev/null 2>&1" "cattle-system namespace was removed by rollback" 600 15
-  assert_in_vm_with_retries "! sudo k3s kubectl get namespace registry >/dev/null 2>&1" "registry namespace was removed by rollback" 600 15
-  assert_in_vm_with_retries "! sudo k3s kubectl get clusterissuer selfsigned >/dev/null 2>&1" "selfsigned ClusterIssuer was removed by rollback" 300 10
+  assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace cert-manager >/dev/null 2>&1; else ! sudo k3s kubectl get namespace cert-manager >/dev/null 2>&1; fi" "cert-manager namespace was removed by rollback" 600 15
+  assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace longhorn-system >/dev/null 2>&1; else ! sudo k3s kubectl get namespace longhorn-system >/dev/null 2>&1; fi" "longhorn-system namespace was removed by rollback" 600 15
+  assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace cattle-system >/dev/null 2>&1; else ! sudo k3s kubectl get namespace cattle-system >/dev/null 2>&1; fi" "cattle-system namespace was removed by rollback" 600 15
+  assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace registry >/dev/null 2>&1; else ! sudo k3s kubectl get namespace registry >/dev/null 2>&1; fi" "registry namespace was removed by rollback" 600 15
+  assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get clusterissuer selfsigned >/dev/null 2>&1; else ! sudo k3s kubectl get clusterissuer selfsigned >/dev/null 2>&1; fi" "selfsigned ClusterIssuer was removed by rollback" 300 10
   assert_in_vm_with_retries "! grep -qE '^[[:space:]]*/srv/nfs/k8s-share[[:space:]]' /etc/exports" "NFS export was removed by rollback" 120 5
   assert_in_vm_with_retries "! grep -q 'rancher.home.arpa\\|registry.home.arpa' /etc/hosts" "apply-managed hosts entries were removed by rollback" 120 5
 }
