@@ -93,6 +93,10 @@ cleanup_exit() {
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 service_active() { systemctl is-active --quiet "$1"; }
+path_is_within_dir() {
+  local path="$1" dir="$2"
+  [[ "${path}" == "${dir}" || "${path}" == "${dir}/"* ]]
+}
 
 usage() {
   cat <<'EOF'
@@ -278,14 +282,37 @@ uninstall_k3s() {
   killall_script="$(pk3s_runtime_killall_script_path)"
   if [[ -x "${uninstall_script}" ]]; then
     sudo "${uninstall_script}" || true
-  elif [[ -x "${killall_script}" ]]; then
+  fi
+  if [[ -x "${killall_script}" ]]; then
     sudo "${killall_script}" || true
   fi
+
+  unmount_runtime_state_dirs
 
   while IFS= read -r runtime_path; do
     [[ -n "${runtime_path}" ]] || continue
     sudo rm -rf "${runtime_path}"
   done < <(pk3s_runtime_state_dirs)
+}
+
+runtime_mount_points() {
+  awk '{print $5}' /proc/self/mountinfo | sort -r
+}
+
+unmount_runtime_state_dirs() {
+  local runtime_path mount_path
+  while IFS= read -r mount_path; do
+    [[ -n "${mount_path}" ]] || continue
+    while IFS= read -r runtime_path; do
+      [[ -n "${runtime_path}" ]] || continue
+      if path_is_within_dir "${mount_path}" "${runtime_path}"; then
+        sudo umount "${mount_path}" >/dev/null 2>&1 \
+          || sudo umount -l "${mount_path}" >/dev/null 2>&1 \
+          || true
+        break
+      fi
+    done < <(pk3s_runtime_state_dirs)
+  done < <(runtime_mount_points)
 }
 
 apply_cleanup() {
@@ -336,4 +363,6 @@ main() {
   fi
 }
 
-main "$@"
+if [[ "${PRODUCTIVE_K3S_LIB_ONLY:-0}" != "1" ]]; then
+  main "$@"
+fi

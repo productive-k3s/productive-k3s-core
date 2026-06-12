@@ -102,6 +102,7 @@ for required_path in \
   "productive-k3s-core-HEAD/LICENSE" \
   "productive-k3s-core-HEAD/scripts/productive-k3s-core.sh" \
   "productive-k3s-core-HEAD/scripts/addons-runtime.sh" \
+  "productive-k3s-core-HEAD/scripts/runtime-contract.sh" \
   "productive-k3s-core-HEAD/scripts/component-versions.sh" \
   "productive-k3s-core-HEAD/scripts/preflight-host.sh" \
   "productive-k3s-core-HEAD/scripts/apply.sh" \
@@ -298,6 +299,7 @@ cp "${REPO_DIR}/productive-k3s-core.sh" "${STACK_DISPATCH_DIR}/"
 cp "${REPO_DIR}/scripts/productive-k3s-core.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/component-versions.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/addons-runtime.sh" "${STACK_DISPATCH_DIR}/scripts/"
+cp "${REPO_DIR}/scripts/runtime-contract.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cat > "${STACK_DISPATCH_DIR}/scripts/apply.sh" <<EOF
 #!/usr/bin/env bash
 printf 'stack=%s repo=%s args=%s\n' "\${PRODUCTIVE_K3S_STACK_NAME:-}" "\${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" "\$*" > "${STACK_APPLY_CAPTURE}"

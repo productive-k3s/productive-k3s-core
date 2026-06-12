@@ -29,6 +29,7 @@ INCLUDE_PATHS=(
   "productive-k3s-core.sh"
   "scripts/productive-k3s-core.sh"
   "scripts/addons-runtime.sh"
+  "scripts/runtime-contract.sh"
   "scripts/component-versions.sh"
   "scripts/preflight-host.sh"
   "scripts/apply.sh"
