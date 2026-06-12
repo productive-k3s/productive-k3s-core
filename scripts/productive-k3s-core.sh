@@ -694,6 +694,7 @@ run_packaged_addon_install() {
   local tgz_path="$1"
   local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
   local target_kubeconfig=""
+  local core_repo_dir tmp_root addon_name package_root
   target_kubeconfig="$(resolve_local_cluster_kubeconfig)" || {
     printf 'addon install could not find a readable local kubeconfig. Run apply first or set KUBECONFIG.\n' >&2
     return 4
@@ -711,11 +712,18 @@ run_packaged_addon_install() {
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
+  addon_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
   install_script="$(printf '%s\n' "${metadata}" | sed -n '3p')"
-  manifest_dir="$(dirname "${manifest}")"
+  core_repo_dir="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  tmp_root="$(mktemp -d)"
+  package_root="${tmp_root}/addons/${addon_name}"
+  mkdir -p "${package_root}" "${tmp_root}/scripts"
+  cp -R "${tmp_dir}/." "${package_root}/"
+  cp "${SCRIPT_DIR}/addon-host-runtime.sh" "${tmp_root}/scripts/addon-host-runtime.sh"
+  manifest_dir="${package_root}"
   install_path="${manifest_dir}/${install_script}"
   [[ -f "${install_path}" ]] || {
-    rm -rf "${tmp_dir}"
+    rm -rf "${tmp_dir}" "${tmp_root}"
     printf 'addon package install script not found: %s\n' "${install_script}" >&2
     return 4
   }
@@ -724,6 +732,9 @@ run_packaged_addon_install() {
   (
     cd "${manifest_dir}"
     export KUBECONFIG="${target_kubeconfig}"
+    export PRODUCTIVE_K3S_CORE_REPO_DIR="${core_repo_dir}"
+    export PK3S_KUBECTL_MODE="${PK3S_KUBECTL_MODE:-$(pk3s_runtime_addon_kubectl_mode)}"
+    export PK3S_KUBECTL_BIN="${PK3S_KUBECTL_BIN:-$(pk3s_runtime_addon_kubectl_bin)}"
     export PK3S_INGRESS_CLASS_NAME="${PK3S_INGRESS_CLASS_NAME:-$(pk3s_runtime_default_ingress_class)}"
     bash "${install_path}"
   )
@@ -731,7 +742,7 @@ run_packaged_addon_install() {
   if (( rc == 0 )) && [[ -n "${public_host}" ]]; then
     apply_addon_public_ingress "${manifest}" "$(printf '%s\n' "${metadata}" | sed -n '1p')" "${target_kubeconfig}" "${public_host}" || rc=$?
   fi
-  rm -rf "${tmp_dir}"
+  rm -rf "${tmp_dir}" "${tmp_root}"
   return "${rc}"
 }
 

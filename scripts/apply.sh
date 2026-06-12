@@ -1164,6 +1164,7 @@ print_stack_addon_impacts() {
     printf '\r\n'
     [[ -n "${impact_summary}" ]] && printf '      %s\r\n' "${impact_summary}"
   done < <(stack_install_order_addons)
+  return 0
 }
 
 ensure_packages() {
