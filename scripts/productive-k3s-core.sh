@@ -784,14 +784,14 @@ create_overlay_repo_for_stack_tgz() {
     return "${rc}"
   }
   stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
-  real_repo="$(resolve_addons_repo_dir)" || {
-    rm -rf "${tmp_dir}"
-    printf 'could not resolve productive-k3s-addons source repository. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR.\n' >&2
-    return 4
-  }
+  real_repo="$(resolve_addons_repo_dir || true)"
   overlay_root="$(mktemp -d)"
   mkdir -p "${overlay_root}/stacks/${stack_name}" "${overlay_root}/bundled-addons"
-  ln -s "${real_repo}/addons" "${overlay_root}/addons"
+  if [[ -n "${real_repo}" ]]; then
+    ln -s "${real_repo}/addons" "${overlay_root}/addons"
+  else
+    mkdir -p "${overlay_root}/addons"
+  fi
   cp "${manifest}" "${overlay_root}/stacks/${stack_name}/stack.yaml"
   if [[ -d "${tmp_dir}/addons" ]]; then
     cp -R "${tmp_dir}/addons/." "${overlay_root}/bundled-addons/"

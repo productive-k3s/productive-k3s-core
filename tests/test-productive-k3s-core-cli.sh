@@ -383,6 +383,15 @@ grep -q "stack=observability" "${STACK_APPLY_CAPTURE}" || fail "stack tgz instal
 grep -q "bundled=.*bundled-addons" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install did not expose the bundled addons directory"
 pass "stack tgz install dispatches with a bundled addons overlay"
 
+(
+  cd "${STACK_DISPATCH_DIR}" &&
+  env -u PRODUCTIVE_K3S_ADDONS_REPO_DIR ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_ARCHIVE}" --dry-run
+)
+grep -q "stack=observability" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install without a source repo did not forward the packaged stack name"
+grep -q "repo=.*tmp" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install without a source repo did not synthesize a temporary overlay repo"
+grep -q "bundled=.*bundled-addons" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install without a source repo did not expose bundled addons"
+pass "stack tgz install works without a local addons source repo when bundled packages are present"
+
 STACK_TGZ_BAD_PKG_DIR="${ADDON_TMP_DIR}/stack-tgz-bad"
 STACK_TGZ_BAD_ARCHIVE="${ADDON_TMP_DIR}/broken-stack.tgz"
 mkdir -p "${STACK_TGZ_BAD_PKG_DIR}"
