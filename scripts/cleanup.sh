@@ -278,6 +278,7 @@ run_stack_addon_clean_hooks() {
 
 uninstall_k3s() {
   local uninstall_script killall_script runtime_path
+  stop_runtime_services
   uninstall_script="$(pk3s_runtime_uninstall_script_path)"
   killall_script="$(pk3s_runtime_killall_script_path)"
   if [[ -x "${uninstall_script}" ]]; then
@@ -293,6 +294,8 @@ uninstall_k3s() {
     [[ -n "${runtime_path}" ]] || continue
     sudo rm -rf "${runtime_path}"
   done < <(pk3s_runtime_state_dirs)
+
+  reload_runtime_service_manager
 }
 
 runtime_mount_points() {
@@ -313,6 +316,20 @@ unmount_runtime_state_dirs() {
       fi
     done < <(pk3s_runtime_state_dirs)
   done < <(runtime_mount_points)
+}
+
+stop_runtime_services() {
+  local service_name
+  for service_name in "$(pk3s_runtime_server_service)" "$(pk3s_runtime_agent_service)"; do
+    [[ -n "${service_name}" ]] || continue
+    sudo systemctl stop "${service_name}" >/dev/null 2>&1 || true
+    sudo systemctl disable "${service_name}" >/dev/null 2>&1 || true
+  done
+}
+
+reload_runtime_service_manager() {
+  sudo systemctl daemon-reload >/dev/null 2>&1 || true
+  sudo systemctl reset-failed >/dev/null 2>&1 || true
 }
 
 apply_cleanup() {

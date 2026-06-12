@@ -42,11 +42,17 @@ Describe 'cleanup runtime helpers'
       uninstall_k3s
       cat "${capture_file}"'
     The status should equal 0
+    The output should include 'sudo:systemctl stop rke2-server'
+    The output should include 'sudo:systemctl disable rke2-server'
+    The output should include 'sudo:systemctl stop rke2-agent'
+    The output should include 'sudo:systemctl disable rke2-agent'
     The output should include 'sudo:'
     The output should include 'rke2-uninstall.sh'
     The output should include 'rke2-killall.sh'
     The output should include 'sudo:umount /var/lib/kubelet/pods/pod-a/volumes/kubernetes.io~projected/kube-api-access'
     The output should include 'sudo:rm -rf /etc/rancher/rke2'
     The output should include 'sudo:rm -rf /var/lib/kubelet'
+    The output should include 'sudo:systemctl daemon-reload'
+    The output should include 'sudo:systemctl reset-failed'
   End
 End
