@@ -362,10 +362,63 @@ stack_yaml_get() {
     /^metadata:/ { section="metadata"; subsection=""; next }
     /^spec:/ { section="spec"; subsection=""; next }
     section == "spec" && /^  addons:/ { subsection="addons"; next }
+    section == "spec" && /^  resolution:/ { subsection="resolution"; next }
     section == "metadata" && key == "metadata.name" && /^  name:/ { print; exit }
     section == "metadata" && key == "metadata.version" && /^  version:/ { print; exit }
+    section == "spec" && subsection == "resolution" && key == "spec.resolution.mode" && /^    mode:/ { print; exit }
     section == "spec" && subsection == "addons" && /^    - / { print }
   ' "${file}"
+}
+
+stack_manifest_addon_records() {
+  local manifest="$1"
+  awk '
+    /^spec:/ { in_spec=1; next }
+    in_spec && /^  addons:/ { in_addons=1; next }
+    in_addons && /^  / && !/^    / { exit }
+    !in_addons { next }
+    /^    - / {
+      flush_record()
+      line=$0
+      sub(/^    - /, "", line)
+      current_name=""
+      current_version=""
+      current_source=""
+      if (line ~ /^name:[[:space:]]*/) {
+        sub(/^name:[[:space:]]*/, "", line)
+        current_name=line
+      } else if (line !~ /:/) {
+        current_name=line
+      }
+      in_record=1
+      next
+    }
+    in_record && /^      / {
+      line=$0
+      sub(/^      /, "", line)
+      if (line ~ /^name:[[:space:]]*/) {
+        sub(/^name:[[:space:]]*/, "", line)
+        current_name=line
+      } else if (line ~ /^version:[[:space:]]*/) {
+        sub(/^version:[[:space:]]*/, "", line)
+        current_version=line
+      } else if (line ~ /^source:[[:space:]]*/) {
+        sub(/^source:[[:space:]]*/, "", line)
+        current_source=line
+      }
+      next
+    }
+    in_record { flush_record(); in_record=0 }
+    END { flush_record() }
+    function flush_record() {
+      if (!in_record) {
+        return
+      }
+      if (current_name != "" || current_version != "" || current_source != "") {
+        printf "name=%s\tversion=%s\tsource=%s\n", current_name, current_version, current_source
+      }
+    }
+  ' "${manifest}"
 }
 
 extract_tgz_to_temp() {
@@ -431,10 +484,9 @@ validate_addon_manifest() {
 
 validate_stack_manifest() {
   local manifest="$1"
-  local stack_name stack_version addons_raw addon_count=0
+  local stack_name stack_version addon_count=0
   stack_name="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "metadata.name")")"
   stack_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "metadata.version")")"
-  addons_raw="$(stack_yaml_get "${manifest}" "spec.addons")"
 
   [[ -n "${stack_name}" ]] || {
     printf 'stack source metadata.name is required\n' >&2
@@ -444,20 +496,61 @@ validate_stack_manifest() {
     printf 'stack source metadata.version is required\n' >&2
     return 4
   }
-  while IFS= read -r addon_line; do
-    [[ -n "${addon_line}" ]] || continue
+  while IFS= read -r addon_record; do
+    [[ -n "${addon_record}" ]] || continue
     local addon_name
-    addon_name="${addon_line#*- }"
-    addon_name="${addon_name# }"
-    [[ -n "${addon_name}" ]] || continue
+    addon_name="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^name=/) {
+            sub(/^name=/, "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    ')"
+    [[ -n "${addon_name}" ]] || {
+      printf 'stack source addon entries require a name\n' >&2
+      return 4
+    }
     addon_count=$((addon_count + 1))
-  done <<< "${addons_raw}"
+  done < <(stack_manifest_addon_records "${manifest}")
   (( addon_count > 0 )) || {
     printf 'stack source spec.addons must include at least one addon\n' >&2
     return 4
   }
 
   printf '%s\n%s\n%s\n' "${stack_name}" "${stack_version}" "${addon_count}"
+}
+
+validate_stack_bundled_sources() {
+  local manifest="$1"
+  local package_root="$2"
+  while IFS= read -r addon_record; do
+    [[ -n "${addon_record}" ]] || continue
+    local addon_source
+    addon_source="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^source=/) {
+            sub(/^source=/, "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    ')"
+    [[ -n "${addon_source}" ]] || continue
+    [[ "${addon_source}" == addons/* ]] || {
+      printf 'stack addon source must stay within addons/: %s\n' "${addon_source}" >&2
+      return 4
+    }
+    [[ -f "${package_root}/${addon_source}" ]] || {
+      printf 'Bundled addon package not found: %s\n' "${addon_source}" >&2
+      return 4
+    }
+  done < <(stack_manifest_addon_records "${manifest}")
 }
 
 resolve_addon_public_ingress_support() {
@@ -673,20 +766,38 @@ create_overlay_repo_for_stack_manifest() {
 
 create_overlay_repo_for_stack_tgz() {
   local tgz_path="$1"
-  local tmp_dir manifest overlay_result
+  local tmp_dir manifest metadata stack_name overlay_root real_repo
   tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
   manifest="$(resolve_stack_manifest "${tmp_dir}")" || {
     local rc=$?
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
-  overlay_result="$(create_overlay_repo_for_stack_manifest "${manifest}")" || {
+  metadata="$(validate_stack_manifest "${manifest}")" || {
     local rc=$?
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
+  validate_stack_bundled_sources "${manifest}" "${tmp_dir}" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
+  real_repo="$(resolve_addons_repo_dir)" || {
+    rm -rf "${tmp_dir}"
+    printf 'could not resolve productive-k3s-addons source repository. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR.\n' >&2
+    return 4
+  }
+  overlay_root="$(mktemp -d)"
+  mkdir -p "${overlay_root}/stacks/${stack_name}" "${overlay_root}/bundled-addons"
+  ln -s "${real_repo}/addons" "${overlay_root}/addons"
+  cp "${manifest}" "${overlay_root}/stacks/${stack_name}/stack.yaml"
+  if [[ -d "${tmp_dir}/addons" ]]; then
+    cp -R "${tmp_dir}/addons/." "${overlay_root}/bundled-addons/"
+  fi
   rm -rf "${tmp_dir}"
-  printf '%s\n' "${overlay_result}"
+  printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
 }
 
 create_overlay_repo_for_addon_name() {
@@ -728,7 +839,12 @@ run_stack_install_from_overlay() {
   local overlay_repo="$1"
   local stack_name="$2"
   shift 2
-  with_stack_source_env "${overlay_repo}" "${stack_name}" "${SCRIPT_DIR}/apply.sh" --mode stack "$@"
+  (
+    export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${overlay_repo}"
+    export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
+    export PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR="${overlay_repo}/bundled-addons"
+    "${SCRIPT_DIR}/apply.sh" --mode stack "$@"
+  )
 }
 
 run_addon_install() {

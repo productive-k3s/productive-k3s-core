@@ -222,6 +222,32 @@ printf '%s\n' "$stack_validate_output" | grep -q "Stack source validation passed
 printf '%s\n' "$stack_validate_output" | grep -q "base" || fail "stack validation did not report stack metadata"
 pass "stack source validation works"
 
+STACK_STRUCTURED_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source-structured"
+mkdir -p "${STACK_STRUCTURED_SOURCE_DIR}"
+cat >"${STACK_STRUCTURED_SOURCE_DIR}/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: observability
+  version: 1.0.0
+spec:
+  resolution:
+    mode: bundled
+  addons:
+    - name: prometheus
+      version: 1.2.0
+      source: addons/prometheus.tgz
+    - name: grafana
+      version: 2.1.0
+  wiring:
+    values:
+      - values/prometheus.yaml
+EOF
+structured_stack_validate_output="$(cd "$REPO_DIR" && ./productive-k3s-core.sh dev stack validate --source "${STACK_STRUCTURED_SOURCE_DIR}")"
+printf '%s\n' "$structured_stack_validate_output" | grep -q "Stack source validation passed" || fail "structured stack source validation did not pass"
+printf '%s\n' "$structured_stack_validate_output" | grep -q "observability" || fail "structured stack validation did not report stack metadata"
+pass "stack source validation accepts structured addon entries"
+
 cat >"${STACK_BAD_SOURCE_DIR}/stack.yaml" <<'EOF'
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
@@ -302,7 +328,7 @@ cp "${REPO_DIR}/scripts/addons-runtime.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/runtime-contract.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cat > "${STACK_DISPATCH_DIR}/scripts/apply.sh" <<EOF
 #!/usr/bin/env bash
-printf 'stack=%s repo=%s args=%s\n' "\${PRODUCTIVE_K3S_STACK_NAME:-}" "\${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" "\$*" > "${STACK_APPLY_CAPTURE}"
+printf 'stack=%s repo=%s bundled=%s args=%s\n' "\${PRODUCTIVE_K3S_STACK_NAME:-}" "\${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" "\${PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR:-}" "\$*" > "${STACK_APPLY_CAPTURE}"
 EOF
 cat > "${STACK_DISPATCH_DIR}/scripts/validate.sh" <<EOF
 #!/usr/bin/env bash
@@ -330,6 +356,58 @@ EOF
 grep -q "stack=base" "${STACK_APPLY_CAPTURE}" || fail "stack install did not forward the selected stack name"
 grep -q -- "--mode stack --dry-run" "${STACK_APPLY_CAPTURE}" || fail "stack install did not invoke apply in stack mode"
 pass "stack install dispatches to apply in explicit stack mode"
+
+STACK_TGZ_PKG_DIR="${ADDON_TMP_DIR}/stack-tgz"
+STACK_TGZ_ARCHIVE="${ADDON_TMP_DIR}/observability-stack.tgz"
+mkdir -p "${STACK_TGZ_PKG_DIR}/addons"
+cat > "${STACK_TGZ_PKG_DIR}/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: observability
+  version: 1.0.0
+spec:
+  resolution:
+    mode: bundled
+  addons:
+    - name: prometheus
+      source: addons/prometheus.tgz
+EOF
+printf 'placeholder' > "${STACK_TGZ_PKG_DIR}/addons/prometheus.tgz"
+tar -czf "${STACK_TGZ_ARCHIVE}" -C "${STACK_TGZ_PKG_DIR}" .
+(
+  cd "${STACK_DISPATCH_DIR}" &&
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_ARCHIVE}" --dry-run
+)
+grep -q "stack=observability" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install did not forward the packaged stack name"
+grep -q "bundled=.*bundled-addons" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install did not expose the bundled addons directory"
+pass "stack tgz install dispatches with a bundled addons overlay"
+
+STACK_TGZ_BAD_PKG_DIR="${ADDON_TMP_DIR}/stack-tgz-bad"
+STACK_TGZ_BAD_ARCHIVE="${ADDON_TMP_DIR}/broken-stack.tgz"
+mkdir -p "${STACK_TGZ_BAD_PKG_DIR}"
+cat > "${STACK_TGZ_BAD_PKG_DIR}/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: broken-stack
+  version: 1.0.0
+spec:
+  resolution:
+    mode: bundled
+  addons:
+    - name: prometheus
+      source: addons/prometheus.tgz
+EOF
+tar -czf "${STACK_TGZ_BAD_ARCHIVE}" -C "${STACK_TGZ_BAD_PKG_DIR}" .
+if (
+  cd "${STACK_DISPATCH_DIR}" &&
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_BAD_ARCHIVE}" >/tmp/productive-k3s-core-stack-bundled.out 2>&1
+); then
+  fail "bundled stack unexpectedly succeeded without packaged addon tgz"
+fi
+grep -q "Bundled addon package not found" /tmp/productive-k3s-core-stack-bundled.out || fail "missing bundled addon validation message"
+pass "stack tgz install rejects missing bundled addon packages"
 
 (
   cd "${STACK_DISPATCH_DIR}" &&

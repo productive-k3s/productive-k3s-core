@@ -202,6 +202,9 @@ assert_contains "$root_local_all_recipe" "./scripts/productive-k3s-core-dev.sh t
 root_external_all_recipe="$(make -C "${REPO_DIR}" -n test-external-all)"
 assert_contains "$root_external_all_recipe" "./scripts/productive-k3s-core-dev.sh test-external-all"
 
+root_stacks_recipe="$(make -C "${REPO_DIR}" -n test-stacks)"
+assert_contains "$root_stacks_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks"
+
 root_tag_release_recipe="$(make -C "${REPO_DIR}" -n tag-release VERSION=1.2.3)"
 assert_contains "$root_tag_release_recipe" "./scripts/create-release-tag.sh 1.2.3"
 

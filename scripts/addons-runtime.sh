@@ -41,16 +41,72 @@ resolve_stack_source_manifest() {
   printf '%s\n' "${manifest}"
 }
 
-stack_source_addon_names() {
+stack_source_addon_records() {
   local stack_name="$1"
   local manifest
   manifest="$(resolve_stack_source_manifest "${stack_name}")" || return 1
   awk '
     /^spec:/ { in_spec=1; next }
     in_spec && /^  addons:/ { in_addons=1; next }
-    in_addons && /^    - / { sub(/^    - /, "", $0); print; next }
-    in_addons && !/^    - / { exit }
+    in_addons && /^  / && !/^    / { exit }
+    !in_addons { next }
+    /^    - / {
+      flush_record()
+      line=$0
+      sub(/^    - /, "", line)
+      current_name=""
+      current_version=""
+      current_source=""
+      if (line ~ /^name:[[:space:]]*/) {
+        sub(/^name:[[:space:]]*/, "", line)
+        current_name=line
+      } else if (line !~ /:/) {
+        current_name=line
+      }
+      in_record=1
+      next
+    }
+    in_record && /^      / {
+      line=$0
+      sub(/^      /, "", line)
+      if (line ~ /^name:[[:space:]]*/) {
+        sub(/^name:[[:space:]]*/, "", line)
+        current_name=line
+      } else if (line ~ /^version:[[:space:]]*/) {
+        sub(/^version:[[:space:]]*/, "", line)
+        current_version=line
+      } else if (line ~ /^source:[[:space:]]*/) {
+        sub(/^source:[[:space:]]*/, "", line)
+        current_source=line
+      }
+      next
+    }
+    in_record { flush_record(); in_record=0 }
+    END { flush_record() }
+    function flush_record() {
+      if (!in_record) {
+        return
+      }
+      if (current_name != "" || current_version != "" || current_source != "") {
+        printf "name=%s\tversion=%s\tsource=%s\n", current_name, current_version, current_source
+      }
+    }
   ' "${manifest}"
+}
+
+stack_source_addon_names() {
+  local stack_name="$1"
+  stack_source_addon_records "${stack_name}" | awk -F '\t' '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^name=/) {
+          sub(/^name=/, "", $i)
+          print $i
+          break
+        }
+      }
+    }
+  '
 }
 
 addon_component_key() {

@@ -25,6 +25,7 @@ Development commands:
   test-checkstatus-external
   test-local-all
   test-external-all
+  test-stacks
   test-preflight-host
   test-arm-support-docs
   test-bootstrap-modes
@@ -54,6 +55,7 @@ Environment:
   PRODUCTIVE_K3S_ADDONS_REPO_DIR  Local productive-k3s-addons checkout to copy for full/core VM tests
   PRODUCTIVE_K3S_ADDONS_REPO_URL  Git URL to clone productive-k3s-addons when no local checkout is provided
   PRODUCTIVE_K3S_ADDONS_REPO_REF  Branch or tag to clone from PRODUCTIVE_K3S_ADDONS_REPO_URL (default: main)
+  STACK_TGZ_URL                   Published stack tgz URL used by test-stacks
 EOF
 }
 
@@ -203,10 +205,15 @@ main() {
     test-external-all)
       shift
       clean_suite_category_artifacts external
+      run_suite_with_artifact external test-stacks bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh"
       run_suite_with_artifact external test-telemetry-consent bash "${REPO_DIR}/tests/test-telemetry-consent.sh"
       run_suite_with_artifact external test-telemetry-delivery bash "${REPO_DIR}/tests/test-telemetry-delivery.sh"
       run_suite_with_artifact external test-telemetry-default-endpoint bash "${REPO_DIR}/tests/test-telemetry-default-endpoint.sh"
       exec "${REPO_DIR}/tests/run-suite-with-artifact.sh" external test-bootstrap-telemetry-events bash "${REPO_DIR}/tests/test-bootstrap-telemetry-events.sh" "$@"
+      ;;
+    test-stacks)
+      shift
+      exec bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
       ;;
     test-preflight-host)
       shift

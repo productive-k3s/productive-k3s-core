@@ -1602,6 +1602,15 @@ stack_install_order_addons() {
   stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}"
 }
 
+stack_install_order_addon_records() {
+  if ! stack_source_addon_records "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
+    err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
+    exit 1
+  fi
+
+  stack_source_addon_records "${PRODUCTIVE_K3S_STACK_NAME}"
+}
+
 write_addon_config_var() {
   local output_file="$1"
   local key="$2"
@@ -1688,6 +1697,48 @@ install_stack_addon_by_name() {
       warn "Stack '${PRODUCTIVE_K3S_STACK_NAME}' references unsupported addon '${addon_name}'. Skipping."
       ;;
   esac
+}
+
+install_stack_addon_record() {
+  local addon_record="$1"
+  local addon_name addon_source bundled_path
+  addon_name="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^name=/) {
+          sub(/^name=/, "", $i)
+          print $i
+          exit
+        }
+      }
+    }
+  ')"
+  addon_source="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^source=/) {
+          sub(/^source=/, "", $i)
+          print $i
+          exit
+        }
+      }
+    }
+  ')"
+  [[ -n "${addon_name}" ]] || {
+    err "Stack '${PRODUCTIVE_K3S_STACK_NAME}' contains an addon entry without a name."
+    exit 1
+  }
+  if [[ -n "${addon_source}" ]]; then
+    bundled_path="${PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR:-}/${addon_source#addons/}"
+    [[ -f "${bundled_path}" ]] || {
+      err "Bundled addon package not found: ${addon_source}"
+      exit 1
+    }
+    log "Installing bundled addon package '${addon_source}' for stack '${PRODUCTIVE_K3S_STACK_NAME}'"
+    "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
+    return
+  fi
+  install_stack_addon_by_name "${addon_name}"
 }
 
 ensure_cert_manager() {
@@ -2414,12 +2465,12 @@ main() {
     warn "$(pk3s_runtime_cluster_label) is not active yet. Cluster-level checks will be partial until it is installed for real."
   fi
   if mode_runs_stack; then
-    local stack_addon_name
-    local -a stack_addons=()
-    mapfile -t stack_addons < <(stack_install_order_addons)
-    for stack_addon_name in "${stack_addons[@]}"; do
-      [[ -n "${stack_addon_name}" ]] || continue
-      install_stack_addon_by_name "${stack_addon_name}"
+    local stack_addon_record
+    local -a stack_addon_records=()
+    mapfile -t stack_addon_records < <(stack_install_order_addon_records)
+    for stack_addon_record in "${stack_addon_records[@]}"; do
+      [[ -n "${stack_addon_record}" ]] || continue
+      install_stack_addon_record "${stack_addon_record}"
     done
   fi
   if mode_runs_host_local && [[ "$ENABLE_NFS" == "y" ]]; then
