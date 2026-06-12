@@ -1611,6 +1611,36 @@ stack_install_order_addon_records() {
   stack_source_addon_records "${PRODUCTIVE_K3S_STACK_NAME}"
 }
 
+stack_bundled_addon_package_path() {
+  local addon_name="$1"
+  local addon_record addon_source
+
+  [[ -n "${PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR:-}" ]] || return 1
+
+  while IFS= read -r addon_record; do
+    [[ -n "${addon_record}" ]] || continue
+    if ! printf '%s\n' "${addon_record}" | grep -q "^name=${addon_name}"$'\t'; then
+      continue
+    fi
+    addon_source="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^source=/) {
+            sub(/^source=/, "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    ')"
+    [[ -n "${addon_source}" ]] || return 1
+    printf '%s\n' "${PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR}/${addon_source#addons/}"
+    return 0
+  done < <(stack_install_order_addon_records)
+
+  return 1
+}
+
 write_addon_config_var() {
   local output_file="$1"
   local key="$2"
@@ -1629,17 +1659,108 @@ run_addon_source_configure_hook() {
   local addon_name="$1"
   local phase="$2"
   local output_file="$3"
+  local bundled_path bundled_tmp_dir bundled_script rc
 
-  if ! addon_source_script_exists "${addon_name}" configure.sh; then
-    err "Addon '${addon_name}' does not provide scripts/configure.sh"
-    exit 1
+  if addon_source_script_exists "${addon_name}" configure.sh; then
+    : > "${output_file}"
+    if ! run_addon_source_hook "${addon_name}" configure.sh pk3s_addon_configure "${phase}" "${output_file}"; then
+      err "Addon '${addon_name}' configure hook 'pk3s_addon_configure' is missing."
+      exit 1
+    fi
+    return
   fi
 
-  : > "${output_file}"
-  if ! run_addon_source_hook "${addon_name}" configure.sh pk3s_addon_configure "${phase}" "${output_file}"; then
-    err "Addon '${addon_name}' configure hook 'pk3s_addon_configure' is missing."
-    exit 1
+  bundled_path="$(stack_bundled_addon_package_path "${addon_name}" || true)"
+  if [[ -n "${bundled_path}" && -f "${bundled_path}" ]]; then
+    bundled_tmp_dir="$(mktemp -d)"
+    tar -xzf "${bundled_path}" -C "${bundled_tmp_dir}"
+    bundled_script="${bundled_tmp_dir}/scripts/configure.sh"
+    if [[ ! -f "${bundled_script}" ]]; then
+      rm -rf "${bundled_tmp_dir}"
+      err "Addon '${addon_name}' does not provide scripts/configure.sh"
+      exit 1
+    fi
+
+    : > "${output_file}"
+    (
+      cd "${bundled_tmp_dir}"
+      # shellcheck disable=SC1090
+      source "${bundled_script}"
+      if ! declare -F pk3s_addon_configure >/dev/null 2>&1; then
+        exit 2
+      fi
+      pk3s_addon_configure "${phase}" "${output_file}"
+    )
+    rc=$?
+    rm -rf "${bundled_tmp_dir}"
+    if [[ "${rc}" -ne 0 ]]; then
+      if [[ "${rc}" -eq 2 ]]; then
+        err "Addon '${addon_name}' configure hook 'pk3s_addon_configure' is missing."
+      fi
+      exit 1
+    fi
+    return
   fi
+
+  err "Addon '${addon_name}' does not provide scripts/configure.sh"
+  exit 1
+}
+
+stack_addon_record_source_value() {
+  local addon_record="$1"
+  printf '%s\n' "${addon_record}" | awk -F '\t' '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^source=/) {
+          sub(/^source=/, "", $i)
+          print $i
+          exit
+        }
+      }
+    }
+  '
+}
+
+stack_addon_record_name_value() {
+  local addon_record="$1"
+  printf '%s\n' "${addon_record}" | awk -F '\t' '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^name=/) {
+          sub(/^name=/, "", $i)
+          print $i
+          exit
+        }
+      }
+    }
+  '
+}
+
+install_stack_addon_record() {
+  local addon_record="$1"
+  local addon_name addon_source bundled_path
+  addon_name="$(stack_addon_record_name_value "${addon_record}")"
+  addon_source="$(stack_addon_record_source_value "${addon_record}")"
+  [[ -n "${addon_name}" ]] || {
+    err "Stack '${PRODUCTIVE_K3S_STACK_NAME}' contains an addon entry without a name."
+    exit 1
+  }
+  if [[ -n "${addon_source}" ]]; then
+    bundled_path="${PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR:-}/${addon_source#addons/}"
+    [[ -f "${bundled_path}" ]] || {
+      err "Bundled addon package not found: ${addon_source}"
+      exit 1
+    }
+    if [[ "${DRY_RUN}" == "1" ]]; then
+      log "[dry-run] Would install bundled addon package '${addon_source}' for stack '${PRODUCTIVE_K3S_STACK_NAME}'"
+      track_install "bundled-addon:${addon_name}"
+      return
+    fi
+    log "Installing bundled addon package '${addon_source}' for stack '${PRODUCTIVE_K3S_STACK_NAME}'"
+    "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
+    return
+  fi
+  install_stack_addon_by_name "${addon_name}"
 }
 
 install_stack_addon_by_name() {
@@ -1697,53 +1818,6 @@ install_stack_addon_by_name() {
       warn "Stack '${PRODUCTIVE_K3S_STACK_NAME}' references unsupported addon '${addon_name}'. Skipping."
       ;;
   esac
-}
-
-install_stack_addon_record() {
-  local addon_record="$1"
-  local addon_name addon_source bundled_path
-  addon_name="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
-    {
-      for (i = 1; i <= NF; i++) {
-        if ($i ~ /^name=/) {
-          sub(/^name=/, "", $i)
-          print $i
-          exit
-        }
-      }
-    }
-  ')"
-  addon_source="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
-    {
-      for (i = 1; i <= NF; i++) {
-        if ($i ~ /^source=/) {
-          sub(/^source=/, "", $i)
-          print $i
-          exit
-        }
-      }
-    }
-  ')"
-  [[ -n "${addon_name}" ]] || {
-    err "Stack '${PRODUCTIVE_K3S_STACK_NAME}' contains an addon entry without a name."
-    exit 1
-  }
-  if [[ -n "${addon_source}" ]]; then
-    bundled_path="${PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR:-}/${addon_source#addons/}"
-    [[ -f "${bundled_path}" ]] || {
-      err "Bundled addon package not found: ${addon_source}"
-      exit 1
-    }
-    if [[ "${DRY_RUN}" == "1" ]]; then
-      log "[dry-run] Would install bundled addon package '${addon_source}' for stack '${PRODUCTIVE_K3S_STACK_NAME}'"
-      track_install "bundled-addon:${addon_name}"
-      return
-    fi
-    log "Installing bundled addon package '${addon_source}' for stack '${PRODUCTIVE_K3S_STACK_NAME}'"
-    "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
-    return
-  fi
-  install_stack_addon_by_name "${addon_name}"
 }
 
 ensure_cert_manager() {

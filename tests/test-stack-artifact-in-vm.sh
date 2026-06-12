@@ -128,12 +128,13 @@ main() {
   assert_in_vm "tar -xOf '${STACK_TGZ_REMOTE_PATH}' ./stack.yaml | grep -q 'name: ${STACK_EXPECTED_NAME}'" "published stack manifest does not expose the expected stack name"
 
   log "Running packaged stack dry-run first"
-  run_in_vm "cd '${REMOTE_DIR}' && unset PRODUCTIVE_K3S_ADDONS_REPO_DIR && ./productive-k3s-core.sh stack install --tgz '${STACK_TGZ_REMOTE_PATH}' --dry-run >/tmp/pk3s-stack-dry-run.log 2>&1"
+  run_in_vm "cd '${REMOTE_DIR}' && unset PRODUCTIVE_K3S_ADDONS_REPO_DIR && export PRODUCTIVE_K3S_DISTRO='${DISTRO}' PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true && ./productive-k3s-core.sh stack install --tgz '${STACK_TGZ_REMOTE_PATH}' --dry-run >/tmp/pk3s-stack-dry-run.log 2>&1 </dev/null"
 
   log "Installing the packaged stack from TGZ"
   full_answers | multipass exec "${VM_NAME}" -- bash -lc "
     cd '${REMOTE_DIR}' &&
     unset PRODUCTIVE_K3S_ADDONS_REPO_DIR &&
+    export PRODUCTIVE_K3S_DISTRO='${DISTRO}' &&
     export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true &&
     ./productive-k3s-core.sh stack install --tgz '${STACK_TGZ_REMOTE_PATH}'
   "
