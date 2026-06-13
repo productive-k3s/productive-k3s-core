@@ -31,6 +31,8 @@ TRANSFER_STAGED_ADDONS_REPO=""
 ADDONS_REPO_DIR=""
 REMOTE_ADDONS_DIR=""
 REMOTE_COMMAND_STATUS=""
+VM_LAUNCH_TIMEOUT_SECONDS="${VM_LAUNCH_TIMEOUT_SECONDS:-}"
+VM_LAUNCH_RETRY_SLEEP_SECONDS="${VM_LAUNCH_RETRY_SLEEP_SECONDS:-15}"
 
 usage() {
   cat <<'EOU'
@@ -102,6 +104,17 @@ default_remote_user_for_platform() {
       ;;
     *)
       return 1
+      ;;
+  esac
+}
+
+default_launch_timeout_for_image() {
+  case "$1" in
+    http://*|https://*)
+      printf '900'
+      ;;
+    *)
+      printf '300'
       ;;
   esac
 }
@@ -325,9 +338,11 @@ write_artifacts() {
 }
 
 launch_vm() {
-  local timeout_secs="300"
-  local sleep_secs="15"
+  local timeout_secs sleep_secs
   local start_ts now_ts
+
+  timeout_secs="${VM_LAUNCH_TIMEOUT_SECONDS:-$(default_launch_timeout_for_image "$VM_IMAGE")}"
+  sleep_secs="${VM_LAUNCH_RETRY_SLEEP_SECONDS}"
 
   log "Launching VM: $VM_NAME"
   start_ts=$(date +%s)
@@ -337,6 +352,10 @@ launch_vm() {
       VM_CREATED="y"
       return 0
     fi
+
+    # A failed remote-image launch can leave a partial instance record behind.
+    multipass delete "$VM_NAME" >/dev/null 2>&1 || true
+    multipass purge >/dev/null 2>&1 || true
 
     now_ts=$(date +%s)
     if (( now_ts - start_ts >= timeout_secs )); then

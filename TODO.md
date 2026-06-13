@@ -57,6 +57,9 @@ Rules:
 - `Close Release Checklist`
   `Add a maintainer checklist for source change, artifact generation, publish, catalog update, and isolated checkout validation of stack artifacts.`
 
+- `Centralize GitHub Owner and Release URL Base`
+  `Replace hardcoded jemacchi repo URLs with a repo-local base/owner setting in docs/src/index.md, docs/src/en/product/how-to-use.md, docs/src/es/product/how-to-use.md, and docs/mkdocs.yml.`
+
 - `Update User-Facing Documentation`
   `Refresh product, user, and developer docs so published examples reflect explicit stack installation, artifact testing, and current support boundaries.`
 
