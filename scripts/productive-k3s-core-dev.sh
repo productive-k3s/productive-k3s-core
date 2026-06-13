@@ -156,6 +156,18 @@ run_stack_artifact_test() {
     bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
 }
 
+run_stack_artifact_matrix_k3s() {
+  run_stack_artifact_test k3s ubuntu 24.04 "$@" || return $?
+  run_stack_artifact_test k3s ubuntu 22.04 "$@" || return $?
+  run_stack_artifact_test k3s debian13 https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 "$@" || return $?
+  run_stack_artifact_test k3s debian12 https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 "$@"
+}
+
+run_stack_artifact_matrix_rke2() {
+  run_stack_artifact_test rke2 ubuntu 24.04 "$@" || return $?
+  run_stack_artifact_test rke2 ubuntu 22.04 "$@"
+}
+
 main() {
   local command="${1:-help}"
   local local_suite_needs_addons="n"
@@ -237,7 +249,7 @@ main() {
     test-external-all)
       shift
       clean_suite_category_artifacts external
-      run_suite_with_artifact external test-stacks-external bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh"
+      run_suite_with_artifact external test-stacks bash "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-raw "$@"
       run_suite_with_artifact external test-telemetry-consent bash "${REPO_DIR}/tests/test-telemetry-consent.sh"
       run_suite_with_artifact external test-telemetry-delivery bash "${REPO_DIR}/tests/test-telemetry-delivery.sh"
       run_suite_with_artifact external test-telemetry-default-endpoint bash "${REPO_DIR}/tests/test-telemetry-default-endpoint.sh"
@@ -245,20 +257,28 @@ main() {
       ;;
     test-stacks)
       shift
-      "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-k3s "$@" || exit $?
-      exec "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-rke2 "$@"
+      run_suite_with_artifact external test-stacks bash "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-raw "$@"
+      ;;
+    test-stacks-raw)
+      shift
+      "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-k3s-raw "$@" || exit $?
+      exec "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-rke2-raw "$@"
       ;;
     test-stacks-k3s)
       shift
-      run_stack_artifact_test k3s ubuntu 24.04 "$@" || exit $?
-      run_stack_artifact_test k3s ubuntu 22.04 "$@" || exit $?
-      run_stack_artifact_test k3s debian13 https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 "$@" || exit $?
-      exec env PRODUCTIVE_K3S_DISTRO=k3s STACK_TEST_PLATFORM=debian12 STACK_TEST_IMAGE=https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
+      run_suite_with_artifact external test-stacks-k3s bash "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-k3s-raw "$@"
+      ;;
+    test-stacks-k3s-raw)
+      shift
+      run_stack_artifact_matrix_k3s "$@"
       ;;
     test-stacks-rke2)
       shift
-      run_stack_artifact_test rke2 ubuntu 24.04 "$@" || exit $?
-      exec env PRODUCTIVE_K3S_DISTRO=rke2 STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=22.04 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
+      run_suite_with_artifact external test-stacks-rke2 bash "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-rke2-raw "$@"
+      ;;
+    test-stacks-rke2-raw)
+      shift
+      run_stack_artifact_matrix_rke2 "$@"
       ;;
     test-stacks-k3s-ubuntu24)
       shift
