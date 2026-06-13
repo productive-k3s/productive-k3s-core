@@ -58,10 +58,18 @@ Dedicated Ubuntu 24.04 RKE2 entrypoints are also available:
 
 ```bash
 make test-rke2-core
+make test-rke2-core-ubuntu22
 make test-rke2-full
 make test-rke2-full-clean
 make test-rke2-full-rollback
 make test-rke2-ubuntu-all
+```
+
+Published stack artifact entrypoints are also available:
+
+```bash
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-rke2
 ```
 
 Category intent:

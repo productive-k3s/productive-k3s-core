@@ -206,6 +206,15 @@ assert_contains "$(sed -n '1,260p' "${REPO_DIR}/scripts/productive-k3s-core-dev.
 root_stacks_recipe="$(make -C "${REPO_DIR}" -n test-stacks)"
 assert_contains "$root_stacks_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks"
 
+root_stacks_k3s_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s)"
+assert_contains "$root_stacks_k3s_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s"
+
+root_stacks_rke2_recipe="$(make -C "${REPO_DIR}" -n test-stacks-rke2)"
+assert_contains "$root_stacks_rke2_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-rke2"
+
+root_rke2_core_ubuntu22_recipe="$(make -C "${REPO_DIR}" -n test-rke2-core-ubuntu22)"
+assert_contains "$root_rke2_core_ubuntu22_recipe" "./scripts/productive-k3s-core-dev.sh test-rke2-core-ubuntu22"
+
 root_tag_release_recipe="$(make -C "${REPO_DIR}" -n tag-release VERSION=1.2.3)"
 assert_contains "$root_tag_release_recipe" "./scripts/create-release-tag.sh 1.2.3"
 

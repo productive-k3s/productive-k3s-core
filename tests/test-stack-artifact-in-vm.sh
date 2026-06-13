@@ -50,6 +50,12 @@ need_cmd() {
   }
 }
 
+validate_runtime_matrix() {
+  if [[ "${DISTRO}" == "rke2" && "${PLATFORM}" != "ubuntu" ]]; then
+    fail "rke2 stack artifact tests currently support Ubuntu only (requested platform: ${PLATFORM})"
+  fi
+}
+
 log() {
   printf '[INFO] %s\n' "$1"
 }
@@ -100,6 +106,7 @@ main() {
     fail "STACK_TGZ_URL is required"
   }
 
+  validate_runtime_matrix
   need_cmd multipass
   need_cmd curl
   trap cleanup EXIT

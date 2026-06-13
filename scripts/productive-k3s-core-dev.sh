@@ -26,6 +26,8 @@ Development commands:
   test-local-all
   test-external-all
   test-stacks
+  test-stacks-k3s
+  test-stacks-rke2
   test-preflight-host
   test-arm-support-docs
   test-bootstrap-modes
@@ -37,6 +39,7 @@ Development commands:
   test-smoke
   test-core
   test-rke2-core
+  test-rke2-core-ubuntu22
   test-rke2-full
   test-rke2-full-clean
   test-rke2-full-rollback
@@ -122,6 +125,29 @@ run_suite_with_artifact() {
   local suite_name="$2"
   shift 2
   "${REPO_DIR}/tests/run-suite-with-artifact.sh" "${suite_category}" "${suite_name}" "$@"
+}
+
+assert_rke2_ubuntu_only() {
+  local platform="$1"
+  if [[ "${platform}" != "ubuntu" ]]; then
+    printf 'rke2 test targets currently support Ubuntu only (requested platform: %s)\n' "${platform}" >&2
+    exit 1
+  fi
+}
+
+run_stack_artifact_test() {
+  local distro="$1"
+  local platform="$2"
+  local image="$3"
+  shift 3
+  if [[ "${distro}" == "rke2" ]]; then
+    assert_rke2_ubuntu_only "${platform}"
+  fi
+  exec env \
+    PRODUCTIVE_K3S_DISTRO="${distro}" \
+    STACK_TEST_PLATFORM="${platform}" \
+    STACK_TEST_IMAGE="${image}" \
+    bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
 }
 
 main() {
@@ -215,6 +241,14 @@ main() {
       shift
       exec bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
       ;;
+    test-stacks-k3s)
+      shift
+      run_stack_artifact_test k3s ubuntu 24.04 "$@"
+      ;;
+    test-stacks-rke2)
+      shift
+      run_stack_artifact_test rke2 ubuntu 22.04 "$@"
+      ;;
     test-preflight-host)
       shift
       exec bash "${REPO_DIR}/tests/test-preflight-host.sh" "$@"
@@ -261,6 +295,11 @@ main() {
       shift
       prepare_addons_repo_checkout
       exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 24.04 --profile core "$@"
+      ;;
+    test-rke2-core-ubuntu22)
+      shift
+      prepare_addons_repo_checkout
+      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image 22.04 --profile core "$@"
       ;;
     test-rke2-full)
       shift
