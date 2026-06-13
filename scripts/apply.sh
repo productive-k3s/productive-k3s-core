@@ -1758,7 +1758,56 @@ install_stack_addon_record() {
       return
     fi
     log "Installing bundled addon package '${addon_source}' for stack '${PRODUCTIVE_K3S_STACK_NAME}'"
-    "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
+    case "${addon_name}" in
+      cert-manager)
+        PK3S_CERT_MANAGER_VERSION="${PRODUCTIVE_K3S_CERT_MANAGER_VERSION}" \
+        PK3S_CLUSTER_ISSUER_ACTION="$(clusterissuer_action)" \
+        PK3S_TLS_SOURCE="$( [[ "${TLS_CHOICE}" == "1" ]] && echo letsencrypt || echo secret )" \
+        PK3S_CLUSTER_ISSUER="${ISSUER_NAME}" \
+        PK3S_LETSENCRYPT_EMAIL="${LE_EMAIL}" \
+        PK3S_LETSENCRYPT_ENVIRONMENT="${LE_ENV}" \
+          "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
+        ;;
+      longhorn)
+        PK3S_LONGHORN_VERSION="${PRODUCTIVE_K3S_LONGHORN_VERSION}" \
+        PK3S_LONGHORN_DATA_PATH="${LONGHORN_DATA_PATH}" \
+        PK3S_LONGHORN_REPLICA_COUNT="${LONGHORN_REPLICA_COUNT}" \
+        PK3S_LONGHORN_SINGLE_NODE_MODE="${SINGLE_NODE_LONGHORN_MODE}" \
+        PK3S_LONGHORN_MINIMAL_AVAILABLE_PERCENTAGE="${LONGHORN_MINIMAL_AVAILABLE_PERCENTAGE}" \
+        PK3S_LONGHORN_MAKE_DEFAULT="${LONGHORN_MAKE_DEFAULT:-n}" \
+          "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
+        ;;
+      rancher)
+        PK3S_RANCHER_VERSION="${PRODUCTIVE_K3S_RANCHER_VERSION}" \
+        PK3S_RANCHER_HOST="${RANCHER_HOST}" \
+        PK3S_RANCHER_BOOTSTRAP_PASSWORD="${ADMIN_PASS}" \
+        PK3S_RANCHER_MANAGE_LOCAL_HOSTS="${RANCHER_MANAGE_LOCAL_HOSTS:-n}" \
+        PK3S_NODE_PRIMARY_IP="${NODE_IP:-}" \
+        PK3S_TLS_SOURCE="$( [[ "${TLS_CHOICE}" == "1" ]] && echo letsencrypt || echo secret )" \
+        PK3S_CLUSTER_ISSUER="${ISSUER_NAME}" \
+        PK3S_LETSENCRYPT_EMAIL="${LE_EMAIL}" \
+        PK3S_LETSENCRYPT_ENVIRONMENT="${LE_ENV}" \
+          "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
+        ;;
+      registry)
+        PK3S_REGISTRY_IMAGE="${PRODUCTIVE_K3S_REGISTRY_IMAGE}" \
+        PK3S_REGISTRY_HOST="${REGISTRY_HOST}" \
+        PK3S_REGISTRY_PVC_SIZE="${REGISTRY_SIZE}" \
+        PK3S_REGISTRY_STORAGE_CLASS="${REGISTRY_STORAGE_CLASS}" \
+        PK3S_REGISTRY_MANAGE_LOCAL_HOSTS="${REGISTRY_MANAGE_LOCAL_HOSTS:-n}" \
+        PK3S_REGISTRY_TRUST_DOCKER="${REGISTRY_TRUST_DOCKER:-n}" \
+        PK3S_NODE_PRIMARY_IP="${NODE_IP:-}" \
+        PK3S_TLS_SOURCE="$( [[ "${TLS_CHOICE}" == "1" ]] && echo letsencrypt || echo secret )" \
+        PK3S_CLUSTER_ISSUER="${ISSUER_NAME}" \
+        PK3S_REGISTRY_AUTH_ENABLED="${REGISTRY_AUTH_ENABLED}" \
+        PK3S_REGISTRY_AUTH_USER="${REGISTRY_AUTH_USER}" \
+        PK3S_REGISTRY_AUTH_PASSWORD="${REGISTRY_AUTH_PASSWORD}" \
+          "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
+        ;;
+      *)
+        "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
+        ;;
+    esac
     return
   fi
   install_stack_addon_by_name "${addon_name}"
