@@ -68,8 +68,32 @@ make test-rke2-ubuntu-all
 Published stack artifact entrypoints are also available:
 
 ```bash
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks
 STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s
 STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-rke2
+```
+
+Semantics:
+
+- `test-stacks` runs both published stack artifact matrices: `k3s` first, then `rke2`
+- `test-stacks-k3s` runs the published stack artifact across the supported `k3s` VM matrix:
+  - Ubuntu 24.04
+  - Ubuntu 22.04
+  - Debian 13
+  - Debian 12
+- `test-stacks-rke2` runs the published stack artifact across the supported `rke2` VM matrix:
+  - Ubuntu 24.04
+  - Ubuntu 22.04
+
+Granular stack targets are also available for debugging one platform at a time:
+
+```bash
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s-ubuntu24
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s-ubuntu22
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s-debian13
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s-debian12
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-rke2-ubuntu24
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-rke2-ubuntu22
 ```
 
 Category intent:

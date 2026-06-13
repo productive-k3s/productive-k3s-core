@@ -1,4 +1,4 @@
-.PHONY: preflight preflight-strict apply dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test test-unit test-lint test-format test-spell test-coverage test-clean test-clean-artifacts test-clean-vms test-clean-all test-checkstatus test-checkstatus-matrix test-checkstatus-local test-checkstatus-external test-local-all test-external-all test-stacks test-stacks-k3s test-stacks-rke2 test-preflight-host test-arm-support-docs test-bootstrap-modes test-artifact-tools test-telemetry test-productive-k3s-core-cli test-in-vm-engine-propagation test-agent-smoke test-smoke test-core test-rke2-core test-rke2-core-ubuntu22 test-rke2-full test-rke2-full-clean test-rke2-full-rollback test-rke2-ubuntu-all test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all tag-release
+.PHONY: preflight preflight-strict apply dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test test-unit test-lint test-format test-spell test-coverage test-clean test-clean-artifacts test-clean-vms test-clean-all test-checkstatus test-checkstatus-matrix test-checkstatus-local test-checkstatus-external test-local-all test-external-all test-stacks test-stacks-k3s test-stacks-rke2 test-stacks-k3s-ubuntu24 test-stacks-k3s-ubuntu22 test-stacks-k3s-debian13 test-stacks-k3s-debian12 test-stacks-rke2-ubuntu24 test-stacks-rke2-ubuntu22 test-preflight-host test-arm-support-docs test-bootstrap-modes test-artifact-tools test-telemetry test-productive-k3s-core-cli test-in-vm-engine-propagation test-agent-smoke test-smoke test-core test-rke2-core test-rke2-core-ubuntu22 test-rke2-full test-rke2-full-clean test-rke2-full-rollback test-rke2-ubuntu-all test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all tag-release
 
 preflight:
 	./productive-k3s-core.sh preflight
@@ -91,6 +91,24 @@ test-stacks-k3s:
 
 test-stacks-rke2:
 	./scripts/productive-k3s-core-dev.sh test-stacks-rke2
+
+test-stacks-k3s-ubuntu24:
+	./scripts/productive-k3s-core-dev.sh test-stacks-k3s-ubuntu24
+
+test-stacks-k3s-ubuntu22:
+	./scripts/productive-k3s-core-dev.sh test-stacks-k3s-ubuntu22
+
+test-stacks-k3s-debian13:
+	./scripts/productive-k3s-core-dev.sh test-stacks-k3s-debian13
+
+test-stacks-k3s-debian12:
+	./scripts/productive-k3s-core-dev.sh test-stacks-k3s-debian12
+
+test-stacks-rke2-ubuntu24:
+	./scripts/productive-k3s-core-dev.sh test-stacks-rke2-ubuntu24
+
+test-stacks-rke2-ubuntu22:
+	./scripts/productive-k3s-core-dev.sh test-stacks-rke2-ubuntu22
 
 test-preflight-host:
 	./scripts/productive-k3s-core-dev.sh test-preflight-host

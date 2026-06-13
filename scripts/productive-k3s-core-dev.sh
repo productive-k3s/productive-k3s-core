@@ -28,6 +28,12 @@ Development commands:
   test-stacks
   test-stacks-k3s
   test-stacks-rke2
+  test-stacks-k3s-ubuntu24
+  test-stacks-k3s-ubuntu22
+  test-stacks-k3s-debian13
+  test-stacks-k3s-debian12
+  test-stacks-rke2-ubuntu24
+  test-stacks-rke2-ubuntu22
   test-preflight-host
   test-arm-support-docs
   test-bootstrap-modes
@@ -143,7 +149,7 @@ run_stack_artifact_test() {
   if [[ "${distro}" == "rke2" ]]; then
     assert_rke2_ubuntu_only "${platform}"
   fi
-  exec env \
+  env \
     PRODUCTIVE_K3S_DISTRO="${distro}" \
     STACK_TEST_PLATFORM="${platform}" \
     STACK_TEST_IMAGE="${image}" \
@@ -239,15 +245,44 @@ main() {
       ;;
     test-stacks)
       shift
-      exec bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
+      "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-k3s "$@" || exit $?
+      exec "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-rke2 "$@"
       ;;
     test-stacks-k3s)
       shift
-      run_stack_artifact_test k3s ubuntu 24.04 "$@"
+      run_stack_artifact_test k3s ubuntu 24.04 "$@" || exit $?
+      run_stack_artifact_test k3s ubuntu 22.04 "$@" || exit $?
+      run_stack_artifact_test k3s debian13 https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 "$@" || exit $?
+      exec env PRODUCTIVE_K3S_DISTRO=k3s STACK_TEST_PLATFORM=debian12 STACK_TEST_IMAGE=https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
       ;;
     test-stacks-rke2)
       shift
-      run_stack_artifact_test rke2 ubuntu 22.04 "$@"
+      run_stack_artifact_test rke2 ubuntu 24.04 "$@" || exit $?
+      exec env PRODUCTIVE_K3S_DISTRO=rke2 STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=22.04 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
+      ;;
+    test-stacks-k3s-ubuntu24)
+      shift
+      exec env PRODUCTIVE_K3S_DISTRO=k3s STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=24.04 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
+      ;;
+    test-stacks-k3s-ubuntu22)
+      shift
+      exec env PRODUCTIVE_K3S_DISTRO=k3s STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=22.04 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
+      ;;
+    test-stacks-k3s-debian13)
+      shift
+      exec env PRODUCTIVE_K3S_DISTRO=k3s STACK_TEST_PLATFORM=debian13 STACK_TEST_IMAGE=https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
+      ;;
+    test-stacks-k3s-debian12)
+      shift
+      exec env PRODUCTIVE_K3S_DISTRO=k3s STACK_TEST_PLATFORM=debian12 STACK_TEST_IMAGE=https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
+      ;;
+    test-stacks-rke2-ubuntu24)
+      shift
+      exec env PRODUCTIVE_K3S_DISTRO=rke2 STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=24.04 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
+      ;;
+    test-stacks-rke2-ubuntu22)
+      shift
+      exec env PRODUCTIVE_K3S_DISTRO=rke2 STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=22.04 bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh" "$@"
       ;;
     test-preflight-host)
       shift

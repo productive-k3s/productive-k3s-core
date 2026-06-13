@@ -212,6 +212,24 @@ assert_contains "$root_stacks_k3s_recipe" "./scripts/productive-k3s-core-dev.sh 
 root_stacks_rke2_recipe="$(make -C "${REPO_DIR}" -n test-stacks-rke2)"
 assert_contains "$root_stacks_rke2_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-rke2"
 
+root_stacks_k3s_ubuntu24_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s-ubuntu24)"
+assert_contains "$root_stacks_k3s_ubuntu24_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s-ubuntu24"
+
+root_stacks_k3s_ubuntu22_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s-ubuntu22)"
+assert_contains "$root_stacks_k3s_ubuntu22_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s-ubuntu22"
+
+root_stacks_k3s_debian13_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s-debian13)"
+assert_contains "$root_stacks_k3s_debian13_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s-debian13"
+
+root_stacks_k3s_debian12_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s-debian12)"
+assert_contains "$root_stacks_k3s_debian12_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s-debian12"
+
+root_stacks_rke2_ubuntu24_recipe="$(make -C "${REPO_DIR}" -n test-stacks-rke2-ubuntu24)"
+assert_contains "$root_stacks_rke2_ubuntu24_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-rke2-ubuntu24"
+
+root_stacks_rke2_ubuntu22_recipe="$(make -C "${REPO_DIR}" -n test-stacks-rke2-ubuntu22)"
+assert_contains "$root_stacks_rke2_ubuntu22_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-rke2-ubuntu22"
+
 root_rke2_core_ubuntu22_recipe="$(make -C "${REPO_DIR}" -n test-rke2-core-ubuntu22)"
 assert_contains "$root_rke2_core_ubuntu22_recipe" "./scripts/productive-k3s-core-dev.sh test-rke2-core-ubuntu22"
 
