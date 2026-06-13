@@ -222,6 +222,19 @@ resolve_bundle_version_fallback() {
   return 1
 }
 
+resolve_current_core_version() {
+  local version
+  if [[ -f "$BUNDLE_INFO_PATH" ]]; then
+    version="$(sed -n 's/.*"bundle_version": "\(.*\)".*/\1/p' "$BUNDLE_INFO_PATH" | head -n1)"
+    if [[ -n "${version}" ]]; then
+      printf '%s\n' "${version}"
+      return 0
+    fi
+  fi
+
+  resolve_bundle_version_fallback
+}
+
 print_bundle_info_json() {
   local version
   if [[ -f "$BUNDLE_INFO_PATH" ]]; then
@@ -363,10 +376,34 @@ stack_yaml_get() {
     /^spec:/ { section="spec"; subsection=""; next }
     section == "spec" && /^  addons:/ { subsection="addons"; next }
     section == "spec" && /^  resolution:/ { subsection="resolution"; next }
+    section == "spec" && /^  runtime:/ { subsection="runtime"; runtime_subsection=""; compatibility_subsection=""; next }
+    section == "spec" && subsection == "runtime" && /^    compatibility:/ { runtime_subsection="compatibility"; compatibility_subsection=""; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && /^      core:/ { compatibility_subsection="core"; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && /^      kubernetes:/ { compatibility_subsection="kubernetes"; next }
     section == "metadata" && key == "metadata.name" && /^  name:/ { print; exit }
     section == "metadata" && key == "metadata.version" && /^  version:/ { print; exit }
     section == "spec" && subsection == "resolution" && key == "spec.resolution.mode" && /^    mode:/ { print; exit }
-    section == "spec" && subsection == "addons" && /^    - / { print }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "core" && key == "spec.runtime.compatibility.core.minVersion" && /^        minVersion:/ { print; exit }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && key == "spec.runtime.compatibility.kubernetes.minVersion" && /^        minVersion:/ { print; exit }
+  ' "${file}"
+}
+
+stack_yaml_list() {
+  local file="$1"
+  local key="$2"
+  awk -v key="${key}" '
+    /^spec:/ { section="spec"; subsection=""; runtime_subsection=""; compatibility_subsection=""; kubernetes_subsection=""; next }
+    section == "spec" && /^  runtime:/ { subsection="runtime"; runtime_subsection=""; compatibility_subsection=""; kubernetes_subsection=""; next }
+    section == "spec" && subsection == "runtime" && /^    compatibility:/ { runtime_subsection="compatibility"; compatibility_subsection=""; kubernetes_subsection=""; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && /^      kubernetes:/ { compatibility_subsection="kubernetes"; kubernetes_subsection=""; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && /^        distros:/ { kubernetes_subsection="distros"; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && kubernetes_subsection == "distros" && key == "spec.runtime.compatibility.kubernetes.distros" && /^          - / {
+      line=$0
+      sub(/^          - /, "", line)
+      print line
+      next
+    }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && kubernetes_subsection == "distros" && !/^          - / { exit }
   ' "${file}"
 }
 
@@ -484,9 +521,14 @@ validate_addon_manifest() {
 
 validate_stack_manifest() {
   local manifest="$1"
-  local stack_name stack_version addon_count=0
+  local stack_name stack_version resolution_mode addon_count=0
+  local core_min_version kubernetes_min_version compatible_distros compatible_distro
+  local seen_addon_names="" has_structured_source="n"
   stack_name="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "metadata.name")")"
   stack_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "metadata.version")")"
+  resolution_mode="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "spec.resolution.mode")")"
+  core_min_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "spec.runtime.compatibility.core.minVersion")")"
+  kubernetes_min_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "spec.runtime.compatibility.kubernetes.minVersion")")"
 
   [[ -n "${stack_name}" ]] || {
     printf 'stack source metadata.name is required\n' >&2
@@ -496,9 +538,13 @@ validate_stack_manifest() {
     printf 'stack source metadata.version is required\n' >&2
     return 4
   }
+  if [[ -n "${resolution_mode}" && "${resolution_mode}" != "catalog" && "${resolution_mode}" != "bundled" ]]; then
+    printf 'stack source spec.resolution.mode must be either catalog or bundled\n' >&2
+    return 4
+  fi
   while IFS= read -r addon_record; do
     [[ -n "${addon_record}" ]] || continue
-    local addon_name
+    local addon_name addon_source
     addon_name="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
       {
         for (i = 1; i <= NF; i++) {
@@ -514,14 +560,68 @@ validate_stack_manifest() {
       printf 'stack source addon entries require a name\n' >&2
       return 4
     }
+    if printf '%s\n' "${seen_addon_names}" | grep -Fxq "${addon_name}"; then
+      printf 'stack source addon entries must be unique: %s\n' "${addon_name}" >&2
+      return 4
+    fi
+    seen_addon_names+="${addon_name}"$'\n'
+    addon_source="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^source=/) {
+            sub(/^source=/, "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    ')"
+    if [[ -n "${addon_source}" ]]; then
+      has_structured_source="y"
+      [[ "${addon_source}" == addons/*.tgz ]] || {
+        printf 'stack addon source must stay within addons/ and point to a .tgz: %s\n' "${addon_source}" >&2
+        return 4
+      }
+    fi
     addon_count=$((addon_count + 1))
   done < <(stack_manifest_addon_records "${manifest}")
   (( addon_count > 0 )) || {
     printf 'stack source spec.addons must include at least one addon\n' >&2
     return 4
   }
+  if [[ "${resolution_mode}" == "bundled" && "${has_structured_source}" != "y" ]]; then
+    printf 'stack source spec.resolution.mode=bundled requires at least one addon source under addons/\n' >&2
+    return 4
+  fi
 
-  printf '%s\n%s\n%s\n' "${stack_name}" "${stack_version}" "${addon_count}"
+  compatible_distros="$(stack_yaml_list "${manifest}" "spec.runtime.compatibility.kubernetes.distros" || true)"
+  if [[ -n "${compatible_distros}" ]]; then
+    local seen_distros=""
+    while IFS= read -r compatible_distro; do
+      [[ -n "${compatible_distro}" ]] || continue
+      case "${compatible_distro}" in
+        k3s|rke2) ;;
+        *)
+          printf 'stack source runtime compatibility distro is not supported: %s\n' "${compatible_distro}" >&2
+          return 4
+          ;;
+      esac
+      if printf '%s\n' "${seen_distros}" | grep -Fxq "${compatible_distro}"; then
+        printf 'stack source runtime compatibility distros must be unique: %s\n' "${compatible_distro}" >&2
+        return 4
+      fi
+      seen_distros+="${compatible_distro}"$'\n'
+    done <<< "${compatible_distros}"
+  fi
+
+  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    "${stack_name}" \
+    "${stack_version}" \
+    "${addon_count}" \
+    "${resolution_mode}" \
+    "${core_min_version}" \
+    "${kubernetes_min_version}" \
+    "${compatible_distros}"
 }
 
 validate_stack_bundled_sources() {
@@ -551,6 +651,72 @@ validate_stack_bundled_sources() {
       return 4
     }
   done < <(stack_manifest_addon_records "${manifest}")
+}
+
+normalize_semver() {
+  local version="${1#v}"
+  printf '%s\n' "${version}"
+}
+
+semver_is_comparable() {
+  local version
+  version="$(normalize_semver "${1:-}")"
+  [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+}
+
+semver_gte() {
+  local left right
+  left="$(normalize_semver "${1:-}")"
+  right="$(normalize_semver "${2:-}")"
+  [[ "$(printf '%s\n%s\n' "${right}" "${left}" | sort -V | head -n1)" == "${right}" ]]
+}
+
+stack_runtime_compatible_distro_list() {
+  local manifest="$1"
+  stack_yaml_list "${manifest}" "spec.runtime.compatibility.kubernetes.distros" || true
+}
+
+enforce_stack_runtime_compatibility() {
+  local manifest="$1"
+  local current_distro required_core_min_version current_core_version allowed_distro compatible_distro_list
+
+  compatible_distro_list="$(stack_runtime_compatible_distro_list "${manifest}")"
+  current_distro="${PRODUCTIVE_K3S_DISTRO:-k3s}"
+  if [[ -n "${compatible_distro_list}" ]]; then
+    local distro_allowed="n"
+    while IFS= read -r allowed_distro; do
+      [[ -n "${allowed_distro}" ]] || continue
+      if [[ "${allowed_distro}" == "${current_distro}" ]]; then
+        distro_allowed="y"
+        break
+      fi
+    done <<< "${compatible_distro_list}"
+    if [[ "${distro_allowed}" != "y" ]]; then
+      printf 'stack runtime compatibility does not support distro %s (allowed: %s)\n' \
+        "${current_distro}" \
+        "$(printf '%s' "${compatible_distro_list}" | paste -sd ', ' -)" >&2
+      return 4
+    fi
+  fi
+
+  required_core_min_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "spec.runtime.compatibility.core.minVersion")")"
+  [[ -n "${required_core_min_version}" ]] || return 0
+
+  current_core_version="$(resolve_current_core_version || true)"
+  if ! semver_is_comparable "${required_core_min_version}"; then
+    printf 'stack runtime compatibility core.minVersion is not comparable: %s\n' "${required_core_min_version}" >&2
+    return 4
+  fi
+  if ! semver_is_comparable "${current_core_version}"; then
+    printf 'warning: skipping stack core version compatibility check because current productive-k3s-core version is not semver-like: %s\n' "${current_core_version:-unknown}" >&2
+    return 0
+  fi
+  if ! semver_gte "${current_core_version}" "${required_core_min_version}"; then
+    printf 'stack runtime compatibility requires productive-k3s-core >= %s (current: %s)\n' \
+      "${required_core_min_version}" \
+      "${current_core_version}" >&2
+    return 4
+  fi
 }
 
 resolve_addon_public_ingress_support() {
@@ -850,6 +1016,9 @@ run_stack_install_from_overlay() {
   local overlay_repo="$1"
   local stack_name="$2"
   shift 2
+  local manifest_path
+  manifest_path="${overlay_repo}/stacks/${stack_name}/stack.yaml"
+  enforce_stack_runtime_compatibility "${manifest_path}" || return $?
   (
     export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${overlay_repo}"
     export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
@@ -957,15 +1126,24 @@ run_dev_stack_validate() {
     printf 'Usage: ./productive-k3s-core.sh dev stack validate --source <dir>\n' >&2
     return 2
   }
-  local manifest metadata stack_name stack_version addon_count
+  local manifest metadata stack_name stack_version addon_count resolution_mode core_min_version kubernetes_min_version compatible_distros compatible_distro_summary
   manifest="$(resolve_stack_manifest "${source_dir}")" || return $?
   metadata="$(validate_stack_manifest "${manifest}")" || return $?
   stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
   stack_version="$(printf '%s\n' "${metadata}" | sed -n '2p')"
   addon_count="$(printf '%s\n' "${metadata}" | sed -n '3p')"
+  resolution_mode="$(printf '%s\n' "${metadata}" | sed -n '4p')"
+  core_min_version="$(printf '%s\n' "${metadata}" | sed -n '5p')"
+  kubernetes_min_version="$(printf '%s\n' "${metadata}" | sed -n '6p')"
+  compatible_distros="$(printf '%s\n' "${metadata}" | tail -n +7)"
+  compatible_distro_summary="$(printf '%s' "${compatible_distros}" | paste -sd ', ' -)"
   printf 'Stack source: %s\n' "${stack_name}"
   printf 'Stack version: %s\n' "${stack_version}"
   printf 'Referenced addons: %s\n' "${addon_count}"
+  printf 'Stack resolution mode: %s\n' "${resolution_mode:-catalog-or-legacy}"
+  printf 'Minimum core version: %s\n' "${core_min_version:-none}"
+  printf 'Minimum Kubernetes version: %s\n' "${kubernetes_min_version:-none}"
+  printf 'Compatible distros: %s\n' "${compatible_distro_summary:-any}"
   printf 'Stack source validation passed\n'
 }
 

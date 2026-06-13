@@ -205,7 +205,10 @@ pass "addon tgz validation works"
 
 STACK_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source"
 STACK_BAD_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source-bad"
+STACK_BAD_MODE_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source-bad-mode"
+STACK_BAD_DUPLICATE_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source-bad-duplicate"
 mkdir -p "${STACK_SOURCE_DIR}" "${STACK_BAD_SOURCE_DIR}"
+mkdir -p "${STACK_BAD_MODE_SOURCE_DIR}" "${STACK_BAD_DUPLICATE_SOURCE_DIR}"
 cat >"${STACK_SOURCE_DIR}/stack.yaml" <<'EOF'
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
@@ -233,6 +236,15 @@ metadata:
 spec:
   resolution:
     mode: bundled
+  runtime:
+    compatibility:
+      core:
+        minVersion: v0.1.0
+      kubernetes:
+        minVersion: v1.31.0
+        distros:
+          - k3s
+          - rke2
   addons:
     - name: prometheus
       version: 1.2.0
@@ -246,6 +258,9 @@ EOF
 structured_stack_validate_output="$(cd "$REPO_DIR" && ./productive-k3s-core.sh dev stack validate --source "${STACK_STRUCTURED_SOURCE_DIR}")"
 printf '%s\n' "$structured_stack_validate_output" | grep -q "Stack source validation passed" || fail "structured stack source validation did not pass"
 printf '%s\n' "$structured_stack_validate_output" | grep -q "observability" || fail "structured stack validation did not report stack metadata"
+printf '%s\n' "$structured_stack_validate_output" | grep -q "Stack resolution mode: bundled" || fail "structured stack validation did not report the resolution mode"
+printf '%s\n' "$structured_stack_validate_output" | grep -q "Minimum core version: v0.1.0" || fail "structured stack validation did not report the core compatibility floor"
+printf '%s\n' "$structured_stack_validate_output" | grep -q "Compatible distros: k3s, rke2\|Compatible distros: k3s,rke2" || fail "structured stack validation did not report compatible distros"
 pass "stack source validation accepts structured addon entries"
 
 cat >"${STACK_BAD_SOURCE_DIR}/stack.yaml" <<'EOF'
@@ -262,6 +277,43 @@ if (cd "$REPO_DIR" && ./productive-k3s-core.sh dev stack validate --source "${ST
 fi
 grep -q "spec.addons must include at least one addon" /tmp/productive-k3s-core-stack-validate.out || fail "stack validation error message missing"
 pass "stack source validation rejects empty addon lists"
+
+cat >"${STACK_BAD_MODE_SOURCE_DIR}/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: broken-mode
+  version: 0.1.0
+spec:
+  resolution:
+    mode: archive
+  addons:
+    - cert-manager
+EOF
+if (cd "$REPO_DIR" && ./productive-k3s-core.sh dev stack validate --source "${STACK_BAD_MODE_SOURCE_DIR}" >/tmp/productive-k3s-core-stack-validate-mode.out 2>&1); then
+  fail "stack source validation unexpectedly succeeded for invalid resolution mode"
+fi
+grep -q "spec.resolution.mode must be either catalog or bundled" /tmp/productive-k3s-core-stack-validate-mode.out || fail "stack validation invalid resolution mode message missing"
+pass "stack source validation rejects invalid resolution modes"
+
+cat >"${STACK_BAD_DUPLICATE_SOURCE_DIR}/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: broken-duplicate
+  version: 0.1.0
+spec:
+  addons:
+    - name: registry
+      source: addons/registry.tgz
+    - name: registry
+      source: addons/registry-copy.tgz
+EOF
+if (cd "$REPO_DIR" && ./productive-k3s-core.sh dev stack validate --source "${STACK_BAD_DUPLICATE_SOURCE_DIR}" >/tmp/productive-k3s-core-stack-validate-duplicate.out 2>&1); then
+  fail "stack source validation unexpectedly succeeded for duplicate addon names"
+fi
+grep -q "addon entries must be unique" /tmp/productive-k3s-core-stack-validate-duplicate.out || fail "stack validation duplicate addon message missing"
+pass "stack source validation rejects duplicate addon names"
 
 (
   cd "$REPO_DIR" &&
@@ -339,6 +391,19 @@ cat > "${STACK_DISPATCH_DIR}/scripts/cleanup.sh" <<EOF
 printf 'stack=%s args=%s\n' "\${PRODUCTIVE_K3S_STACK_NAME:-}" "\$*" > "${STACK_CLEANUP_CAPTURE}"
 EOF
 chmod +x "${STACK_DISPATCH_DIR}/scripts/apply.sh" "${STACK_DISPATCH_DIR}/scripts/validate.sh" "${STACK_DISPATCH_DIR}/scripts/cleanup.sh"
+cat > "${STACK_DISPATCH_DIR}/bundle-info.json" <<'EOF'
+{
+  "schema_version": "1",
+  "bundle_name": "productive-k3s-core",
+  "bundle_type": "productive-k3s-core",
+  "bundle_version": "v1.5.0",
+  "cli_entrypoint": "productive-k3s-core.sh",
+  "platform": "any",
+  "api_compatibility": {
+    "contract": "productive-k3s-cli-bundle-info/v1"
+  }
+}
+EOF
 cat > "${STACK_ADDONS_DIR}/stacks/base/stack.yaml" <<'EOF'
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
@@ -391,6 +456,61 @@ grep -q "stack=observability" "${STACK_APPLY_CAPTURE}" || fail "stack tgz instal
 grep -q "repo=.*tmp" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install without a source repo did not synthesize a temporary overlay repo"
 grep -q "bundled=.*bundled-addons" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install without a source repo did not expose bundled addons"
 pass "stack tgz install works without a local addons source repo when bundled packages are present"
+
+STACK_TGZ_K3S_ONLY_DIR="${ADDON_TMP_DIR}/stack-tgz-k3s-only"
+STACK_TGZ_K3S_ONLY_ARCHIVE="${ADDON_TMP_DIR}/k3s-only-stack.tgz"
+mkdir -p "${STACK_TGZ_K3S_ONLY_DIR}"
+cat > "${STACK_TGZ_K3S_ONLY_DIR}/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: k3s-only
+  version: 1.0.0
+spec:
+  runtime:
+    compatibility:
+      kubernetes:
+        distros:
+          - k3s
+  addons:
+    - registry
+EOF
+tar -czf "${STACK_TGZ_K3S_ONLY_ARCHIVE}" -C "${STACK_TGZ_K3S_ONLY_DIR}" .
+if (
+  cd "${STACK_DISPATCH_DIR}" &&
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" PRODUCTIVE_K3S_DISTRO=rke2 ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_K3S_ONLY_ARCHIVE}" --dry-run >/tmp/productive-k3s-core-stack-distro.out 2>&1
+); then
+  fail "stack tgz install unexpectedly succeeded for an incompatible distro"
+fi
+grep -q "does not support distro rke2" /tmp/productive-k3s-core-stack-distro.out || fail "missing stack distro compatibility error"
+pass "stack tgz install rejects incompatible distros before apply"
+
+STACK_TGZ_CORE_MIN_DIR="${ADDON_TMP_DIR}/stack-tgz-core-min"
+STACK_TGZ_CORE_MIN_ARCHIVE="${ADDON_TMP_DIR}/core-min-stack.tgz"
+mkdir -p "${STACK_TGZ_CORE_MIN_DIR}"
+cat > "${STACK_TGZ_CORE_MIN_DIR}/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: future-core
+  version: 1.0.0
+spec:
+  runtime:
+    compatibility:
+      core:
+        minVersion: v9.9.9
+  addons:
+    - registry
+EOF
+tar -czf "${STACK_TGZ_CORE_MIN_ARCHIVE}" -C "${STACK_TGZ_CORE_MIN_DIR}" .
+if (
+  cd "${STACK_DISPATCH_DIR}" &&
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_CORE_MIN_ARCHIVE}" --dry-run >/tmp/productive-k3s-core-stack-core-min.out 2>&1
+); then
+  fail "stack tgz install unexpectedly succeeded for an incompatible core version"
+fi
+grep -q "requires productive-k3s-core >=" /tmp/productive-k3s-core-stack-core-min.out || fail "missing stack core compatibility error"
+pass "stack tgz install rejects incompatible core versions before apply"
 
 STACK_TGZ_BAD_PKG_DIR="${ADDON_TMP_DIR}/stack-tgz-bad"
 STACK_TGZ_BAD_ARCHIVE="${ADDON_TMP_DIR}/broken-stack.tgz"

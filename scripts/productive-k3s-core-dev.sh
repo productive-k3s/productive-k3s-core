@@ -205,7 +205,7 @@ main() {
     test-external-all)
       shift
       clean_suite_category_artifacts external
-      run_suite_with_artifact external test-stacks bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh"
+      run_suite_with_artifact external test-stacks-external bash "${REPO_DIR}/tests/test-stack-artifact-in-vm.sh"
       run_suite_with_artifact external test-telemetry-consent bash "${REPO_DIR}/tests/test-telemetry-consent.sh"
       run_suite_with_artifact external test-telemetry-delivery bash "${REPO_DIR}/tests/test-telemetry-delivery.sh"
       run_suite_with_artifact external test-telemetry-default-endpoint bash "${REPO_DIR}/tests/test-telemetry-default-endpoint.sh"
