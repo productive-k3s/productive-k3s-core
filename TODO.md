@@ -35,9 +35,6 @@ Rules:
 - `Review Public CLI Readiness`
   `Do one pass focused on help text, command naming, examples, and error messages to ensure the Core CLI is consistent as a public operator entrypoint.`
 
-- `Simplify Root Makefile`
-  `Move transversal make targets into domain folders like docs, tests, or tools, and keep the root Makefile focused on app commands and operational entrypoints.`
-
 ## Testing and Quality
 
 - `Expand Runtime Regression Coverage`
