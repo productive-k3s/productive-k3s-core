@@ -66,7 +66,7 @@ fail() {
 }
 
 run_in_vm() {
-  multipass exec "${VM_NAME}" -- bash -lc "$1"
+  multipass exec "${VM_NAME}" -- bash -lc "$1" </dev/null
 }
 
 assert_in_vm() {
@@ -98,6 +98,13 @@ admin
 
 y
 EOF
+}
+
+run_stack_install_with_answers() {
+  local answers escaped_answers
+  answers="$(full_answers)"
+  escaped_answers="$(printf '%q' "${answers}")"
+  run_in_vm "cd '${REMOTE_DIR}' && bootstrap_answers_file=\"\$(mktemp)\" && printf '%s' ${escaped_answers} > \"\${bootstrap_answers_file}\" && unset PRODUCTIVE_K3S_ADDONS_REPO_DIR && export PRODUCTIVE_K3S_DISTRO='${DISTRO}' PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true && ./productive-k3s-core.sh stack install --tgz '${STACK_TGZ_REMOTE_PATH}' < \"\${bootstrap_answers_file}\"; stack_rc=\$?; rm -f \"\${bootstrap_answers_file}\"; exit \"\${stack_rc}\""
 }
 
 main() {
@@ -138,13 +145,7 @@ main() {
   run_in_vm "cd '${REMOTE_DIR}' && unset PRODUCTIVE_K3S_ADDONS_REPO_DIR && export PRODUCTIVE_K3S_DISTRO='${DISTRO}' PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true && ./productive-k3s-core.sh stack install --tgz '${STACK_TGZ_REMOTE_PATH}' --dry-run >/tmp/pk3s-stack-dry-run.log 2>&1 </dev/null"
 
   log "Installing the packaged stack from TGZ"
-  full_answers | multipass exec "${VM_NAME}" -- bash -lc "
-    cd '${REMOTE_DIR}' &&
-    unset PRODUCTIVE_K3S_ADDONS_REPO_DIR &&
-    export PRODUCTIVE_K3S_DISTRO='${DISTRO}' &&
-    export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true &&
-    ./productive-k3s-core.sh stack install --tgz '${STACK_TGZ_REMOTE_PATH}'
-  "
+  run_stack_install_with_answers
 
   log "Validating installed stack resources"
   if [[ "${DISTRO}" == "rke2" ]]; then
