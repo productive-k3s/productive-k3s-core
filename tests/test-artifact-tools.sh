@@ -172,66 +172,75 @@ assert_contains "$(cat "${MULTIPASS_LOG}")" "list --format csv"
 assert_contains "$(cat "${MULTIPASS_LOG}")" "delete productive-k3s-core-test-smoke-1"
 assert_contains "$(cat "${MULTIPASS_LOG}")" "purge"
 
-root_clean_recipe="$(make -C "${REPO_DIR}" -n test-clean)"
-assert_contains "$root_clean_recipe" "./scripts/productive-k3s-core-dev.sh test-clean"
-
-root_clean_artifacts_recipe="$(make -C "${REPO_DIR}" -n test-clean-artifacts)"
-assert_contains "$root_clean_artifacts_recipe" "./scripts/productive-k3s-core-dev.sh test-clean-artifacts"
-
-root_clean_vms_recipe="$(make -C "${REPO_DIR}" -n test-clean-vms)"
-assert_contains "$root_clean_vms_recipe" "./scripts/productive-k3s-core-dev.sh test-clean-vms"
-
-root_clean_all_recipe="$(make -C "${REPO_DIR}" -n test-clean-all)"
-assert_contains "$root_clean_all_recipe" "./scripts/productive-k3s-core-dev.sh test-clean-all"
-
-root_checkstatus_recipe="$(make -C "${REPO_DIR}" -n test-checkstatus)"
-assert_contains "$root_checkstatus_recipe" "./scripts/productive-k3s-core-dev.sh test-checkstatus"
-
-root_checkstatus_matrix_recipe="$(make -C "${REPO_DIR}" -n test-checkstatus-matrix)"
-assert_contains "$root_checkstatus_matrix_recipe" "./scripts/productive-k3s-core-dev.sh test-checkstatus-matrix"
-
-root_checkstatus_local_recipe="$(make -C "${REPO_DIR}" -n test-checkstatus-local)"
-assert_contains "$root_checkstatus_local_recipe" "./scripts/productive-k3s-core-dev.sh test-checkstatus-local"
-
-root_checkstatus_external_recipe="$(make -C "${REPO_DIR}" -n test-checkstatus-external)"
-assert_contains "$root_checkstatus_external_recipe" "./scripts/productive-k3s-core-dev.sh test-checkstatus-external"
-
 root_local_all_recipe="$(make -C "${REPO_DIR}" -n test-local-all)"
-assert_contains "$root_local_all_recipe" "./scripts/productive-k3s-core-dev.sh test-local-all"
+assert_contains "$root_local_all_recipe" "make -C ./tests test-local-all"
 
 root_external_all_recipe="$(make -C "${REPO_DIR}" -n test-external-all)"
-assert_contains "$root_external_all_recipe" "./scripts/productive-k3s-core-dev.sh test-external-all"
+assert_contains "$root_external_all_recipe" "make -C ./tests test-external-all"
 assert_contains "$(sed -n '1,320p' "${REPO_DIR}/scripts/productive-k3s-core-dev.sh")" "run_suite_with_artifact external test-stacks"
 
-root_stacks_recipe="$(make -C "${REPO_DIR}" -n test-stacks)"
-assert_contains "$root_stacks_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks"
+root_matrix_all_recipe="$(make -C "${REPO_DIR}" -n test-matrix-all)"
+assert_contains "$root_matrix_all_recipe" "make -C ./tests test-matrix-all"
 
-root_stacks_k3s_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s)"
-assert_contains "$root_stacks_k3s_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s"
+root_docs_build_recipe="$(make -C "${REPO_DIR}" -n docs-build)"
+assert_contains "$root_docs_build_recipe" "make -C ./docs docs-build"
 
-root_stacks_rke2_recipe="$(make -C "${REPO_DIR}" -n test-stacks-rke2)"
-assert_contains "$root_stacks_rke2_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-rke2"
+root_docs_serve_recipe="$(make -C "${REPO_DIR}" -n docs-serve)"
+assert_contains "$root_docs_serve_recipe" "make -C ./docs docs-serve"
 
-root_stacks_k3s_ubuntu24_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s-ubuntu24)"
-assert_contains "$root_stacks_k3s_ubuntu24_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s-ubuntu24"
+tests_clean_recipe="$(make -C "${REPO_DIR}/tests" -n test-clean)"
+assert_contains "$tests_clean_recipe" "bash ./clean-test-artifacts.sh"
 
-root_stacks_k3s_ubuntu22_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s-ubuntu22)"
-assert_contains "$root_stacks_k3s_ubuntu22_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s-ubuntu22"
+tests_clean_artifacts_recipe="$(make -C "${REPO_DIR}/tests" -n test-clean-artifacts)"
+assert_contains "$tests_clean_artifacts_recipe" "bash ./clean-test-artifacts.sh"
 
-root_stacks_k3s_debian13_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s-debian13)"
-assert_contains "$root_stacks_k3s_debian13_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s-debian13"
+tests_clean_vms_recipe="$(make -C "${REPO_DIR}/tests" -n test-clean-vms)"
+assert_contains "$tests_clean_vms_recipe" "bash ./clean-test-vms.sh"
 
-root_stacks_k3s_debian12_recipe="$(make -C "${REPO_DIR}" -n test-stacks-k3s-debian12)"
-assert_contains "$root_stacks_k3s_debian12_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-k3s-debian12"
+tests_clean_all_recipe="$(make -C "${REPO_DIR}/tests" -n test-clean-all)"
+assert_contains "$tests_clean_all_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-clean-all"
 
-root_stacks_rke2_ubuntu24_recipe="$(make -C "${REPO_DIR}" -n test-stacks-rke2-ubuntu24)"
-assert_contains "$root_stacks_rke2_ubuntu24_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-rke2-ubuntu24"
+tests_checkstatus_recipe="$(make -C "${REPO_DIR}/tests" -n test-checkstatus)"
+assert_contains "$tests_checkstatus_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-checkstatus"
 
-root_stacks_rke2_ubuntu22_recipe="$(make -C "${REPO_DIR}" -n test-stacks-rke2-ubuntu22)"
-assert_contains "$root_stacks_rke2_ubuntu22_recipe" "./scripts/productive-k3s-core-dev.sh test-stacks-rke2-ubuntu22"
+tests_checkstatus_matrix_recipe="$(make -C "${REPO_DIR}/tests" -n test-checkstatus-matrix)"
+assert_contains "$tests_checkstatus_matrix_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-checkstatus-matrix"
 
-root_rke2_core_ubuntu22_recipe="$(make -C "${REPO_DIR}" -n test-rke2-core-ubuntu22)"
-assert_contains "$root_rke2_core_ubuntu22_recipe" "./scripts/productive-k3s-core-dev.sh test-rke2-core-ubuntu22"
+tests_checkstatus_local_recipe="$(make -C "${REPO_DIR}/tests" -n test-checkstatus-local)"
+assert_contains "$tests_checkstatus_local_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-checkstatus-local"
+
+tests_checkstatus_external_recipe="$(make -C "${REPO_DIR}/tests" -n test-checkstatus-external)"
+assert_contains "$tests_checkstatus_external_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-checkstatus-external"
+
+tests_stacks_recipe="$(make -C "${REPO_DIR}/tests" -n test-stacks)"
+assert_contains "$tests_stacks_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-stacks"
+
+tests_stacks_k3s_recipe="$(make -C "${REPO_DIR}/tests" -n test-stacks-k3s)"
+assert_contains "$tests_stacks_k3s_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-stacks-k3s"
+
+tests_stacks_rke2_recipe="$(make -C "${REPO_DIR}/tests" -n test-stacks-rke2)"
+assert_contains "$tests_stacks_rke2_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-stacks-rke2"
+
+tests_stacks_k3s_ubuntu24_recipe="$(make -C "${REPO_DIR}/tests" -n test-stacks-k3s-ubuntu24)"
+assert_contains "$tests_stacks_k3s_ubuntu24_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-stacks-k3s-ubuntu24"
+
+tests_stacks_k3s_ubuntu22_recipe="$(make -C "${REPO_DIR}/tests" -n test-stacks-k3s-ubuntu22)"
+assert_contains "$tests_stacks_k3s_ubuntu22_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-stacks-k3s-ubuntu22"
+
+tests_stacks_k3s_debian13_recipe="$(make -C "${REPO_DIR}/tests" -n test-stacks-k3s-debian13)"
+assert_contains "$tests_stacks_k3s_debian13_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-stacks-k3s-debian13"
+
+tests_stacks_k3s_debian12_recipe="$(make -C "${REPO_DIR}/tests" -n test-stacks-k3s-debian12)"
+assert_contains "$tests_stacks_k3s_debian12_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-stacks-k3s-debian12"
+
+tests_stacks_rke2_ubuntu24_recipe="$(make -C "${REPO_DIR}/tests" -n test-stacks-rke2-ubuntu24)"
+assert_contains "$tests_stacks_rke2_ubuntu24_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-stacks-rke2-ubuntu24"
+
+tests_stacks_rke2_ubuntu22_recipe="$(make -C "${REPO_DIR}/tests" -n test-stacks-rke2-ubuntu22)"
+assert_contains "$tests_stacks_rke2_ubuntu22_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-stacks-rke2-ubuntu22"
+
+tests_rke2_core_ubuntu22_recipe="$(make -C "${REPO_DIR}/tests" -n test-rke2-core-ubuntu22)"
+assert_contains "$tests_rke2_core_ubuntu22_recipe" "bash ../scripts/productive-k3s-core-dev.sh test-rke2-core-ubuntu22"
 
 root_tag_release_recipe="$(make -C "${REPO_DIR}" -n tag-release VERSION=1.2.3)"
 assert_contains "$root_tag_release_recipe" "./scripts/create-release-tag.sh 1.2.3"
