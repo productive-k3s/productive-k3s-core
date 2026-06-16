@@ -234,6 +234,17 @@ component_field() {
   private_component_field "$component" "$field"
 }
 
+cluster_runtime_component_field() {
+  local field="$1"
+  local value
+  value="$(component_field cluster_runtime "$field")"
+  if [[ -n "$value" ]]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  component_field k3s "$field"
+}
+
 manifest_mode() { manifest_string '.mode'; }
 manifest_status() { manifest_string '.status'; }
 manifest_run_id() { manifest_string '.run_id'; }
@@ -426,9 +437,9 @@ build_plan() {
     fi
   fi
 
-  detected="$(component_field k3s detected_before)"
-  planned="$(component_field k3s planned_action)"
-  result="$(component_field k3s result)"
+  detected="$(cluster_runtime_component_field detected_before)"
+  planned="$(cluster_runtime_component_field planned_action)"
+  result="$(cluster_runtime_component_field result)"
   if [[ "$detected" == "missing" && "$planned" == "install" && "$result" == "installed" ]]; then
     add_plan_item "k3s_manual" "$(pk3s_runtime_cluster_label) was installed by this run. Uninstalling it is high-impact and remains manual in this rollback implementation." "manual" "manual"
   fi

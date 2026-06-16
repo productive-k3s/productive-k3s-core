@@ -30,8 +30,8 @@ Describe 'bootstrap manifest and args'
       manifest_set_setting "bootstrap_mode" "stack"
       manifest_set_setting "telemetry_enabled" "true"
       manifest_set_setting "rancher_host" "rancher.home.arpa"
-      manifest_record_component "k3s" "n" "install"
-      manifest_complete_component "k3s" "installed"
+      manifest_record_cluster_runtime_component "n" "install"
+      manifest_complete_cluster_runtime_component "installed"
       manifest_record_component "clusterissuer" "n" "install"
       manifest_complete_component "clusterissuer" "installed" "letsencrypt-staging"
       init_run_manifest
@@ -42,6 +42,8 @@ Describe 'bootstrap manifest and args'
     The output should include '"bootstrap_mode": "stack"'
     The output should include '"telemetry_enabled": "true"'
     The output should not include '"rancher_host": "rancher.home.arpa"'
+    The output should include '"cluster_runtime": {"detected_before": "n", "planned_action": "install", "result": "installed"}'
+    The output should include '"k3s": {"detected_before": "n", "planned_action": "install", "result": "installed"}'
     The output should include '"clusterissuer": {"detected_before": "n", "planned_action": "install", "result": "installed", "note": "letsencrypt-staging"}'
   End
 

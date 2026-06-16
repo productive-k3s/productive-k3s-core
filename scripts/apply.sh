@@ -89,7 +89,7 @@ declare -A MANIFEST_PLANNED=()
 declare -A MANIFEST_RESULT=()
 declare -A MANIFEST_NOTES=()
 declare -A STACK_SELECTED_ADDONS=()
-MANIFEST_COMPONENT_ORDER=(k3s helm cert_manager clusterissuer longhorn longhorn_host_prep rancher rancher_host_local registry registry_host_local registry_docker_trust nfs)
+MANIFEST_COMPONENT_ORDER=(cluster_runtime k3s helm cert_manager clusterissuer longhorn longhorn_host_prep rancher rancher_host_local registry registry_host_local registry_docker_trust nfs)
 PUBLIC_MANIFEST_SETTINGS=(
   host_os_id
   host_os_version_id
@@ -350,6 +350,20 @@ manifest_complete_component() {
   if [[ -n "$note" ]]; then
     MANIFEST_NOTES["$component"]="$note"
   fi
+}
+
+manifest_record_cluster_runtime_component() {
+  local detected_before="$1" planned_action="$2"
+  manifest_record_component "cluster_runtime" "$detected_before" "$planned_action"
+  # Backward compatibility for older tooling that still expects the bootstrap
+  # runtime component to be stored under "k3s".
+  manifest_record_component "k3s" "$detected_before" "$planned_action"
+}
+
+manifest_complete_cluster_runtime_component() {
+  local result="$1" note="${2:-}"
+  manifest_complete_component "cluster_runtime" "$result" "$note"
+  manifest_complete_component "k3s" "$result" "$note"
 }
 
 init_run_manifest() {
@@ -1408,7 +1422,7 @@ install_k3s_if_needed() {
     else
       track_reuse "${cluster_label}"
     fi
-    manifest_complete_component "k3s" "$(result_for_mode reused)"
+    manifest_complete_cluster_runtime_component "$(result_for_mode reused)"
     return
   fi
   if [[ "$action" != "install" ]]; then
@@ -1431,7 +1445,7 @@ install_k3s_if_needed() {
   else
     install_k3s_with_native
   fi
-  manifest_complete_component "k3s" "$(result_for_mode installed)"
+  manifest_complete_cluster_runtime_component "$(result_for_mode installed)"
 }
 
 install_rke2_with_native() {
@@ -2239,7 +2253,7 @@ main() {
   rancher_existing_host="$(get_first_ingress_host cattle-system rancher)"
   registry_existing_host="$(get_first_ingress_host registry registry)"
 
-  manifest_record_component "k3s" "$k3s_detected_state" "pending"
+  manifest_record_cluster_runtime_component "$k3s_detected_state" "pending"
   manifest_record_component "helm" "$helm_detected_state" "pending"
   manifest_record_component "cert_manager" "$( [[ "$cert_manager_present" == "y" ]] && echo present || echo missing )" "pending"
   manifest_record_component "longhorn" "$( [[ "$longhorn_present" == "y" ]] && echo present || echo missing )" "pending"
