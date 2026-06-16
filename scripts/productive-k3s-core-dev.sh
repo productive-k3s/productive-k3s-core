@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TEMP_ADDONS_CLONE_DIR=""
+DEFAULT_GITHUB_OWNER="${PRODUCTIVE_K3S_GITHUB_OWNER:-jemacchi}"
+DEFAULT_GITHUB_REPO_BASE_URL="${PRODUCTIVE_K3S_GITHUB_REPO_BASE_URL:-https://github.com/${DEFAULT_GITHUB_OWNER}}"
 
 usage() {
   cat <<'EOF'
@@ -63,7 +65,10 @@ Development commands:
 Environment:
   PRODUCTIVE_K3S_ADDONS_REPO_DIR  Local productive-k3s-addons checkout to copy for full/core VM tests
   PRODUCTIVE_K3S_ADDONS_REPO_URL  Git URL to clone productive-k3s-addons when no local checkout is provided
-  PRODUCTIVE_K3S_ADDONS_REPO_REF  Branch or tag to clone from PRODUCTIVE_K3S_ADDONS_REPO_URL (default: main)
+  PRODUCTIVE_K3S_ADDONS_REPO_REF  Branch or tag to clone from PRODUCTIVE_K3S_ADDONS_REPO_URL (default: current branch or main)
+  PRODUCTIVE_K3S_GITHUB_OWNER     Default GitHub owner used to resolve ecosystem repositories (default: ${DEFAULT_GITHUB_OWNER})
+  PRODUCTIVE_K3S_GITHUB_REPO_BASE_URL
+                                  Default GitHub repository base URL (default: ${DEFAULT_GITHUB_REPO_BASE_URL})
   STACK_TGZ_URL                   Published stack tgz URL used by test-stacks
 EOF
 }
@@ -74,7 +79,40 @@ cleanup_temp_addons_clone() {
   fi
 }
 
+default_addons_repo_url() {
+  printf '%s\n' "${DEFAULT_GITHUB_REPO_BASE_URL}/productive-k3s-addons.git"
+}
+
+default_addons_repo_ref() {
+  local branch_name=""
+  branch_name="$(git -C "${REPO_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [[ -n "${branch_name}" && "${branch_name}" != "HEAD" ]]; then
+    printf '%s\n' "${branch_name}"
+    return 0
+  fi
+  printf '%s\n' "main"
+}
+
+log_addons_repo_source() {
+  local source_type="$1"
+  local source_value="$2"
+  local ref_value="${3:-}"
+
+  case "${source_type}" in
+    dir)
+      printf '[INFO] Local tests using productive-k3s-addons from directory: %s\n' "${source_value}"
+      ;;
+    url)
+      printf '[INFO] Local tests cloning productive-k3s-addons from URL: %s (ref: %s)\n' "${source_value}" "${ref_value}"
+      ;;
+  esac
+}
+
 prepare_addons_repo_checkout() {
+  local source_dir=""
+  local source_url=""
+  local source_ref=""
+
   TEMP_ADDONS_CLONE_DIR="$(mktemp -d)"
   trap cleanup_temp_addons_clone EXIT
 
@@ -83,17 +121,24 @@ prepare_addons_repo_checkout() {
       printf 'invalid PRODUCTIVE_K3S_ADDONS_REPO_DIR: %s\n' "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}" >&2
       exit 1
     }
+    source_dir="${PRODUCTIVE_K3S_ADDONS_REPO_DIR}"
+  fi
+
+  if [[ -n "${source_dir}" ]]; then
+    log_addons_repo_source dir "${source_dir}"
     mkdir -p "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"
-    cp -a "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/." \
+    cp -a "${source_dir}/." \
       "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons/"
   else
-    if [[ -z "${PRODUCTIVE_K3S_ADDONS_REPO_URL:-}" ]]; then
-      printf 'tests that use productive-k3s-addons require PRODUCTIVE_K3S_ADDONS_REPO_DIR or PRODUCTIVE_K3S_ADDONS_REPO_URL\n' >&2
+    source_url="${PRODUCTIVE_K3S_ADDONS_REPO_URL:-$(default_addons_repo_url)}"
+    source_ref="${PRODUCTIVE_K3S_ADDONS_REPO_REF:-$(default_addons_repo_ref)}"
+    log_addons_repo_source url "${source_url}" "${source_ref}"
+    if ! git clone --depth 1 --branch "${source_ref}" \
+      "${source_url}" \
+      "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"; then
+      printf 'failed to clone productive-k3s-addons from %s (ref: %s)\n' "${source_url}" "${source_ref}" >&2
       exit 1
     fi
-    git clone --depth 1 --branch "${PRODUCTIVE_K3S_ADDONS_REPO_REF:-main}" \
-      "${PRODUCTIVE_K3S_ADDONS_REPO_URL}" \
-      "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons" >/dev/null 2>&1
   fi
 
   cat >> "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons/.gitignore" <<'EOF'
@@ -232,9 +277,7 @@ main() {
       ;;
     test-local-all)
       shift
-      if [[ -n "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" || -n "${PRODUCTIVE_K3S_ADDONS_REPO_URL:-}" ]]; then
-        local_suite_needs_addons="y"
-      fi
+      local_suite_needs_addons="y"
       if [[ "${local_suite_needs_addons}" == "y" ]]; then
         prepare_addons_repo_checkout
       fi
