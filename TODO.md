@@ -13,9 +13,6 @@ Rules:
 
 ## Runtime and Platform
 
-- `Commit Stack Matrix Targets`
-  `Commit the new stack matrix targets, Ubuntu-only RKE2 guards, and Ubuntu 22.04 RKE2 coverage once the isolated checkout validation passes cleanly.`
-
 - `Publish RKE2 Platform Contract`
   `Document explicitly that RKE2 support is currently limited to Ubuntu 24.04 and 22.04, and that Debian remains unsupported until validated.`
 
@@ -30,8 +27,8 @@ Rules:
 - `Add Stack URL Install Path`
   `Consider a first-class stack install flow from URL so Core can consume published stack artifacts without requiring a manual download step.`
 
-- `Validate Kubernetes Version Compatibility`
-  `Enforce or warn on stack-declared Kubernetes minimum versions so compatibility metadata does more than document intent.`
+- `Tighten Compatibility Enforcement`
+  `Turn stack compatibility metadata into explicit warnings or hard failures for unsupported distro and Kubernetes version combinations.`
 
 ## CLI and UX
 
@@ -43,11 +40,11 @@ Rules:
 
 ## Testing and Quality
 
-- `Increase ShellSpec Coverage`
-  `Raise automated coverage around stack install, packaged addon execution, compatibility guards, and external test harness behavior.`
+- `Expand Runtime Regression Coverage`
+  `Add focused automated coverage for manifest runtime metadata, cleanup and rollback parity, and runtime-aware addon execution paths.`
 
-- `Add Failure-Focused External Cases`
-  `Add focused tests for bad stack metadata, unsupported distro selections, missing bundled artifacts, and broken packaged addon runtime assumptions.`
+- `Expand Negative Stack Cases`
+  `Add external and CLI-focused failure cases for invalid stack metadata, unsupported compatibility declarations, and missing bundled inputs.`
 
 - `Review Long-Running VM Test Costs`
   `Track which stack and matrix tests are expensive, and decide what stays in fast maintainer flows versus deeper validation passes.`
@@ -62,6 +59,3 @@ Rules:
 
 - `Update User-Facing Documentation`
   `Refresh product, user, and developer docs so published examples reflect explicit stack installation, artifact testing, and current support boundaries.`
-
-- `Track Ecosystem TODO Files`
-  `Adopt the same TODO.md pattern across related repositories so pending work remains local, versioned, and easy to review without external trackers.`

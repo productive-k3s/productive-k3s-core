@@ -5,8 +5,58 @@ ARTIFACT_CHECK := ./check-test-artifacts.sh
 PUBLIC_ARTIFACT_PRIVACY_CHECK := ./check-public-test-artifacts.sh
 DEBIAN12_IMAGE := https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2
 DEBIAN13_IMAGE := https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2
+DEV_WRAPPER := ../scripts/productive-k3s-core-dev.sh
 
 .PHONY: \
+	test \
+	test-unit \
+	test-lint \
+	test-format \
+	test-spell \
+	test-coverage \
+	test-clean \
+	test-clean-artifacts \
+	test-clean-vms \
+	test-clean-all \
+	test-checkstatus \
+	test-checkstatus-matrix \
+	test-checkstatus-local \
+	test-checkstatus-external \
+	test-local-all \
+	test-external-all \
+	test-stacks \
+	test-stacks-k3s \
+	test-stacks-rke2 \
+	test-stacks-k3s-ubuntu24 \
+	test-stacks-k3s-ubuntu22 \
+	test-stacks-k3s-debian13 \
+	test-stacks-k3s-debian12 \
+	test-stacks-rke2-ubuntu24 \
+	test-stacks-rke2-ubuntu22 \
+	test-preflight-host \
+	test-arm-support-docs \
+	test-bootstrap-modes \
+	test-artifact-tools \
+	test-telemetry \
+	test-productive-k3s-core-cli \
+	test-in-vm-engine-propagation \
+	test-agent-smoke \
+	test-smoke \
+	test-core \
+	test-rke2-core \
+	test-rke2-core-ubuntu22 \
+	test-rke2-full \
+	test-rke2-full-clean \
+	test-rke2-full-rollback \
+	test-rke2-ubuntu-all \
+	test-core-debian12 \
+	test-core-debian13 \
+	test-matrix-smoke \
+	test-matrix-core \
+	test-matrix-full \
+	test-matrix-full-rollback \
+	test-matrix-full-clean \
+	test-matrix-all \
 	clean-test-state \
 	clean-test-artifacts \
 	clean-smoke-artifacts \
@@ -31,6 +81,152 @@ DEBIAN13_IMAGE := https://cloud.debian.org/images/cloud/trixie/latest/debian-13-
 	full-ubuntu-24.04 full-ubuntu-22.04 full-debian12 full-debian13 \
 	full-rollback-ubuntu-24.04 full-rollback-ubuntu-22.04 full-rollback-debian12 full-rollback-debian13 \
 	full-clean-ubuntu-24.04 full-clean-ubuntu-22.04 full-clean-debian12 full-clean-debian13
+
+test: test-unit test-lint test-format test-spell
+
+test-unit:
+	bash ./bin/run-shellspec.sh
+
+test-lint:
+	bash ./bin/run-shellcheck.sh
+
+test-format:
+	bash ./bin/run-shfmt.sh
+
+test-spell:
+	bash ./bin/run-spellcheck.sh
+
+test-coverage:
+	bash ./bin/run-kcov.sh
+
+test-clean:
+	bash ./clean-test-artifacts.sh
+
+test-clean-artifacts:
+	bash ./clean-test-artifacts.sh
+
+test-clean-vms:
+	bash ./clean-test-vms.sh
+
+test-clean-all:
+	bash $(DEV_WRAPPER) test-clean-all
+
+test-checkstatus:
+	bash $(DEV_WRAPPER) test-checkstatus
+
+test-checkstatus-matrix:
+	bash $(DEV_WRAPPER) test-checkstatus-matrix
+
+test-checkstatus-local:
+	bash $(DEV_WRAPPER) test-checkstatus-local
+
+test-checkstatus-external:
+	bash $(DEV_WRAPPER) test-checkstatus-external
+
+test-local-all:
+	bash $(DEV_WRAPPER) test-local-all
+
+test-external-all:
+	bash $(DEV_WRAPPER) test-external-all
+
+test-stacks:
+	bash $(DEV_WRAPPER) test-stacks
+
+test-stacks-k3s:
+	bash $(DEV_WRAPPER) test-stacks-k3s
+
+test-stacks-rke2:
+	bash $(DEV_WRAPPER) test-stacks-rke2
+
+test-stacks-k3s-ubuntu24:
+	bash $(DEV_WRAPPER) test-stacks-k3s-ubuntu24
+
+test-stacks-k3s-ubuntu22:
+	bash $(DEV_WRAPPER) test-stacks-k3s-ubuntu22
+
+test-stacks-k3s-debian13:
+	bash $(DEV_WRAPPER) test-stacks-k3s-debian13
+
+test-stacks-k3s-debian12:
+	bash $(DEV_WRAPPER) test-stacks-k3s-debian12
+
+test-stacks-rke2-ubuntu24:
+	bash $(DEV_WRAPPER) test-stacks-rke2-ubuntu24
+
+test-stacks-rke2-ubuntu22:
+	bash $(DEV_WRAPPER) test-stacks-rke2-ubuntu22
+
+test-preflight-host:
+	bash $(DEV_WRAPPER) test-preflight-host
+
+test-arm-support-docs:
+	bash $(DEV_WRAPPER) test-arm-support-docs
+
+test-bootstrap-modes:
+	bash $(DEV_WRAPPER) test-bootstrap-modes
+
+test-artifact-tools:
+	bash $(DEV_WRAPPER) test-artifact-tools
+
+test-telemetry:
+	bash $(DEV_WRAPPER) test-telemetry
+
+test-productive-k3s-core-cli:
+	bash $(DEV_WRAPPER) test-productive-k3s-core-cli
+
+test-in-vm-engine-propagation:
+	bash $(DEV_WRAPPER) test-in-vm-engine-propagation
+
+test-agent-smoke:
+	bash $(DEV_WRAPPER) test-agent-smoke
+
+test-smoke:
+	bash $(DEV_WRAPPER) test-smoke
+
+test-core:
+	bash $(DEV_WRAPPER) test-core
+
+test-rke2-core:
+	bash $(DEV_WRAPPER) test-rke2-core
+
+test-rke2-core-ubuntu22:
+	bash $(DEV_WRAPPER) test-rke2-core-ubuntu22
+
+test-rke2-full:
+	bash $(DEV_WRAPPER) test-rke2-full
+
+test-rke2-full-clean:
+	bash $(DEV_WRAPPER) test-rke2-full-clean
+
+test-rke2-full-rollback:
+	bash $(DEV_WRAPPER) test-rke2-full-rollback
+
+test-rke2-ubuntu-all:
+	bash $(DEV_WRAPPER) test-rke2-ubuntu-all
+
+test-core-debian12:
+	bash $(DEV_WRAPPER) test-core-debian12
+
+test-core-debian13:
+	bash $(DEV_WRAPPER) test-core-debian13
+
+test-matrix-smoke:
+	bash $(DEV_WRAPPER) test-matrix-smoke
+
+test-matrix-core:
+	bash $(DEV_WRAPPER) test-matrix-core
+
+test-matrix-full:
+	bash $(DEV_WRAPPER) test-matrix-full
+
+test-matrix-full-rollback:
+	bash $(DEV_WRAPPER) test-matrix-full-rollback
+
+test-matrix-full-clean:
+	bash $(DEV_WRAPPER) test-matrix-full-clean
+
+test-matrix-all:
+	bash $(DEV_WRAPPER) test-matrix-all
 
 clean-test-state:
 	bash ./clean-test-state.sh

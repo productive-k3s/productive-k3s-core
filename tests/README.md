@@ -30,19 +30,19 @@ Generated at runtime and intentionally not tracked:
 Run the normalized local test entrypoints:
 
 ```bash
-make test
-make test-unit
-make test-lint
-make test-format
-make test-spell
-make test-coverage
-make test-clean-artifacts
-make test-clean-vms
-make test-clean-all
-make test-local-all
-make test-external-all
-make test-checkstatus-local
-make test-checkstatus-external
+make -C tests test
+make -C tests test-unit
+make -C tests test-lint
+make -C tests test-format
+make -C tests test-spell
+make -C tests test-coverage
+make -C tests test-clean-artifacts
+make -C tests test-clean-vms
+make -C tests test-clean-all
+make -C tests test-local-all
+make -C tests test-external-all
+make -C tests test-checkstatus-local
+make -C tests test-checkstatus-external
 ```
 
 These commands are intentionally local-maintainer oriented. They do not redefine the existing live matrix or CI contract.
@@ -50,27 +50,27 @@ These commands are intentionally local-maintainer oriented. They do not redefine
 The VM matrix stays separate:
 
 ```bash
-make test-matrix-all
-make test-checkstatus-matrix
+make -C tests test-matrix-all
+make -C tests test-checkstatus-matrix
 ```
 
 Dedicated Ubuntu 24.04 RKE2 entrypoints are also available:
 
 ```bash
-make test-rke2-core
-make test-rke2-core-ubuntu22
-make test-rke2-full
-make test-rke2-full-clean
-make test-rke2-full-rollback
-make test-rke2-ubuntu-all
+make -C tests test-rke2-core
+make -C tests test-rke2-core-ubuntu22
+make -C tests test-rke2-full
+make -C tests test-rke2-full-clean
+make -C tests test-rke2-full-rollback
+make -C tests test-rke2-ubuntu-all
 ```
 
 Published stack artifact entrypoints are also available:
 
 ```bash
-STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks
-STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s
-STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-rke2
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make -C tests test-stacks
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make -C tests test-stacks-k3s
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make -C tests test-stacks-rke2
 ```
 
 Semantics:
@@ -88,12 +88,20 @@ Semantics:
 Granular stack targets are also available for debugging one platform at a time:
 
 ```bash
-STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s-ubuntu24
-STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s-ubuntu22
-STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s-debian13
-STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-k3s-debian12
-STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-rke2-ubuntu24
-STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make test-stacks-rke2-ubuntu22
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make -C tests test-stacks-k3s-ubuntu24
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make -C tests test-stacks-k3s-ubuntu22
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make -C tests test-stacks-k3s-debian13
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make -C tests test-stacks-k3s-debian12
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make -C tests test-stacks-rke2-ubuntu24
+STACK_TGZ_URL=https://downloads.productive-k3s.io/addons/base-0.1.0.tgz make -C tests test-stacks-rke2-ubuntu22
+```
+
+From the repository root, keep only the three principal test entrypoints:
+
+```bash
+make test-local-all
+make test-matrix-all
+make test-external-all
 ```
 
 Category intent:

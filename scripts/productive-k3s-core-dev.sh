@@ -239,10 +239,10 @@ main() {
         prepare_addons_repo_checkout
       fi
       clean_suite_category_artifacts local
-      run_suite_with_artifact local test-unit make -C "${REPO_DIR}" test-unit
-      run_suite_with_artifact local test-lint make -C "${REPO_DIR}" test-lint
-      run_suite_with_artifact local test-format make -C "${REPO_DIR}" test-format
-      run_suite_with_artifact local test-spell make -C "${REPO_DIR}" test-spell
+      run_suite_with_artifact local test-unit make -C "${REPO_DIR}/tests" test-unit
+      run_suite_with_artifact local test-lint make -C "${REPO_DIR}/tests" test-lint
+      run_suite_with_artifact local test-format make -C "${REPO_DIR}/tests" test-format
+      run_suite_with_artifact local test-spell make -C "${REPO_DIR}/tests" test-spell
       run_suite_with_artifact local test-preflight-host bash "${REPO_DIR}/tests/test-preflight-host.sh"
       run_suite_with_artifact local test-arm-support-docs bash "${REPO_DIR}/tests/test-arm-support-docs.sh"
       run_suite_with_artifact local test-bootstrap-modes bash "${REPO_DIR}/tests/test-bootstrap-modes.sh"
