@@ -126,6 +126,12 @@ clean_suite_category_artifacts() {
   rm -f "$(artifacts_dir)"/test-"${suite_category}"-*.json
 }
 
+clean_named_suite_artifacts() {
+  local suite_category="$1"
+  local suite_name="$2"
+  rm -f "$(artifacts_dir)"/test-"${suite_category}"-*-"${suite_name}".json
+}
+
 run_suite_with_artifact() {
   local suite_category="$1"
   local suite_name="$2"
@@ -257,6 +263,7 @@ main() {
       ;;
     test-stacks)
       shift
+      clean_named_suite_artifacts external test-stacks
       run_suite_with_artifact external test-stacks bash "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-raw "$@"
       ;;
     test-stacks-raw)
@@ -266,6 +273,7 @@ main() {
       ;;
     test-stacks-k3s)
       shift
+      clean_named_suite_artifacts external test-stacks-k3s
       run_suite_with_artifact external test-stacks-k3s bash "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-k3s-raw "$@"
       ;;
     test-stacks-k3s-raw)
@@ -274,6 +282,7 @@ main() {
       ;;
     test-stacks-rke2)
       shift
+      clean_named_suite_artifacts external test-stacks-rke2
       run_suite_with_artifact external test-stacks-rke2 bash "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-stacks-rke2-raw "$@"
       ;;
     test-stacks-rke2-raw)
