@@ -375,7 +375,11 @@ main() {
       ;;
     test-telemetry)
       shift
-      exec "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" test-external-all "$@"
+      clean_named_suite_artifacts external test-telemetry
+      run_suite_with_artifact external test-telemetry-consent bash "${REPO_DIR}/tests/test-telemetry-consent.sh"
+      run_suite_with_artifact external test-telemetry-delivery bash "${REPO_DIR}/tests/test-telemetry-delivery.sh"
+      run_suite_with_artifact external test-telemetry-default-endpoint bash "${REPO_DIR}/tests/test-telemetry-default-endpoint.sh"
+      exec "${REPO_DIR}/tests/run-suite-with-artifact.sh" external test-bootstrap-telemetry-events bash "${REPO_DIR}/tests/test-bootstrap-telemetry-events.sh" "$@"
       ;;
     test-productive-k3s-core-cli)
       shift
