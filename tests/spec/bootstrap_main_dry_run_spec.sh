@@ -56,7 +56,21 @@ Describe 'bootstrap dry-run main flows'
   It 'runs an explicit single-node dry-run bootstrap plan'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
       temp_runs="$(mktemp -d)"
+      temp_addons="$(mktemp -d)"
       RUNS_DIR="${temp_runs}"
+      mkdir -p "${temp_addons}/stacks/base"
+      cat >"${temp_addons}/stacks/base/stack.yaml" <<'"'"'EOF'"'"'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: base
+  version: 0.1.0
+spec:
+  addons:
+    - cert-manager
+    - registry
+EOF
+      export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${temp_addons}"
       bind_stdin_to_tty() { :; }
       sudo_keepalive() { :; }
       resolve_telemetry_enabled() { TELEMETRY_ENABLED=false; }

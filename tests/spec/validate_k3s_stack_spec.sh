@@ -8,10 +8,32 @@ Describe 'validate k3s stack'
       tmpdir="$(mktemp -d)"
       mockdir="${tmpdir}/bin"
       manifest_path="${tmpdir}/apply.json"
+      addons_repo="${tmpdir}/productive-k3s-addons"
       mkdir -p "${mockdir}"
+      mkdir -p "${addons_repo}/stacks/base"
+      mkdir -p "${addons_repo}/addons/cert-manager/scripts"
+      mkdir -p "${addons_repo}/addons/registry/scripts"
       cat >"${manifest_path}" <<'"'"'EOF'"'"'
 {"settings":{"nfs_manage":"y","rancher_manage_local_hosts":"y","registry_manage_local_hosts":"y","registry_trust_docker":"n"}}
 EOF
+      cat >"${addons_repo}/stacks/base/stack.yaml" <<'"'"'EOF'"'"'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: base
+  version: 0.1.0
+spec:
+  addons:
+    - cert-manager
+    - registry
+EOF
+      for addon in cert-manager registry; do
+        cat >"${addons_repo}/addons/${addon}/scripts/validate.sh" <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+pk3s_addon_validate() { :; }
+EOF
+        chmod +x "${addons_repo}/addons/${addon}/scripts/validate.sh"
+      done
 
       cat >"${mockdir}/sudo" <<'"'"'EOF'"'"'
 #!/usr/bin/env bash
@@ -207,29 +229,62 @@ EOF
       chmod +x "${mockdir}/sudo" "${mockdir}/systemctl" "${mockdir}/exportfs" "${mockdir}/getent" "${mockdir}/curl" "${mockdir}/docker" "${mockdir}/jq" "${mockdir}/k3s" "${mockdir}/kubectl"
       export PATH="${mockdir}:$PATH"
       export PRODUCTIVE_K3S_STACK_NAME="base"
+      export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${addons_repo}"
       export PRODUCTIVE_K3S_APPLY_MANIFEST_PATH="${manifest_path}"
       /usr/bin/bash "${script}" --json
     ' bash "$SCRIPT"
     The status should equal 0
     The output should include '"status":"ok"'
     The output should include 'all nodes are Ready'
-    The output should include 'Longhorn volumes API is responding'
-    The output should include 'registry PVC is Bound'
-    The output should include 'Rancher HTTPS endpoint responds with HTTP 200'
-    The output should include 'Registry HTTPS endpoint responds with HTTP 401'
+    The output should include 'NFS service '\''nfs-server'\'' is active'
+    The output should include 'expected NFS export '\''/srv/nfs/k8s-share'\'' is present'
   End
 
-  It 'fails docker registry validation when credentials are incomplete'
+  It 'records docker availability when registry functional validation is requested'
     When run bash -lc '
       script="$1"
       tmpdir="$(mktemp -d)"
       mockdir="${tmpdir}/bin"
       manifest_path="${tmpdir}/apply.json"
+      addons_repo="${tmpdir}/productive-k3s-addons"
       mkdir -p "${mockdir}"
+      mkdir -p "${addons_repo}/stacks/base"
+      mkdir -p "${addons_repo}/addons/cert-manager/scripts"
+      mkdir -p "${addons_repo}/addons/registry/scripts"
       cat >"${manifest_path}" <<'"'"'EOF'"'"'
 {"settings":{"nfs_manage":"n","rancher_manage_local_hosts":"n","registry_manage_local_hosts":"n","registry_trust_docker":"n"}}
 EOF
-      for cmd in sudo systemctl exportfs getent curl docker jq; do
+      cat >"${addons_repo}/stacks/base/stack.yaml" <<'"'"'EOF'"'"'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: base
+  version: 0.1.0
+spec:
+  addons:
+    - cert-manager
+    - registry
+EOF
+      for addon in cert-manager registry; do
+        cat >"${addons_repo}/addons/${addon}/scripts/validate.sh" <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+pk3s_addon_validate() { :; }
+EOF
+        chmod +x "${addons_repo}/addons/${addon}/scripts/validate.sh"
+      done
+      cat >"${mockdir}/sudo" <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+set -eu
+if [[ "${1:-}" == "-n" && "${2:-}" == "true" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "-v" ]]; then
+  exit 0
+fi
+exec "$@"
+EOF
+      chmod +x "${mockdir}/sudo"
+      for cmd in systemctl exportfs getent curl docker jq; do
         cat >"${mockdir}/${cmd}" <<'"'"'EOF'"'"'
 #!/usr/bin/env bash
 exit 0
@@ -242,22 +297,25 @@ if [[ "${1:-}" == "kubectl" ]]; then shift; fi
 args="$*"
 case "${args}" in
   "get nodes -o wide")
-    printf "NAME STATUS ROLES AGE VERSION\nnode1 Ready control-plane 1d v1\n"
+    printf "NAME STATUS ROLES AGE VERSION INTERNAL-IP\nnode1 Ready control-plane 1d v1 10.0.0.1\n"
     ;;
   "get nodes --no-headers")
-    printf "node1 Ready control-plane 1d v1\n"
+    printf "node1 Ready control-plane 1d v1 10.0.0.1\n"
     ;;
   "get pods -A --field-selector=status.phase!=Succeeded,status.phase!=Failed -o wide")
-    printf "NAMESPACE NAME READY STATUS RESTARTS AGE IP NODE NOMINATED NODE READINESS GATES\n"
+    printf "NAMESPACE NAME READY STATUS RESTARTS AGE IP NODE NOMINATED NODE READINESS GATES\nkube-system coredns-1 1/1 Running 0 1d 10.42.0.2 node1 <none> <none>\n"
     ;;
   "get pods -A --no-headers")
-    printf ""
+    printf "kube-system coredns-1 1/1 Running 0 1d\n"
     ;;
   "get sc")
-    printf "NAME\nlonghorn-single (default)\n"
+    printf "NAME PROVISIONER RECLAIMPOLICY VOLUMEBINDINGMODE ALLOWVOLUMEEXPANSION AGE\nlonghorn-single (default) driver Delete Immediate true 1d\n"
+    ;;
+  get\ sc\ -o\ jsonpath=*is-default-class* )
+    printf "longhorn-single|true\n"
     ;;
   "get ingress -A")
-    printf "NAMESPACE NAME CLASS HOSTS ADDRESS PORTS AGE\n"
+    printf "NAMESPACE NAME CLASS HOSTS ADDRESS PORTS AGE\nregistry registry traefik registry.home.arpa 10.0.0.1 80,443 1d\n"
     ;;
   *)
     exit 1
@@ -271,14 +329,15 @@ EOF
       chmod +x "${mockdir}/k3s" "${mockdir}/kubectl"
       export PATH="${mockdir}:$PATH"
       export PRODUCTIVE_K3S_STACK_NAME="base"
+      export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${addons_repo}"
       export PRODUCTIVE_K3S_APPLY_MANIFEST_PATH="${manifest_path}"
       export REGISTRY_USER="only-user"
       unset REGISTRY_PASSWORD
       /usr/bin/bash "${script}" --json --docker-registry-test
     ' bash "$SCRIPT"
-    The status should equal 1
-    The output should include 'set both REGISTRY_USER and REGISTRY_PASSWORD, or neither'
-    The output should include '"status":"fail"'
+    The status should equal 0
+    The output should include 'docker is available for registry functional validation'
+    The output should not include 'set both REGISTRY_USER and REGISTRY_PASSWORD, or neither'
   End
 
   It 'skips optional host-local warnings when the latest apply manifest disabled them'
@@ -287,10 +346,32 @@ EOF
       tmpdir="$(mktemp -d)"
       mockdir="${tmpdir}/bin"
       manifest_path="${tmpdir}/apply.json"
+      addons_repo="${tmpdir}/productive-k3s-addons"
       mkdir -p "${mockdir}"
+      mkdir -p "${addons_repo}/stacks/base"
+      mkdir -p "${addons_repo}/addons/cert-manager/scripts"
+      mkdir -p "${addons_repo}/addons/registry/scripts"
       cat >"${manifest_path}" <<'"'"'EOF'"'"'
 {"settings":{"nfs_manage":"n","rancher_manage_local_hosts":"n","registry_manage_local_hosts":"n","registry_trust_docker":"n"}}
 EOF
+      cat >"${addons_repo}/stacks/base/stack.yaml" <<'"'"'EOF'"'"'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: base
+  version: 0.1.0
+spec:
+  addons:
+    - cert-manager
+    - registry
+EOF
+      for addon in cert-manager registry; do
+        cat >"${addons_repo}/addons/${addon}/scripts/validate.sh" <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+pk3s_addon_validate() { :; }
+EOF
+        chmod +x "${addons_repo}/addons/${addon}/scripts/validate.sh"
+      done
 
       cat >"${mockdir}/sudo" <<'"'"'EOF'"'"'
 #!/usr/bin/env bash
@@ -447,12 +528,13 @@ EOF
       chmod +x "${mockdir}/sudo" "${mockdir}/systemctl" "${mockdir}/exportfs" "${mockdir}/getent" "${mockdir}/curl" "${mockdir}/docker" "${mockdir}/jq" "${mockdir}/k3s" "${mockdir}/kubectl"
       export PATH="${mockdir}:$PATH"
       export PRODUCTIVE_K3S_STACK_NAME="base"
+      export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${addons_repo}"
       export PRODUCTIVE_K3S_APPLY_MANIFEST_PATH="${manifest_path}"
       /usr/bin/bash "${script}" --json --strict
     ' bash "$SCRIPT"
     The status should equal 0
     The output should include '"status":"ok"'
     The output should include 'NFS management was not enabled; skipping optional NFS checks'
-    The output should include 'registry.home.arpa was not configured for local host resolution; skipping local HTTPS probe'
+    The output should not include 'registry.home.arpa was not configured for local host resolution; skipping local HTTPS probe'
   End
 End
