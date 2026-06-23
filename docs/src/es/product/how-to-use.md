@@ -16,13 +16,13 @@ Comandos requeridos en el host o la VM para este camino de instalación:
 Antes de correr el bootstrap, podés validar si el host destino coincide con los supuestos públicos de plataforma y con la guía de hardware:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight
+curl -fsSL https://github.com/productive-k3s/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight
 ```
 
 Si querés que también fallen los warnings, usá:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight --strict
+curl -fsSL https://github.com/productive-k3s/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- preflight --strict
 ```
 
 Este preflight chequea la lista de plataformas soportadas, la expectativa de `systemd`, los comandos requeridos y la guía práctica de hardware para el modo seleccionado.
@@ -39,7 +39,7 @@ Ver [Preflight del host](../user-docs/host-preflight.md) para el comportamiento 
 Si querés ver cómo se ejecutaría el instalador antes de cambiar algo en la máquina, primero podés hacer un `dry-run` opcional:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply --dry-run
+curl -fsSL https://github.com/productive-k3s/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply --dry-run
 ```
 
 Incluso en `dry-run`, el script puede seguir mostrando prompts según lo que detecte en el host, por ejemplo si una instalación existente de `k3s` debería reutilizarse. Esos prompts se usan para armar el plan de ejecución, pero el `dry-run` igualmente no aplica cambios.
@@ -89,7 +89,7 @@ Eso no amplía la matriz pública de soporte hacia plataformas arbitrarias ni ha
 Reemplazá `X.Y.Z` por el release que quieras instalar:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply
+curl -fsSL https://github.com/productive-k3s/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply
 ```
 
 Ese instalador descarga el bundle correspondiente a ese release y ejecuta sobre el host el CLI público de `productive-k3s-core`.
@@ -97,7 +97,7 @@ Ese instalador descarga el bundle correspondiente a ese release y ejecuta sobre 
 Si además querés el stack default una vez que el core está listo:
 
 ```bash
-curl -fsSL https://github.com/jemacchi/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- stack install base
+curl -fsSL https://github.com/productive-k3s/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- stack install base
 ```
 
 ## Después de instalar
