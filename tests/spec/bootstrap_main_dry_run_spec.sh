@@ -59,6 +59,8 @@ Describe 'bootstrap dry-run main flows'
       temp_addons="$(mktemp -d)"
       RUNS_DIR="${temp_runs}"
       mkdir -p "${temp_addons}/stacks/base"
+      mkdir -p "${temp_addons}/addons/cert-manager/scripts"
+      mkdir -p "${temp_addons}/addons/registry/scripts"
       cat >"${temp_addons}/stacks/base/stack.yaml" <<'"'"'EOF'"'"'
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
