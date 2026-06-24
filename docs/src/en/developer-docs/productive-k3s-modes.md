@@ -1,15 +1,15 @@
 # Productive K3S Core Modes
 
-`bootstrap-k3s-stack.sh` exposes explicit execution modes through `--mode`.
+`apply.sh` exposes explicit execution modes through `--mode`.
 
 ## Supported modes
 
 | Mode | Purpose |
 | --- | --- |
-| `single-node` | Default mode. Bootstraps a single-node installation and can install the local stack |
-| `server` | Bootstraps only the base server node components |
+| `single-node` | Legacy combined mode. Installs the core plus the default stack in one pass |
+| `server` | Default mode. Bootstraps only the core server node components |
 | `agent` | Joins a node as a K3S agent |
-| `stack` | Installs or reuses stack components on top of an existing cluster |
+| `stack` | Installs or reuses an explicit stack on top of an existing cluster |
 
 ## Operational meaning
 
@@ -18,7 +18,7 @@ The script internally treats the modes as capability switches:
 - `single-node`: runs base installation, stack installation, and host-local tasks
 - `server`: runs base installation only
 - `agent`: configures an agent node and requires a server URL plus cluster token
-- `stack`: requires an existing cluster and Helm, then operates only on stack components
+- `stack`: requires an existing cluster and Helm, then operates only on the selected stack components
 
 ## What changes by mode
 
@@ -34,7 +34,7 @@ The script internally treats the modes as capability switches:
 
 - can install or reuse `k3s` and Helm
 - skips stack-only components
-- skips host-local stack integrations such as NFS and Docker registry trust
+- skips host-local stack integrations such as add-on managed `/etc/hosts`, Docker registry trust, and NFS
 
 ### `agent`
 
@@ -47,6 +47,7 @@ The script internally treats the modes as capability switches:
 - requires an already running `k3s` server and an installed `helm`
 - does not install base `k3s`
 - focuses on stack-level components and cluster issuers
+- is the expected public path for `./productive-k3s-core.sh stack install <name>`
 
 ## Why the mode split matters
 
@@ -59,7 +60,7 @@ The mode model is what makes `productive-k3s-infra` orchestration possible. It g
 ## Notes
 
 !!! note
-    `single-node` is still the simplest all-in-one path for direct local usage.
+    `single-node` is retained as a legacy all-in-one path. The public contract now prefers `apply` for core-only installation and `stack install <name>` for explicit stack installation.
 
 !!! note
     `server`, `agent`, and `stack` are especially valuable when the bootstrap sequence is orchestrated by another layer.

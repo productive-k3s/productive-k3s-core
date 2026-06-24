@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/runtime-contract.sh"
+source "${SCRIPT_DIR}/addons-runtime.sh"
+PRODUCTIVE_K3S_DISTRO="${PRODUCTIVE_K3S_DISTRO:-k3s}"
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-}"
+
 log(){ printf "\n\033[1;32m[+] %s\033[0m\n" "$*"; }
 warn(){ printf "\n\033[1;33m[!] %s\033[0m\n" "$*"; }
 err(){ printf "\n\033[1;31m[✗] %s\033[0m\n" "$*"; }
@@ -20,17 +26,24 @@ sudo_keepalive() {
 }
 
 k() {
-  sudo k3s kubectl "$@"
+  pk3s_runtime_kubectl "$@"
 }
 
 ensure_cmds() {
   local missing=()
   local cmd
-  for cmd in sudo k3s tar date; do
+  for cmd in sudo tar date; do
     if ! need_cmd "$cmd"; then
       missing+=("$cmd")
     fi
   done
+  if [[ "$(pk3s_runtime_addon_kubectl_mode)" == "k3s" ]]; then
+    if ! need_cmd k3s; then
+      missing+=("k3s")
+    fi
+  elif [[ ! -x "$(pk3s_runtime_embedded_kubectl_bin)" ]]; then
+    missing+=("$(pk3s_runtime_embedded_kubectl_bin)")
+  fi
 
   if ((${#missing[@]} > 0)); then
     err "Missing required commands: ${missing[*]}"
@@ -44,13 +57,41 @@ safe_write_cmd() {
   "$@" >"$out" 2>&1 || true
 }
 
+run_stack_addon_backup_hooks() {
+  local output_dir="$1"
+  local addon_name addon_dir backup_fn
+  [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]] || return 0
+  if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
+    err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
+    exit 1
+  fi
+
+  while IFS= read -r addon_name; do
+    [[ -n "${addon_name}" ]] || continue
+    if ! addon_source_script_exists "${addon_name}" backup.sh; then
+      err "Addon '${addon_name}' does not provide scripts/backup.sh"
+      exit 1
+    fi
+    addon_dir="$(resolve_addon_source_dir "${addon_name}")"
+    # shellcheck source=/dev/null
+    source "${addon_dir}/scripts/backup.sh"
+    backup_fn="pk3s_addon_backup"
+    if ! declare -F "${backup_fn}" >/dev/null 2>&1; then
+      err "Addon '${addon_name}' backup hook '${backup_fn}' is missing"
+      exit 1
+    fi
+    "${backup_fn}" "${output_dir}"
+  done < <(stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}")
+}
+
 main() {
+  pk3s_runtime_validate_selection || { err "Unsupported cluster distro/engine selection."; exit 1; }
   ensure_cmds
   sudo_keepalive
 
   local timestamp output_dir archive_path
   timestamp="$(date +%Y%m%d-%H%M%S)"
-  output_dir="${1:-/tmp/k3s-stack-backup-${timestamp}}"
+  output_dir="${1:-/tmp/$(pk3s_runtime_cluster_label)-stack-backup-${timestamp}}"
   mkdir -p "$output_dir"
 
   log "Writing backup to ${output_dir}"
@@ -59,8 +100,7 @@ main() {
     "$output_dir/cluster" \
     "$output_dir/namespaces" \
     "$output_dir/host" \
-    "$output_dir/docker" \
-    "$output_dir/k3s"
+    "$output_dir/cluster-runtime"
 
   log "Exporting cluster-wide resources"
   safe_write_cmd "$output_dir/cluster/nodes.txt" k get nodes -o wide
@@ -78,7 +118,7 @@ main() {
   safe_write_cmd "$output_dir/cluster/events.txt" k get events -A --sort-by=.lastTimestamp
 
   local ns
-  for ns in cert-manager cattle-system longhorn-system registry kube-system; do
+  for ns in kube-system; do
     if k get namespace "$ns" >/dev/null 2>&1; then
       log "Exporting namespace ${ns}"
       safe_write_cmd "$output_dir/namespaces/${ns}-all.yaml" k get all -n "$ns" -o yaml
@@ -90,28 +130,23 @@ main() {
     fi
   done
 
-  log "Exporting k3s host-side config"
-  if [[ -f /etc/rancher/k3s/k3s.yaml ]]; then
-    sudo cp /etc/rancher/k3s/k3s.yaml "$output_dir/k3s/k3s.yaml"
-    sudo chown "$(id -u):$(id -g)" "$output_dir/k3s/k3s.yaml"
+  run_stack_addon_backup_hooks "$output_dir"
+
+  log "Exporting $(pk3s_runtime_cluster_label) host-side config"
+  if [[ -f "$(pk3s_runtime_system_kubeconfig_path)" ]]; then
+    sudo cp "$(pk3s_runtime_system_kubeconfig_path)" "$output_dir/cluster-runtime/$(basename "$(pk3s_runtime_system_kubeconfig_path)")"
+    sudo chown "$(id -u):$(id -g)" "$output_dir/cluster-runtime/$(basename "$(pk3s_runtime_system_kubeconfig_path)")"
   fi
-  if [[ -d /var/lib/rancher/k3s/server/manifests ]]; then
-    sudo cp -a /var/lib/rancher/k3s/server/manifests "$output_dir/k3s/manifests"
-    sudo chown -R "$(id -u):$(id -g)" "$output_dir/k3s/manifests"
+  if [[ "${PRODUCTIVE_K3S_DISTRO}" == "k3s" && -d /var/lib/rancher/k3s/server/manifests ]]; then
+    sudo cp -a /var/lib/rancher/k3s/server/manifests "$output_dir/cluster-runtime/manifests"
+    sudo chown -R "$(id -u):$(id -g)" "$output_dir/cluster-runtime/manifests"
   fi
 
   log "Exporting host config"
   [[ -f /etc/exports ]] && sudo cp /etc/exports "$output_dir/host/exports"
-  [[ -f /etc/hosts ]] && sudo cp /etc/hosts "$output_dir/host/hosts"
   safe_write_cmd "$output_dir/host/exportfs.txt" sudo exportfs -v
-  safe_write_cmd "$output_dir/host/k3s-service.txt" sudo systemctl status k3s --no-pager
+  safe_write_cmd "$output_dir/host/cluster-service.txt" sudo systemctl status "$(pk3s_runtime_server_service)" --no-pager
   safe_write_cmd "$output_dir/host/inotify.txt" bash -lc 'cat /proc/sys/fs/inotify/max_user_watches; echo; cat /proc/sys/fs/inotify/max_user_instances'
-
-  if [[ -d /etc/docker/certs.d ]]; then
-    log "Exporting Docker registry trust"
-    sudo cp -a /etc/docker/certs.d "$output_dir/docker/certs.d"
-    sudo chown -R "$(id -u):$(id -g)" "$output_dir/docker/certs.d"
-  fi
 
   archive_path="${output_dir}.tar.gz"
   log "Creating archive ${archive_path}"

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/runtime-contract.sh"
+source "${SCRIPT_DIR}/addons-runtime.sh"
+
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_GREEN=$'\033[1;32m'
   COLOR_YELLOW=$'\033[1;33m'
@@ -18,10 +22,12 @@ log(){ printf "\n%s[INFO]%s %s\n" "$COLOR_GREEN" "$COLOR_RESET" "$*"; }
 warn(){ printf "\n%s[WARN]%s %s\n" "$COLOR_YELLOW" "$COLOR_RESET" "$*"; }
 err(){ printf "\n%s[ERROR]%s %s\n" "$COLOR_RED" "$COLOR_RESET" "$*"; }
 
+PRODUCTIVE_K3S_DISTRO="${PRODUCTIVE_K3S_DISTRO:-k3s}"
 MODE="plan"
 SUDO_KA_PID=""
 AUTO_APPROVE="n"
 FORCE_CONFIRM="n"
+PRODUCTIVE_K3S_STACK_NAME="${PRODUCTIVE_K3S_STACK_NAME:-}"
 DEFAULT_NFS_EXPORT="/srv/nfs/k8s-share"
 DEFAULT_REGISTRY_HOST="registry.home.arpa"
 DEFAULT_RANCHER_HOST="rancher.home.arpa"
@@ -87,11 +93,15 @@ cleanup_exit() {
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 service_active() { systemctl is-active --quiet "$1"; }
+path_is_within_dir() {
+  local path="$1" dir="$2"
+  [[ "${path}" == "${dir}" || "${path}" == "${dir}/"* ]]
+}
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/clean-k3s-stack.sh [--plan|--apply] [--yes] [--confirm-clean]
+  ./scripts/cleanup.sh [--plan|--apply] [--yes] [--confirm-clean]
 
 Modes:
   --plan   Show what would be removed (default)
@@ -102,8 +112,8 @@ Options:
   --confirm-clean  Auto-approve the typed CLEAN confirmation
 
 What it removes:
-  - k3s cluster components and local k3s state
-  - bootstrap-managed namespaces: cert-manager, longhorn-system, cattle-system, cattle-fleet-system, cattle-fleet-local-system, cattle-capi-system, cattle-turtles-system, registry
+  - cluster runtime components and local runtime state
+  - apply-managed namespaces: cert-manager, longhorn-system, cattle-system, cattle-fleet-system, cattle-fleet-local-system, cattle-capi-system, cattle-turtles-system, registry
   - common bootstrap ClusterIssuers: selfsigned, letsencrypt-staging, letsencrypt-production
   - Rancher/Fleet/Turtles webhook configurations and cattle-related CRDs/APIService objects when present
   - Longhorn CRDs, StorageClasses, and CSIDriver objects when present
@@ -147,7 +157,7 @@ parse_args() {
   done
 }
 
-kubectl_k3s() { sudo k3s kubectl "$@"; }
+kubectl_k3s() { pk3s_runtime_kubectl "$@"; }
 namespace_exists() { kubectl_k3s get namespace "$1" >/dev/null 2>&1; }
 clusterissuer_exists() { kubectl_k3s get clusterissuer "$1" >/dev/null 2>&1; }
 
@@ -161,7 +171,7 @@ delete_named_resources_matching() {
 }
 
 delete_rancher_cluster_artifacts() {
-  if ! service_active k3s; then
+  if ! pk3s_runtime_server_active; then
     return
   fi
   delete_named_resources_matching validatingwebhookconfigurations 'rancher|fleet|cattle'
@@ -171,7 +181,7 @@ delete_rancher_cluster_artifacts() {
 }
 
 delete_longhorn_cluster_artifacts() {
-  if ! service_active k3s; then
+  if ! pk3s_runtime_server_active; then
     return
   fi
   delete_named_resources_matching validatingwebhookconfigurations 'longhorn'
@@ -186,7 +196,7 @@ add_plan_item() {
 }
 
 build_plan() {
-  add_plan_item "Uninstall k3s and remove local k3s state directories if present"
+  add_plan_item "Uninstall $(pk3s_runtime_cluster_label) and remove local runtime state directories if present"
 
   local ns
   for ns in cert-manager longhorn-system cattle-system cattle-fleet-system cattle-fleet-local-system cattle-capi-system cattle-turtles-system registry; do
@@ -201,15 +211,13 @@ build_plan() {
   add_plan_item "Delete Rancher/Fleet/Turtles webhook configurations if present"
   add_plan_item "Delete cattle/fleet-related APIService and CRD objects if present"
   add_plan_item "Delete Longhorn StorageClasses, CSIDriver, and CRDs if present"
-  add_plan_item "Remove /etc/hosts entries containing '${DEFAULT_RANCHER_HOST}' or '${DEFAULT_REGISTRY_HOST}'"
-  add_plan_item "Remove Docker trust directory '/etc/docker/certs.d/${DEFAULT_REGISTRY_HOST}' if present"
   add_plan_item "Remove NFS export '${DEFAULT_NFS_EXPORT}' from /etc/exports and reload exports if present"
 }
 
 print_warning_block() {
   err "DESTRUCTIVE CLEANUP"
   line "  This script is intended to remove the local productive-k3s-core stack completely."
-  line "  It can uninstall k3s and delete cluster namespaces and local host integrations."
+  line "  It can uninstall $(pk3s_runtime_cluster_label) and delete cluster namespaces and local host integrations."
   line "  It does not try to preserve cluster state."
   line "  It does not remove arbitrary user files under storage paths, but Longhorn-backed data may become unreachable once the stack is removed."
 }
@@ -235,43 +243,95 @@ remove_docker_trust() {
 }
 
 remove_nfs_export() {
+  if [[ ! -f /etc/exports ]]; then
+    return 0
+  fi
   sudo sed -i "\|^[[:space:]]*${DEFAULT_NFS_EXPORT//\//\\/}[[:space:]]|d" /etc/exports
   sudo exportfs -ra || true
 }
 
-delete_cluster_issuers() {
-  local issuer
-  for issuer in selfsigned letsencrypt-staging letsencrypt-production; do
-    if service_active k3s && clusterissuer_exists "$issuer"; then
-      sudo k3s kubectl delete clusterissuer "$issuer" --ignore-not-found || true
-    fi
-  done
-}
+run_stack_addon_clean_hooks() {
+  local addon_name addon_dir clean_fn
+  [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]] || return 0
+  if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
+    err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
+    exit 1
+  fi
 
-delete_namespaces() {
-  local ns
-  for ns in registry cattle-turtles-system cattle-capi-system cattle-fleet-local-system cattle-fleet-system cattle-system longhorn-system cert-manager; do
-    if service_active k3s && namespace_exists "$ns"; then
-      log "Requesting deletion of namespace '${ns}'"
-      sudo k3s kubectl delete namespace "$ns" --ignore-not-found --wait=false || true
+  while IFS= read -r addon_name; do
+    [[ -n "${addon_name}" ]] || continue
+    if ! addon_source_script_exists "${addon_name}" clean.sh; then
+      err "Addon '${addon_name}' does not provide scripts/clean.sh"
+      exit 1
     fi
-  done
+    addon_dir="$(resolve_addon_source_dir "${addon_name}")"
+    # shellcheck source=/dev/null
+    source "${addon_dir}/scripts/clean.sh"
+    clean_fn="pk3s_addon_clean"
+    if ! declare -F "${clean_fn}" >/dev/null 2>&1; then
+      err "Addon '${addon_name}' clean hook '${clean_fn}' is missing"
+      exit 1
+    fi
+    "${clean_fn}"
+  done < <(stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}")
 }
 
 uninstall_k3s() {
-  if [[ -x /usr/local/bin/k3s-uninstall.sh ]]; then
-    sudo /usr/local/bin/k3s-uninstall.sh || true
-  elif [[ -x /usr/local/bin/k3s-killall.sh ]]; then
-    sudo /usr/local/bin/k3s-killall.sh || true
+  local uninstall_script killall_script runtime_path
+  stop_runtime_services
+  uninstall_script="$(pk3s_runtime_uninstall_script_path)"
+  killall_script="$(pk3s_runtime_killall_script_path)"
+  if [[ -x "${uninstall_script}" ]]; then
+    sudo "${uninstall_script}" || true
+  fi
+  if [[ -x "${killall_script}" ]]; then
+    sudo "${killall_script}" || true
   fi
 
-  sudo rm -rf /etc/rancher/k3s
-  sudo rm -rf /var/lib/rancher/k3s
-  sudo rm -rf /var/lib/kubelet
-  sudo rm -rf /etc/cni/net.d
-  sudo rm -rf /var/lib/cni
-  sudo rm -rf /run/flannel
-  sudo rm -rf /run/k3s
+  unmount_runtime_state_dirs
+
+  while IFS= read -r runtime_path; do
+    [[ -n "${runtime_path}" ]] || continue
+    sudo rm -rf "${runtime_path}"
+  done < <(pk3s_runtime_state_dirs)
+
+  reload_runtime_service_manager
+}
+
+runtime_mount_points() {
+  awk '{print $5}' /proc/self/mountinfo | sort -r
+}
+
+unmount_runtime_state_dirs() {
+  local runtime_path mount_path
+  local -a runtime_paths=()
+  mapfile -t runtime_paths < <(pk3s_runtime_state_dirs)
+  while IFS= read -r mount_path; do
+    [[ -n "${mount_path}" ]] || continue
+    for runtime_path in "${runtime_paths[@]}"; do
+      [[ -n "${runtime_path}" ]] || continue
+      if path_is_within_dir "${mount_path}" "${runtime_path}"; then
+        sudo umount "${mount_path}" >/dev/null 2>&1 \
+          || sudo umount -l "${mount_path}" >/dev/null 2>&1 \
+          || true
+        break
+      fi
+    done
+  done < <(runtime_mount_points)
+}
+
+stop_runtime_services() {
+  local service_name
+  for service_name in "$(pk3s_runtime_server_service)" "$(pk3s_runtime_agent_service)"; do
+    [[ -n "${service_name}" ]] || continue
+    sudo systemctl stop "${service_name}" >/dev/null 2>&1 || true
+    sudo systemctl disable "${service_name}" >/dev/null 2>&1 || true
+  done
+}
+
+reload_runtime_service_manager() {
+  sudo systemctl daemon-reload >/dev/null 2>&1 || true
+  sudo systemctl reset-failed >/dev/null 2>&1 || true
 }
 
 apply_cleanup() {
@@ -295,29 +355,23 @@ apply_cleanup() {
   sudo_keepalive
 
   log "Deleting cluster-level resources"
-  delete_cluster_issuers
-  delete_rancher_cluster_artifacts
-  delete_namespaces
-  delete_longhorn_cluster_artifacts
+  run_stack_addon_clean_hooks
 
-  log "Removing local host integrations"
-  remove_hosts_entries
-  remove_docker_trust
+  log "Removing local host integrations owned by the engine"
   remove_nfs_export
 
-  log "Uninstalling k3s and removing local k3s state"
+  log "Uninstalling $(pk3s_runtime_cluster_label) and removing local runtime state"
   uninstall_k3s
 
   log "Cleanup completed"
   line "  Manual review recommended:"
-  line "  - verify /etc/hosts"
   line "  - verify /etc/exports"
-  line "  - verify Docker trust directory cleanup"
-  line "  - verify no k3s processes remain"
+  line "  - verify no $(pk3s_runtime_cluster_label) processes remain"
 }
 
 main() {
   parse_args "$@"
+  pk3s_runtime_validate_selection || { err "Unsupported cluster distro/engine selection."; exit 1; }
   bind_stdin_to_tty
   trap cleanup_exit EXIT
   build_plan
@@ -328,4 +382,6 @@ main() {
   fi
 }
 
-main "$@"
+if [[ "${PRODUCTIVE_K3S_LIB_ONLY:-0}" != "1" ]]; then
+  main "$@"
+fi

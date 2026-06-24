@@ -15,18 +15,23 @@ Estos son los entrypoints de uso diario más comunes desde la raíz del reposito
 | --- | --- |
 | `make preflight` | Ejecutar los chequeos de preflight del host con guía en nivel warning |
 | `make preflight-strict` | Ejecutar los chequeos de preflight del host y fallar también por warnings |
-| `make bootstrap` | Ejecutar el flujo interactivo de bootstrap en su modo default `single-node` |
+| `make apply` | Ejecutar el flujo interactivo core-only de apply |
 | `make dry-run` | Ejecutar el bootstrap en modo planificación sin aplicar cambios |
 | `make backup` | Capturar un snapshot de backup del host y del clúster |
-| `make validate` | Ejecutar el validador del stack |
+| `make validate` | Ejecutar el validador del core |
 | `make validate-strict` | Tratar warnings como fallos en la validación |
 | `make docs-build` | Construir el sitio MkDocs en modo estricto |
 | `make docs-serve` | Servir la documentación localmente |
 | `make docs-up` | Levantar el servidor de docs en background |
 | `make docs-down` | Detener el servidor local de docs y limpiar artefactos |
 | `make docs-clean` | Limpiar artefactos de docs y el virtualenv local de docs |
-| `make test-clean` | Eliminar artifacts de resultados de tests y otro estado local de pruebas |
-| `make test-checkstatus` | Resumir los resultados de tests actualmente registrados en artifacts locales |
+| `make test-clean` | Alias seguro: elimina sólo artifacts de tests y estado local de pruebas |
+| `make test-clean-artifacts` | Eliminar sólo artifacts locales y metadata de corridas |
+| `make test-clean-vms` | Eliminar VMs de test de Productive K3S en Multipass y hacer purge |
+| `make test-clean-all` | Eliminar tanto los artifacts locales como las VMs de test de Productive K3S |
+| `make test-checkstatus` | Resumir los resultados actuales de la matriz desde artifacts locales |
+| `make test-checkstatus-local` | Resumir los resultados actuales de la suite local desde artifacts locales |
+| `make test-checkstatus-external` | Resumir los resultados actuales de la suite external desde artifacts locales |
 
 ## Targets de tests puntuales
 
@@ -39,6 +44,8 @@ El `Makefile` raíz también expone algunos entrypoints de tests cómodos para d
 | `make test-productive-k3s-core-cli` | Verificar el contrato del CLI público y el enrutamiento del `Makefile` root |
 | `make test-agent-smoke` | Ejercitar el modo `agent` dentro de Docker |
 | `make test-smoke` | Ejecutar un smoke check del bootstrap dry-run basado en Docker |
+| `make test-local-all` | Ejecutar la suite local completa que no depende de servicios de terceros |
+| `make test-external-all` | Ejecutar suites que pueden tocar endpoints externos, hoy telemetría |
 | `make test-core` | Ejecutar el perfil VM `core` sobre Ubuntu `24.04` |
 | `make test-core-debian12` | Ejecutar el perfil VM `core` sobre Debian `12` |
 | `make test-core-debian13` | Ejecutar el perfil VM `core` sobre Debian `13` |
@@ -72,6 +79,9 @@ Ejemplos:
 
 !!! note
     Los targets de raíz son entrypoints de conveniencia. La granularidad más fina de la matriz vive en `tests/Makefile`.
+
+!!! note
+    `make apply` ya no instala el stack `base` de forma implícita. Usá el CLI público `./productive-k3s-core.sh stack install base` cuando quieras instalar el stack default sobre la instalación local del core.
 
 !!! note
     Para trabajo de documentación, `make docs-build` es el chequeo final más seguro porque ejecuta MkDocs en modo estricto.

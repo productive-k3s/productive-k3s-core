@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PREFIX="productive-k3s-core-test-"
+PREFIXES=(
+  "productive-k3s-core-test-"
+  "pk3s-stack-"
+)
 PURGE="n"
 TARGET=""
 ALL="n"
@@ -15,7 +18,9 @@ Usage:
 
 Notes:
   - Requires Multipass on the host.
-  - --all deletes only VMs whose name starts with productive-k3s-core-test-
+  - --all deletes only VMs whose name starts with one of:
+      - productive-k3s-core-test-
+      - pk3s-stack-
 EOU
 }
 
@@ -99,10 +104,13 @@ main() {
         timeout --kill-after=5s "${VM_CLEANUP_TIMEOUT_SECONDS}s" multipass list --format csv 2>/dev/null || true
       else
         multipass list --format csv 2>/dev/null || true
-      fi | awk -F, -v p="$PREFIX" 'NR>1 && index($1,p)==1 {print $1}'
+      fi | awk -F, '
+        NR == 1 { next }
+        index($1, "productive-k3s-core-test-") == 1 || index($1, "pk3s-stack-") == 1 { print $1 }
+      '
     )
     if [[ ${#targets[@]} -eq 0 ]]; then
-      log "No test VMs found with prefix $PREFIX"
+      log "No test VMs found with the known test prefixes"
       exit 0
     fi
     for name in "${targets[@]}"; do

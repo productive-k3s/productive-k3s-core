@@ -43,12 +43,12 @@ fi
 
 cd "$BOOTSTRAP_DIR"
 if (($# == 0)); then
-  exec ./productive-k3s-core.sh bootstrap
+  exec ./productive-k3s-core.sh apply
 fi
 
 case "$1" in
   -*)
-    exec ./productive-k3s-core.sh bootstrap "$@"
+    exec ./productive-k3s-core.sh apply "$@"
     ;;
   *)
     exec ./productive-k3s-core.sh "$@"

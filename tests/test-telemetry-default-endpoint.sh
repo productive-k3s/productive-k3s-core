@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BOOTSTRAP_SCRIPT="${ROOT_DIR}/scripts/bootstrap-k3s-stack.sh"
+BOOTSTRAP_SCRIPT="${ROOT_DIR}/scripts/apply.sh"
 TELEMETRY_SCRIPT="${ROOT_DIR}/scripts/send-telemetry.sh"
 EVENT_SCRIPT="${ROOT_DIR}/scripts/send-telemetry-event.sh"
 TMP_DIR="$(mktemp -d)"
@@ -120,9 +120,9 @@ assert_equals "$(cat "${TMP_DIR}/requests/authz-2.txt")" "Bearer pk3s_live_core_
 PRODUCTIVE_K3S_LIB_ONLY=1
 # shellcheck disable=SC1090
 source "${BOOTSTRAP_SCRIPT}"
-assert_equals "${TELEMETRY_ENDPOINT}" "${CANONICAL_ENDPOINT}" "bootstrap-k3s-stack.sh should expose the canonical telemetry endpoint by default"
+assert_equals "${TELEMETRY_ENDPOINT}" "${CANONICAL_ENDPOINT}" "apply.sh should expose the canonical telemetry endpoint by default"
 
-RUN_ID="bootstrap-default-endpoint"
+RUN_ID="apply-default-endpoint"
 MODE="server"
 TELEMETRY_ENABLED="true"
 TELEMETRY_MAX_RETRIES="1"
@@ -131,6 +131,6 @@ emit_bootstrap_lifecycle_event "started" "started"
 assert_equals "$(cat "${TMP_DIR}/requests/url-3.txt")" "${CANONICAL_ENDPOINT}" "bootstrap lifecycle events should be delivered to the canonical telemetry endpoint by default"
 assert_equals "$(cat "${TMP_DIR}/requests/marker-3.txt")" "${DEFAULT_MARKER}" "bootstrap lifecycle events should send the default telemetry marker"
 assert_equals "$(cat "${TMP_DIR}/requests/authz-3.txt")" "Bearer pk3s_live_core_default_test" "bootstrap lifecycle events should send the observability bearer token when configured"
-assert_file_contains "${TMP_DIR}/requests/request-3.json" '"event_name": "core.bootstrap.server.started"'
+assert_file_contains "${TMP_DIR}/requests/request-3.json" '"event_name": "core.apply.server.started"'
 
 printf '[PASS] telemetry defaults use the canonical endpoint\n'

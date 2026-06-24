@@ -67,7 +67,7 @@ The release workflow creates a GitHub Release and uploads those files as release
 The installer script is versioned per release and can be used like this:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply
 ```
 
 The installer now exposes the same operational command family as the bundled public CLI. For example:
@@ -80,7 +80,7 @@ curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-
 Additional bootstrap flags can still be passed:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap --dry-run
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply --dry-run
 ```
 
 ## Hosted Validation Workflow
@@ -117,8 +117,8 @@ The workflow should provide these jobs:
 - run on `ubuntu-24.04`
 - run shell syntax checks
 - run the full bootstrap directly on the runner host
-- run `scripts/validate-k3s-stack.sh --strict`
-- run `scripts/clean-k3s-stack.sh --apply`
+- run `scripts/validate.sh --strict`
+- run `scripts/cleanup.sh --apply`
 - upload `test-artifacts/` and `runs/` as workflow artifacts
 - fail if `test-artifacts/hosted-validation-summary.json` does not end with `status == "success"`
 

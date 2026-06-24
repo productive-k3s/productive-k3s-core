@@ -14,12 +14,46 @@ HOST_VALIDATE_STATUS="not-run"
 HOST_CLEAN_STATUS="not-run"
 OVERALL_STATUS="failed"
 HOST_MANIFEST_PATH=""
+ADDONS_REPO_DIR_IS_TEMP=0
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
     echo "[ERROR] Missing required command: $1" >&2
     exit 1
   }
+}
+
+resolve_addons_repo_dir() {
+  if [[ -n "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" && -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/addons" ]]; then
+    printf '%s\n' "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}"
+    return 0
+  fi
+
+  local sibling_dir
+  sibling_dir="$(cd "${REPO_DIR}/.." && pwd)/productive-k3s-addons"
+  if [[ -d "${sibling_dir}/addons" ]]; then
+    printf '%s\n' "${sibling_dir}"
+    return 0
+  fi
+
+  return 1
+}
+
+prepare_addons_repo_dir() {
+  local resolved_dir
+  if resolved_dir="$(resolve_addons_repo_dir)"; then
+    ADDONS_REPO_DIR_IS_TEMP=0
+    printf '%s\n' "${resolved_dir}"
+    return 0
+  fi
+
+  local repo_url repo_ref temp_dir
+  repo_url="${PRODUCTIVE_K3S_ADDONS_REPO_URL:-https://github.com/productive-k3s/productive-k3s-addons.git}"
+  repo_ref="${PRODUCTIVE_K3S_ADDONS_REPO_REF:-development}"
+  temp_dir="$(mktemp -d)"
+  git clone --depth 1 --branch "${repo_ref}" "${repo_url}" "${temp_dir}" >/dev/null 2>&1
+  ADDONS_REPO_DIR_IS_TEMP=1
+  printf '%s\n' "${temp_dir}"
 }
 
 json_escape() {
@@ -72,7 +106,7 @@ cleanup_and_write_summary() {
   if [[ "$HOST_BOOTSTRAP_STATUS" == "success" && "$HOST_CLEAN_STATUS" == "not-run" ]]; then
     echo "[INFO] Running best-effort cleanup after partial hosted validation"
     local confirm=$'y\nCLEAN\n'
-    if printf '%s' "$confirm" | ./scripts/clean-k3s-stack.sh --apply >"$HOST_CLEAN_LOG" 2>&1; then
+    if printf '%s' "$confirm" | ./scripts/cleanup.sh --apply >"$HOST_CLEAN_LOG" 2>&1; then
       HOST_CLEAN_STATUS="success"
     else
       HOST_CLEAN_STATUS="failed"
@@ -92,7 +126,7 @@ run_validate_with_retries() {
 
   while true; do
     set +e
-    bash ./scripts/validate-k3s-stack.sh --strict > >(tee -a "$HOST_VALIDATE_LOG") 2>&1
+    bash ./scripts/validate.sh --strict > >(tee -a "$HOST_VALIDATE_LOG") 2>&1
     local rc=$?
     set -e
     if [[ "$rc" -eq 0 ]]; then
@@ -116,15 +150,21 @@ main() {
 
   need_cmd bash
   need_cmd jq
+  need_cmd git
 
   cd "$REPO_DIR"
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="$(prepare_addons_repo_dir)"
+  export PRODUCTIVE_K3S_ADDONS_REPO_DIR
+  if [[ "${ADDONS_REPO_DIR_IS_TEMP:-0}" == "1" ]]; then
+    trap 'rm -rf "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}"; cleanup_and_write_summary $?' EXIT
+  fi
 
   echo "[INFO] Checking shell syntax"
-  bash -n scripts/bootstrap-k3s-stack.sh
+  bash -n scripts/apply.sh
   bash -n scripts/send-telemetry.sh
   bash -n tests/test-in-vm.sh
-  bash -n scripts/rollback-k3s-stack.sh
-  bash -n scripts/clean-k3s-stack.sh
+  bash -n scripts/rollback.sh
+  bash -n scripts/cleanup.sh
   bash ./tests/test-telemetry-consent.sh
 
   echo "[INFO] Running hosted full bootstrap on ubuntu-24.04"
@@ -158,7 +198,7 @@ y
 y
 y
 '
-  if ! printf '%s' "$answers" | ./scripts/bootstrap-k3s-stack.sh | tee "$HOST_FULL_LOG"; then
+  if ! printf '%s' "$answers" | ./scripts/apply.sh | tee "$HOST_FULL_LOG"; then
     HOST_BOOTSTRAP_STATUS="failed"
     return 1
   fi
@@ -175,7 +215,7 @@ y
 
   echo "[INFO] Running destructive cleanup on hosted ubuntu-24.04"
   local confirm=$'y\nCLEAN\n'
-  if ! printf '%s' "$confirm" | ./scripts/clean-k3s-stack.sh --apply | tee "$HOST_CLEAN_LOG"; then
+  if ! printf '%s' "$confirm" | ./scripts/cleanup.sh --apply | tee "$HOST_CLEAN_LOG"; then
     HOST_CLEAN_STATUS="failed"
     return 1
   fi

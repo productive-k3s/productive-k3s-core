@@ -1,6 +1,6 @@
 # shellcheck shell=bash disable=SC2016
 Describe 'bootstrap manifest and args'
-  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/bootstrap-k3s-stack.sh"
+  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/apply.sh"
   RUNNER="$SHELLSPEC_PROJECT_ROOT/tests/helpers/run-bootstrap-lib.sh"
 
   It 'parses dry-run and stack mode arguments'
@@ -30,8 +30,8 @@ Describe 'bootstrap manifest and args'
       manifest_set_setting "bootstrap_mode" "stack"
       manifest_set_setting "telemetry_enabled" "true"
       manifest_set_setting "rancher_host" "rancher.home.arpa"
-      manifest_record_component "k3s" "n" "install"
-      manifest_complete_component "k3s" "installed"
+      manifest_record_cluster_runtime_component "n" "install"
+      manifest_complete_cluster_runtime_component "installed"
       manifest_record_component "clusterissuer" "n" "install"
       manifest_complete_component "clusterissuer" "installed" "letsencrypt-staging"
       init_run_manifest
@@ -42,6 +42,8 @@ Describe 'bootstrap manifest and args'
     The output should include '"bootstrap_mode": "stack"'
     The output should include '"telemetry_enabled": "true"'
     The output should not include '"rancher_host": "rancher.home.arpa"'
+    The output should include '"cluster_runtime": {"detected_before": "n", "planned_action": "install", "result": "installed"}'
+    The output should include '"k3s": {"detected_before": "n", "planned_action": "install", "result": "installed"}'
     The output should include '"clusterissuer": {"detected_before": "n", "planned_action": "install", "result": "installed", "note": "letsencrypt-staging"}'
   End
 
@@ -88,7 +90,7 @@ EOF
       emit_bootstrap_lifecycle_event started started
       cat "${capture}"'
     The status should equal 0
-    The output should include '"event_name": "core.bootstrap.single_node.started"'
+    The output should include '"event_name": "core.apply.single_node.started"'
     The output should include '"sent_at":'
     The output should include '"session_id": "session-xyz"'
     The output should include '"run_id": "run-xyz"'

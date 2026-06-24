@@ -28,7 +28,7 @@ For `server` and `agent`, it still captures the host resource snapshot, but it d
 
 At the moment, the public support baseline includes `amd64`/`x86_64` and Ubuntu `24.04` on `arm64`/`aarch64`. The preflight accepts both families for the currently supported Ubuntu and Debian targets, while the retained ARM validation evidence is specific to Ubuntu `24.04`.
 
-## `scripts/bootstrap-k3s-stack.sh`
+## `scripts/apply.sh`
 
 ### CLI options
 
@@ -61,8 +61,18 @@ Common prompted values include:
 - `Longhorn storage minimal available percentage`
 - `NFS export path`
 - `NFS allowed client network/CIDR`
-- whether to manage local `/etc/hosts`
-- whether to trust the self-signed registry in local Docker
+- whether the `rancher` add-on may manage local `/etc/hosts`
+- whether the `registry` add-on may manage local `/etc/hosts`
+- whether the `registry` add-on may install self-signed trust into local Docker
+
+The important public split now is:
+
+- `./productive-k3s-core.sh apply`
+  installs the local core only
+- `./productive-k3s-core.sh stack install <name>`
+  installs an explicit stack such as `base`
+- `./productive-k3s-core.sh addon install`
+  operates on the local host and local cluster, not on an external kubeconfig target
 
 ### Telemetry-related environment variables
 
@@ -120,10 +130,11 @@ The bootstrap manifest records settings such as:
 - `nfs_manage`
 - `nfs_export_path`
 - `nfs_allowed_network`
-- `manage_local_hosts`
-- `trust_registry_in_docker`
+- `rancher_manage_local_hosts`
+- `registry_manage_local_hosts`
+- `registry_trust_docker`
 
-## `scripts/validate-k3s-stack.sh`
+## `scripts/validate.sh`
 
 ### CLI options
 
@@ -136,12 +147,15 @@ The bootstrap manifest records settings such as:
 
 ### Related environment variables
 
-For the optional Docker login path, the validator can consume:
+- `PRODUCTIVE_K3S_STACK_NAME`
+  When set, validation also runs the selected stack add-on validations. When unset, `validate.sh` behaves as a core-only validator.
+
+The validator still accepts `--docker-registry-test`, but the actual registry push/pull check now lives in the `registry` add-on validation hook. For that optional Docker login path, the validator can consume:
 
 - `REGISTRY_USER`
 - `REGISTRY_PASSWORD`
 
-## `scripts/clean-k3s-stack.sh`
+## `scripts/cleanup.sh`
 
 ### CLI options
 
@@ -153,7 +167,7 @@ For the optional Docker login path, the validator can consume:
 | `--confirm-clean` | Auto-approve the typed `CLEAN` confirmation |
 | `-h`, `--help` | Show CLI help |
 
-## `scripts/rollback-k3s-stack.sh`
+## `scripts/rollback.sh`
 
 ### CLI options
 

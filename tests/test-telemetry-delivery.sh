@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BOOTSTRAP_SCRIPT="${ROOT_DIR}/scripts/bootstrap-k3s-stack.sh"
+BOOTSTRAP_SCRIPT="${ROOT_DIR}/scripts/apply.sh"
 TELEMETRY_SCRIPT="${ROOT_DIR}/scripts/send-telemetry.sh"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -118,7 +118,7 @@ export TELEMETRY_USER_AGENT="productive-k3s/test"
 export TELEMETRY_OUTBOX_DIR
 export TELEMETRY_RUN_ID="${RUN_ID}"
 export TELEMETRY_SOURCE_REPOSITORY="productive-k3s"
-export TELEMETRY_SOURCE_SCRIPT="scripts/bootstrap-k3s-stack.sh"
+export TELEMETRY_SOURCE_SCRIPT="scripts/apply.sh"
 export TELEMETRY_EXIT_CODE="0"
 export TELEMETRY_ENABLED="true"
 export TELEMETRY_SESSION_ID="session-123"
@@ -140,7 +140,7 @@ assert_file_contains "${TMP_DIR}/requests/request-2.json" '"retry_attempt": 1'
 assert_file_contains "${TMP_DIR}/requests/request-2.json" '"is_retry": true'
 assert_file_contains "${TMP_DIR}/requests/request-3.json" '"delivery_attempt": 3'
 assert_file_contains "${TMP_DIR}/requests/request-3.json" '"retry_attempt": 2'
-assert_file_contains "${TMP_DIR}/requests/request-3.json" '"event_name": "bootstrap.completed"'
+assert_file_contains "${TMP_DIR}/requests/request-3.json" '"event_name": "apply.completed"'
 assert_file_contains "${TMP_DIR}/requests/request-3.json" '"session_id": "session-123"'
 assert_file_contains "${TMP_DIR}/requests/request-3.json" '"parent_run_id": "parent-456"'
 assert_file_contains "${TMP_DIR}/requests/request-3.json" '"component": "infra"'

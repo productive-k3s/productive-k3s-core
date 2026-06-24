@@ -1,4 +1,4 @@
-.PHONY: preflight preflight-strict bootstrap dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test test-unit test-lint test-format test-spell test-coverage test-clean test-checkstatus test-preflight-host test-arm-support-docs test-bootstrap-modes test-artifact-tools test-telemetry test-productive-k3s-core-cli test-in-vm-engine-propagation test-agent-smoke test-smoke test-core test-core-debian12 test-core-debian13 test-matrix-smoke test-matrix-core test-matrix-full test-matrix-full-rollback test-matrix-full-clean test-matrix-all tag-release
+.PHONY: preflight preflight-strict apply dry-run backup validate validate-strict docs-build docs-serve test-local-all test-external-all test-matrix-all tag-release
 
 preflight:
 	./productive-k3s-core.sh preflight
@@ -6,11 +6,11 @@ preflight:
 preflight-strict:
 	./productive-k3s-core.sh preflight --strict
 
-bootstrap:
-	./productive-k3s-core.sh bootstrap
+apply:
+	./productive-k3s-core.sh apply
 
 dry-run:
-	./productive-k3s-core.sh bootstrap --dry-run
+	./productive-k3s-core.sh apply --dry-run
 
 backup:
 	./productive-k3s-core.sh backup
@@ -22,96 +22,19 @@ validate-strict:
 	./productive-k3s-core.sh validate --strict
 
 docs-build:
-	./scripts/productive-k3s-core-dev.sh docs-build
+	$(MAKE) -C ./docs docs-build
 
 docs-serve:
-	./scripts/productive-k3s-core-dev.sh docs-serve
+	$(MAKE) -C ./docs docs-serve
 
-docs-up:
-	./scripts/productive-k3s-core-dev.sh docs-up
+test-local-all:
+	$(MAKE) -C ./tests test-local-all
 
-docs-down:
-	./scripts/productive-k3s-core-dev.sh docs-down
-
-docs-clean:
-	./scripts/productive-k3s-core-dev.sh docs-clean
-
-test: test-unit test-lint test-format test-spell
-
-test-unit:
-	bash ./tests/bin/run-shellspec.sh
-
-test-lint:
-	bash ./tests/bin/run-shellcheck.sh
-
-test-format:
-	bash ./tests/bin/run-shfmt.sh
-
-test-spell:
-	bash ./tests/bin/run-spellcheck.sh
-
-test-coverage:
-	bash ./tests/bin/run-kcov.sh
-
-test-clean:
-	./scripts/productive-k3s-core-dev.sh test-clean
-
-test-checkstatus:
-	./scripts/productive-k3s-core-dev.sh test-checkstatus
-
-test-preflight-host:
-	./scripts/productive-k3s-core-dev.sh test-preflight-host
-
-test-arm-support-docs:
-	./scripts/productive-k3s-core-dev.sh test-arm-support-docs
-
-test-bootstrap-modes:
-	./scripts/productive-k3s-core-dev.sh test-bootstrap-modes
-
-test-artifact-tools:
-	./scripts/productive-k3s-core-dev.sh test-artifact-tools
-
-test-telemetry:
-	./scripts/productive-k3s-core-dev.sh test-telemetry
-
-test-productive-k3s-core-cli:
-	./scripts/productive-k3s-core-dev.sh test-productive-k3s-core-cli
-
-test-in-vm-engine-propagation:
-	./scripts/productive-k3s-core-dev.sh test-in-vm-engine-propagation
-
-test-agent-smoke:
-	./scripts/productive-k3s-core-dev.sh test-agent-smoke
-
-test-smoke:
-	./scripts/productive-k3s-core-dev.sh test-smoke
-
-test-core:
-	./scripts/productive-k3s-core-dev.sh test-core
-
-test-core-debian12:
-	./scripts/productive-k3s-core-dev.sh test-core-debian12
-
-test-core-debian13:
-	./scripts/productive-k3s-core-dev.sh test-core-debian13
-
-test-matrix-smoke:
-	./scripts/productive-k3s-core-dev.sh test-matrix-smoke
-
-test-matrix-core:
-	./scripts/productive-k3s-core-dev.sh test-matrix-core
-
-test-matrix-full:
-	./scripts/productive-k3s-core-dev.sh test-matrix-full
-
-test-matrix-full-rollback:
-	./scripts/productive-k3s-core-dev.sh test-matrix-full-rollback
-
-test-matrix-full-clean:
-	./scripts/productive-k3s-core-dev.sh test-matrix-full-clean
+test-external-all:
+	$(MAKE) -C ./tests test-external-all
 
 test-matrix-all:
-	./scripts/productive-k3s-core-dev.sh test-matrix-all
+	$(MAKE) -C ./tests test-matrix-all
 
 tag-release:
 	./scripts/create-release-tag.sh $(VERSION)

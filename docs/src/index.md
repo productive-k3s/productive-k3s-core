@@ -14,10 +14,10 @@ sublead: It is designed for teams that want to adopt Kubernetes practices withou
 sublead_es: Está pensado para equipos que quieren adoptar prácticas de Kubernetes sin la sobrecarga operativa ni el costo de administrar un clúster completo de varios nodos.
 primary_label: View on GitHub
 primary_label_es: Ver en GitHub
-primary_url: https://github.com/jemacchi/productive-k3s-core
+primary_url: https://github.com/productive-k3s/productive-k3s-core
 secondary_label: Open README
 secondary_label_es: Abrir README
-secondary_url: https://github.com/jemacchi/productive-k3s-core/blob/main/README.md
+secondary_url: https://github.com/productive-k3s/productive-k3s-core/blob/main/README.md
 card_title: What it does
 card_title_es: Qué hace
 card_items:

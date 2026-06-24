@@ -4,6 +4,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/component-versions.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/runtime-contract.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/addons-runtime.sh"
+ADDONS_REPO_DIR="$(resolve_addons_repo_dir || true)"
+if [[ -n "${ADDONS_REPO_DIR}" && -f "${ADDONS_REPO_DIR}/scripts/addon-host-runtime.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${ADDONS_REPO_DIR}/scripts/addon-host-runtime.sh"
+fi
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   COLOR_GREEN=$'\033[1;32m'
@@ -27,6 +36,7 @@ MANIFEST=""
 MANIFEST_PRIVATE_CONTEXT=""
 SUDO_KA_PID=""
 AUTO_APPROVE="n"
+PRODUCTIVE_K3S_DISTRO="${PRODUCTIVE_K3S_DISTRO:-k3s}"
 declare -a PLAN_IDS=()
 declare -A PLAN_DESCRIPTIONS=()
 declare -A PLAN_SAFETY=()
@@ -80,8 +90,11 @@ cleanup_exit() {
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 resolve_kubeconfig() {
+  local distro_candidate system_kubeconfig
+  system_kubeconfig="$(pk3s_runtime_system_kubeconfig_path)"
+  distro_candidate="$(pk3s_runtime_default_user_kubeconfig_path)"
   local candidate
-  for candidate in "${HOME}/.kube/k3s.yaml" "${HOME}/.kube/config" "/etc/rancher/k3s/k3s.yaml"; do
+  for candidate in "${distro_candidate}" "${HOME}/.kube/config" "${system_kubeconfig}"; do
     if [[ -r "$candidate" ]]; then
       printf '%s\n' "$candidate"
       return 0
@@ -99,10 +112,25 @@ delete_named_resources_matching() {
   done < <(kubectl_k3s get "$resource" -o name 2>/dev/null | grep -E "$pattern" || true)
 }
 
+run_addon_clean_hook() {
+  local addon_name="$1"
+  shift || true
+  local addon_dir clean_fn
+  addon_dir="$(resolve_addon_source_dir "${addon_name}")" || return 1
+  # shellcheck source=/dev/null
+  source "${addon_dir}/scripts/clean.sh"
+  clean_fn="pk3s_addon_clean"
+  if ! declare -F "${clean_fn}" >/dev/null 2>&1; then
+    err "Addon '${addon_name}' clean hook '${clean_fn}' is missing"
+    return 1
+  fi
+  "${clean_fn}" "$@"
+}
+
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/rollback-k3s-stack.sh --to runs/bootstrap-...json [--plan|--apply] [--yes]
+  ./scripts/rollback.sh --to runs/apply-...json [--plan|--apply] [--yes]
 
 Options:
   --to <file>   Bootstrap run manifest JSON to evaluate
@@ -169,6 +197,13 @@ require_prereqs() {
   elif [[ -f "${MANIFEST%.json}-private.json" ]]; then
     MANIFEST_PRIVATE_CONTEXT="${MANIFEST%.json}-private.json"
   fi
+
+  local manifest_distro
+  manifest_distro="$(jq -r '.settings.cluster_distro // empty' "$MANIFEST")"
+  if [[ -n "${manifest_distro}" ]]; then
+    PRODUCTIVE_K3S_DISTRO="${manifest_distro}"
+  fi
+  pk3s_runtime_validate_selection || { err "Manifest requested unsupported cluster distro/engine selection."; exit 1; }
 }
 
 manifest_string() {
@@ -199,6 +234,17 @@ component_field() {
   private_component_field "$component" "$field"
 }
 
+cluster_runtime_component_field() {
+  local field="$1"
+  local value
+  value="$(component_field cluster_runtime "$field")"
+  if [[ -n "$value" ]]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  component_field k3s "$field"
+}
+
 manifest_mode() { manifest_string '.mode'; }
 manifest_status() { manifest_string '.status'; }
 manifest_run_id() { manifest_string '.run_id'; }
@@ -214,7 +260,7 @@ setting() {
   private_setting "$key"
 }
 
-kubectl_k3s() { sudo k3s kubectl "$@"; }
+kubectl_k3s() { pk3s_runtime_kubectl "$@"; }
 
 ns_exists() { kubectl_k3s get ns "$1" >/dev/null 2>&1; }
 deployment_exists() { kubectl_k3s get deployment "$2" -n "$1" >/dev/null 2>&1; }
@@ -237,7 +283,7 @@ current_state() {
   local component="$1"
   case "$component" in
     k3s)
-      service_active k3s && echo present || echo missing
+      pk3s_runtime_server_active && echo present || echo missing
       ;;
     helm)
       need_cmd helm && echo present || echo missing
@@ -268,24 +314,6 @@ current_state() {
         echo missing
       fi
       ;;
-    local_hosts)
-      local host_line
-      host_line="$(component_field local_hosts note)"
-      if [[ -n "$host_line" ]] && grep -qxF "$host_line" /etc/hosts 2>/dev/null; then
-        echo present
-      else
-        echo missing
-      fi
-      ;;
-    docker_registry_trust)
-      local registry_host
-      registry_host="$(component_field docker_registry_trust note)"
-      if [[ -n "$registry_host" && -f "/etc/docker/certs.d/${registry_host}/ca.crt" ]]; then
-        echo present
-      else
-        echo missing
-      fi
-      ;;
     *)
       echo unknown
       ;;
@@ -298,6 +326,45 @@ add_plan_item() {
   PLAN_DESCRIPTIONS["$id"]="$description"
   PLAN_SAFETY["$id"]="$safety"
   PLAN_APPLY_KIND["$id"]="$kind"
+}
+
+plan_remove_hosts_entry_if_managed() {
+  local id_prefix="$1" host_key="$2" manage_key="$3" label="$4"
+  local host manage
+  host="$(setting "${host_key}")"
+  manage="$(setting "${manage_key}")"
+  if [[ "${manage}" == "y" && -n "${host}" ]]; then
+    add_plan_item "${id_prefix}_hosts" "Remove local /etc/hosts entry for ${label} hostname '${host}'" "safe" "remove_hosts_line"
+  fi
+}
+
+plan_remove_docker_trust_if_managed() {
+  local id_prefix="$1" host_key="$2" manage_key="$3"
+  local host manage
+  host="$(setting "${host_key}")"
+  manage="$(setting "${manage_key}")"
+  if [[ "${manage}" == "y" && -n "${host}" ]]; then
+    add_plan_item "${id_prefix}_docker_trust" "Remove local Docker trust material for registry hostname '${host}'" "safe" "remove_docker_trust"
+  fi
+}
+
+apply_remove_hosts_line() {
+  local host
+  host="$(setting rancher_host)"
+  if [[ -n "${host}" ]]; then
+    pk3s_remove_local_hosts_entry "${host}"
+  fi
+  host="$(setting registry_host)"
+  if [[ -n "${host}" ]]; then
+    pk3s_remove_local_hosts_entry "${host}"
+  fi
+}
+
+apply_remove_docker_trust() {
+  local host
+  host="$(setting registry_host)"
+  [[ -n "${host}" ]] || return 0
+  pk3s_remove_local_docker_trust "${host}"
 }
 
 build_plan() {
@@ -345,6 +412,7 @@ build_plan() {
   result="$(component_field rancher result)"
   now="$(current_state rancher)"
   if [[ "$detected" == "missing" && "$planned" == "install" && "$result" == "installed" && "$now" == "present" ]]; then
+    plan_remove_hosts_entry_if_managed "rancher" "rancher_host" "rancher_manage_local_hosts" "Rancher"
     add_plan_item "rancher" "Uninstall Rancher release and cattle-system/Fleet/Turtles resources" "moderate" "helm_uninstall_rancher"
   fi
 
@@ -353,6 +421,8 @@ build_plan() {
   result="$(component_field registry result)"
   now="$(current_state registry)"
   if [[ "$detected" == "missing" && "$planned" == "install" && "$result" == "installed" && "$now" == "present" ]]; then
+    plan_remove_hosts_entry_if_managed "registry" "registry_host" "registry_manage_local_hosts" "registry"
+    plan_remove_docker_trust_if_managed "registry" "registry_host" "registry_trust_docker"
     add_plan_item "registry" "Delete registry namespace resources created by the bootstrap run" "moderate" "kubectl_delete_registry"
   fi
 
@@ -367,25 +437,11 @@ build_plan() {
     fi
   fi
 
-  planned="$(component_field local_hosts planned_action)"
-  result="$(component_field local_hosts result)"
-  now="$(current_state local_hosts)"
-  if [[ "$planned" == "update" && "$result" == "configured" && "$now" == "present" ]]; then
-    add_plan_item "local_hosts" "Remove bootstrap-managed /etc/hosts line: '$(component_field local_hosts note)'" "safe" "remove_hosts_line"
-  fi
-
-  planned="$(component_field docker_registry_trust planned_action)"
-  result="$(component_field docker_registry_trust result)"
-  now="$(current_state docker_registry_trust)"
-  if [[ "$planned" == "install" && "$result" == "configured" && "$now" == "present" ]]; then
-    add_plan_item "docker_registry_trust" "Remove local Docker trust for registry '$(component_field docker_registry_trust note)'" "moderate" "remove_docker_trust"
-  fi
-
-  detected="$(component_field k3s detected_before)"
-  planned="$(component_field k3s planned_action)"
-  result="$(component_field k3s result)"
+  detected="$(cluster_runtime_component_field detected_before)"
+  planned="$(cluster_runtime_component_field planned_action)"
+  result="$(cluster_runtime_component_field result)"
   if [[ "$detected" == "missing" && "$planned" == "install" && "$result" == "installed" ]]; then
-    add_plan_item "k3s_manual" "k3s was installed by this run. Uninstalling it is high-impact and remains manual in this rollback implementation." "manual" "manual"
+    add_plan_item "k3s_manual" "$(pk3s_runtime_cluster_label) was installed by this run. Uninstalling it is high-impact and remains manual in this rollback implementation." "manual" "manual"
   fi
 
   detected="$(component_field helm detected_before)"
@@ -415,15 +471,15 @@ print_plan() {
 }
 
 apply_kubectl_delete_cert_manager() {
-  sudo k3s kubectl delete -f "https://github.com/cert-manager/cert-manager/releases/download/${PRODUCTIVE_K3S_CERT_MANAGER_VERSION:-v1.19.4}/cert-manager.yaml" || true
-  sudo k3s kubectl delete namespace cert-manager --ignore-not-found --wait=false || true
+  kubectl_k3s delete -f "https://github.com/cert-manager/cert-manager/releases/download/${PRODUCTIVE_K3S_CERT_MANAGER_VERSION:-v1.19.4}/cert-manager.yaml" || true
+  kubectl_k3s delete namespace cert-manager --ignore-not-found --wait=false || true
 }
 
 apply_kubectl_delete_clusterissuer() {
   local issuer
   issuer="$(component_field clusterissuer note)"
   [[ -n "$issuer" ]] || return 0
-  sudo k3s kubectl delete clusterissuer "$issuer" --ignore-not-found
+  kubectl_k3s delete clusterissuer "$issuer" --ignore-not-found
 }
 
 delete_rancher_cluster_artifacts() {
@@ -443,19 +499,15 @@ delete_longhorn_cluster_artifacts() {
 
 apply_helm_uninstall_longhorn() {
   helm uninstall longhorn -n longhorn-system || true
-  sudo k3s kubectl delete namespace longhorn-system --ignore-not-found --wait=false || true
-  delete_longhorn_cluster_artifacts
+  run_addon_clean_hook longhorn || true
   force_finalize_namespace_if_present longhorn-system
 }
 
 apply_helm_uninstall_rancher() {
+  local rancher_host
+  rancher_host="$(setting rancher_host)"
+  run_addon_clean_hook rancher "${rancher_host}" || true
   helm uninstall rancher -n cattle-system || true
-  delete_rancher_cluster_artifacts
-  sudo k3s kubectl delete namespace cattle-turtles-system --ignore-not-found --wait=false || true
-  sudo k3s kubectl delete namespace cattle-capi-system --ignore-not-found --wait=false || true
-  sudo k3s kubectl delete namespace cattle-fleet-local-system --ignore-not-found --wait=false || true
-  sudo k3s kubectl delete namespace cattle-fleet-system --ignore-not-found --wait=false || true
-  sudo k3s kubectl delete namespace cattle-system --ignore-not-found --wait=false || true
   force_finalize_namespace_if_present cattle-turtles-system
   force_finalize_namespace_if_present cattle-capi-system
   force_finalize_namespace_if_present cattle-fleet-local-system
@@ -464,7 +516,9 @@ apply_helm_uninstall_rancher() {
 }
 
 apply_kubectl_delete_registry() {
-  sudo k3s kubectl delete namespace registry --ignore-not-found --wait=false || true
+  local registry_host
+  registry_host="$(setting registry_host)"
+  run_addon_clean_hook registry "${registry_host}" || true
   force_finalize_namespace_if_present registry
 }
 
@@ -474,23 +528,6 @@ apply_remove_nfs_export() {
   [[ -n "$export_path" ]] || return 0
   sudo sed -i "\|^[[:space:]]*${export_path//\//\\/}[[:space:]]|d" /etc/exports
   sudo exportfs -ra
-}
-
-apply_remove_hosts_line() {
-  local host_line
-  host_line="$(component_field local_hosts note)"
-  [[ -n "$host_line" ]] || return 0
-  sudo sed -i "\|^$(printf '%s' "$host_line" | sed 's/[.[\\*^$()+?{|]/\\&/g')$|d" /etc/hosts
-}
-
-apply_remove_docker_trust() {
-  local registry_host
-  registry_host="$(component_field docker_registry_trust note)"
-  [[ -n "$registry_host" ]] || return 0
-  sudo rm -rf "/etc/docker/certs.d/${registry_host}"
-  if systemctl list-unit-files docker.service >/dev/null 2>&1; then
-    sudo systemctl restart docker
-  fi
 }
 
 apply_plan() {

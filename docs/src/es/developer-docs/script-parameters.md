@@ -28,7 +28,7 @@ Para `server` y `agent`, igual captura el snapshot de recursos del host, pero no
 
 Por ahora, la baseline pública soportada incluye `amd64`/`x86_64` y Ubuntu `24.04` sobre `arm64`/`aarch64`. El preflight acepta ambas familias para los targets Ubuntu y Debian actualmente soportados, mientras que la evidencia ARM retenida hoy es específica de Ubuntu `24.04`.
 
-## `scripts/bootstrap-k3s-stack.sh`
+## `scripts/apply.sh`
 
 ### Opciones CLI
 
@@ -61,8 +61,18 @@ Valores preguntados habitualmente:
 - `Longhorn storage minimal available percentage`
 - `NFS export path`
 - `NFS allowed client network/CIDR`
-- si debe administrar `/etc/hosts` local
-- si debe confiar el registry self-signed dentro del Docker local
+- si el add-on `rancher` puede administrar `/etc/hosts` local
+- si el add-on `registry` puede administrar `/etc/hosts` local
+- si el add-on `registry` puede instalar confianza self-signed en Docker local
+
+La separación pública importante ahora es:
+
+- `./productive-k3s-core.sh apply`
+  instala sólo el core local
+- `./productive-k3s-core.sh stack install <name>`
+  instala un stack explícito como `base`
+- `./productive-k3s-core.sh addon install`
+  opera sobre el host local y el clúster local, no sobre un target externo vía kubeconfig
 
 ### Variables de entorno relacionadas con telemetría
 
@@ -120,10 +130,11 @@ El manifest de bootstrap registra settings como:
 - `nfs_manage`
 - `nfs_export_path`
 - `nfs_allowed_network`
-- `manage_local_hosts`
-- `trust_registry_in_docker`
+- `rancher_manage_local_hosts`
+- `registry_manage_local_hosts`
+- `registry_trust_docker`
 
-## `scripts/validate-k3s-stack.sh`
+## `scripts/validate.sh`
 
 ### Opciones CLI
 
@@ -136,12 +147,15 @@ El manifest de bootstrap registra settings como:
 
 ### Variables de entorno relacionadas
 
-Para el camino opcional de Docker login, el validador puede consumir:
+- `PRODUCTIVE_K3S_STACK_NAME`
+  Cuando está seteada, la validación también corre los checks de add-ons del stack seleccionado. Cuando no está seteada, `validate.sh` se comporta como un validador core-only.
+
+El validador sigue aceptando `--docker-registry-test`, pero la validación real de push/pull del registry ahora vive en el hook de validación del add-on `registry`. Para el camino opcional de Docker login, el validador puede consumir:
 
 - `REGISTRY_USER`
 - `REGISTRY_PASSWORD`
 
-## `scripts/clean-k3s-stack.sh`
+## `scripts/cleanup.sh`
 
 ### Opciones CLI
 
@@ -153,7 +167,7 @@ Para el camino opcional de Docker login, el validador puede consumir:
 | `--confirm-clean` | Auto-aprobar la confirmación tipeada `CLEAN` |
 | `-h`, `--help` | Mostrar ayuda CLI |
 
-## `scripts/rollback-k3s-stack.sh`
+## `scripts/rollback.sh`
 
 ### Opciones CLI
 

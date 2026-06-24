@@ -8,13 +8,13 @@
 - `docs/` operational how-to guides for `k3s`, ingress, Rancher, registry, Longhorn, and certificate checks.
 - `docs/` note for Longhorn single-node behavior and PVC troubleshooting.
 - `utils/` helper scripts for inspecting ingress, Rancher, Longhorn, Longhorn volumes, and listing registry repositories/tags.
-- `scripts/validate-k3s-stack.sh` with:
+- `scripts/validate.sh` with:
   - strict mode
   - JSON output
   - optional Docker registry push/pull validation
-- `scripts/backup-k3s-stack.sh` for stack and host configuration export.
-- `scripts/rollback-k3s-stack.sh` for safe manifest-guided rollback of bootstrap-introduced resources.
-- `scripts/clean-k3s-stack.sh` for destructive full local stack cleanup.
+- `scripts/backup.sh` for stack and host configuration export.
+- `scripts/rollback.sh` for safe manifest-guided rollback of bootstrap-introduced resources.
+- `scripts/cleanup.sh` for destructive full local stack cleanup.
 - `tests/test-in-docker.sh` as a smoke-only container harness for bootstrap `--dry-run`.
 - `tests/test-in-vm.sh` as the real integration harness using Multipass, with profiles:
   - `smoke`

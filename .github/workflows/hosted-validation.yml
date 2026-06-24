@@ -64,10 +64,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          make test-unit
-          make test-lint
-          make test-format
-          make test-spell
+          make -C tests test-unit
+          make -C tests test-lint
+          make -C tests test-format
+          make -C tests test-spell
 
   smoke-matrix:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          make test-telemetry
+          make -C tests test-telemetry
 
       - name: Run containerized smoke for ${{ matrix.label }}
         shell: bash
@@ -148,7 +148,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          make test-telemetry
+          make -C tests test-telemetry
 
       - name: Run hosted validation
         shell: bash

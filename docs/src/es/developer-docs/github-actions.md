@@ -67,7 +67,7 @@ El workflow de release crea un GitHub Release y sube esos archivos como assets.
 El script instalador queda versionado por release y puede usarse así:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply
 ```
 
 Ahora el instalador expone la misma familia de comandos operativos que el CLI público incluido dentro del bundle. Por ejemplo:
@@ -80,7 +80,7 @@ curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-
 Todavía pueden pasarse flags adicionales al bootstrap:
 
 ```bash
-curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- bootstrap --dry-run
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- apply --dry-run
 ```
 
 ## Workflow de validación hosteada
@@ -117,8 +117,8 @@ El workflow debería ofrecer estos jobs:
 - corre sobre `ubuntu-24.04`
 - ejecuta shell syntax checks
 - corre el bootstrap full directamente sobre el host del runner
-- corre `scripts/validate-k3s-stack.sh --strict`
-- corre `scripts/clean-k3s-stack.sh --apply`
+- corre `scripts/validate.sh --strict`
+- corre `scripts/cleanup.sh --apply`
 - sube `test-artifacts/` y `runs/` como workflow artifacts
 - falla si `test-artifacts/hosted-validation-summary.json` no termina con `status == "success"`
 

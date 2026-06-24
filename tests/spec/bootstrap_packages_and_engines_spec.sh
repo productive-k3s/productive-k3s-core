@@ -1,6 +1,6 @@
 # shellcheck shell=bash disable=SC2016
 Describe 'bootstrap package and engine helpers'
-  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/bootstrap-k3s-stack.sh"
+  SCRIPT="$SHELLSPEC_PROJECT_ROOT/scripts/apply.sh"
   RUNNER="$SHELLSPEC_PROJECT_ROOT/tests/helpers/run-bootstrap-lib.sh"
 
   It 'keeps ensure_packages as a no-op when everything is installed'
@@ -30,25 +30,6 @@ Describe 'bootstrap package and engine helpers'
       ensure_packages "Longhorn" jq'
     The status should equal 1
     The output should include 'Cannot continue with Longhorn without those packages.'
-  End
-
-  It 'enables iscsid when it is inactive'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      DRY_RUN=1
-      service_active() { return 1; }
-      prompt_yesno() { printf -v "$1" y; }
-      ensure_iscsid'
-    The status should equal 0
-    The output should include '[dry-run] Enabling and starting iscsid'
-  End
-
-  It 'skips iscsid enablement after a negative answer'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      service_active() { return 1; }
-      prompt_yesno() { printf -v "$1" n; }
-      ensure_iscsid'
-    The status should equal 0
-    The output should include "Longhorn requires 'iscsid'"
   End
 
   It 'installs k3sup in dry-run mode when missing'

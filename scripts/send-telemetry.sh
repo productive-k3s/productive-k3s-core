@@ -13,7 +13,7 @@ TELEMETRY_USER_AGENT="${TELEMETRY_USER_AGENT:-productive-k3s/dev}"
 TELEMETRY_ENABLED="${TELEMETRY_ENABLED:-false}"
 TELEMETRY_RUN_ID="${TELEMETRY_RUN_ID:-unknown-run}"
 TELEMETRY_SOURCE_REPOSITORY="${TELEMETRY_SOURCE_REPOSITORY:-productive-k3s}"
-TELEMETRY_SOURCE_SCRIPT="${TELEMETRY_SOURCE_SCRIPT:-scripts/bootstrap-k3s-stack.sh}"
+TELEMETRY_SOURCE_SCRIPT="${TELEMETRY_SOURCE_SCRIPT:-scripts/apply.sh}"
 TELEMETRY_EXIT_CODE="${TELEMETRY_EXIT_CODE:-0}"
 TELEMETRY_SESSION_ID="${TELEMETRY_SESSION_ID:-}"
 TELEMETRY_PARENT_RUN_ID="${TELEMETRY_PARENT_RUN_ID:-}"
@@ -53,7 +53,7 @@ write_payload() {
     printf '{\n'
     printf '  "schema_version": "1",\n'
     printf '  "event_family": "install",\n'
-    printf '  "event_name": "bootstrap.completed",\n'
+    printf '  "event_name": "apply.completed",\n'
     printf '  "sent_at": "%s",\n' "$(json_escape "$(date -Iseconds)")"
     printf '  "delivery_attempt": %s,\n' "${delivery_attempt}"
     printf '  "retry_attempt": %s,\n' "${retry_attempt}"

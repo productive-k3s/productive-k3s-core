@@ -4,6 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/component-versions.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/runtime-contract.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/addons-runtime.sh"
 BUNDLE_INFO_PATH="${SCRIPT_DIR}/../bundle-info.json"
 TELEMETRY_EVENT_SENDER="${SCRIPT_DIR}/send-telemetry-event.sh"
 TELEMETRY_MARKER="${TELEMETRY_MARKER:-pk3s-public-v1}"
@@ -12,19 +16,23 @@ usage() {
   cat <<'EOF'
 Usage:
   ./productive-k3s-core.sh <command> [args...]
-  ./productive-k3s-core.sh addon <validate|install> --tgz <file>
-  ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)
+  ./productive-k3s-core.sh addon validate --tgz <file>
+  ./productive-k3s-core.sh addon install (--tgz <file> | <name>) [--public-host <fqdn>]
+  ./productive-k3s-core.sh stack <install|validate|backup|cleanup> <name> [args...]
+  ./productive-k3s-core.sh stack install --tgz <file> [args...]
   ./productive-k3s-core.sh dev addon validate --source <dir>
-  ./productive-k3s-core.sh [bootstrap args...]
+  ./productive-k3s-core.sh dev stack validate --source <dir>
+  ./productive-k3s-core.sh [apply args...]
 
 Operational commands:
   bundle      Show bundle metadata for automation
   bom         Show a JSON bill of materials for this CLI/runtime
-  preflight   Run host compatibility checks before bootstrap
-  bootstrap   Run the interactive bootstrap flow
+  preflight   Run host compatibility checks before apply
+  apply       Install the local Productive K3S core only
   backup      Capture a host and cluster backup snapshot
-  validate    Run the post-bootstrap validator
-  addon       Validate or install packaged add-ons
+  validate    Run the post-apply validator
+  addon       Validate or install add-ons on the local host/cluster
+  stack       Install or manage named stacks on the local host/cluster
   dev         Development-oriented source-based addon workflows
   help        Show this help
 
@@ -33,14 +41,16 @@ Examples:
   ./productive-k3s-core.sh bom --json
   ./productive-k3s-core.sh preflight
   ./productive-k3s-core.sh preflight --strict
-  ./productive-k3s-core.sh bootstrap --dry-run
+  ./productive-k3s-core.sh apply --dry-run
+  ./productive-k3s-core.sh stack install base
+  ./productive-k3s-core.sh stack validate base --strict
   ./productive-k3s-core.sh validate --strict
   ./productive-k3s-core.sh addon validate --tgz ./longhorn-addon.tgz
-  ./productive-k3s-core.sh addon install --tgz ./longhorn-addon.tgz --cluster-context default
-  ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal --cluster-context default
+  ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal
+  ./productive-k3s-core.sh addon install nginx
 
 If no command is provided, or the first argument is an option, the wrapper
-defaults to `bootstrap` for release-installer compatibility.
+defaults to `apply` for release-installer compatibility.
 EOF
 }
 
@@ -159,11 +169,15 @@ core_command_emits_telemetry() {
   local command="${1:-}"
   shift || true
   case "${command}" in
-    bootstrap)
+    apply)
       return 0
       ;;
     addon)
       [[ "${1:-}" == "install" ]]
+      return
+      ;;
+    stack)
+      [[ "${1:-}" == "install" || "${1:-}" == "cleanup" ]]
       return
       ;;
     -*)
@@ -179,13 +193,17 @@ run_preflight() {
   "${SCRIPT_DIR}/preflight-host.sh" "$@"
 }
 
-run_bootstrap() {
+run_apply() {
   local parent_run_id="${TELEMETRY_RUN_ID:-}"
-  TELEMETRY_PARENT_RUN_ID="${parent_run_id}" TELEMETRY_RUN_ID="" TELEMETRY_COMPONENT="core" "${SCRIPT_DIR}/bootstrap-k3s-stack.sh" "$@"
+  TELEMETRY_PARENT_RUN_ID="${parent_run_id}" TELEMETRY_RUN_ID="" TELEMETRY_COMPONENT="core" "${SCRIPT_DIR}/apply.sh" "$@"
 }
 
 run_backup() {
-  "${SCRIPT_DIR}/backup-k3s-stack.sh" "$@"
+  "${SCRIPT_DIR}/backup.sh" "$@"
+}
+
+run_cleanup() {
+  "${SCRIPT_DIR}/cleanup.sh" "$@"
 }
 
 resolve_bundle_version_fallback() {
@@ -202,6 +220,19 @@ resolve_bundle_version_fallback() {
   fi
 
   return 1
+}
+
+resolve_current_core_version() {
+  local version
+  if [[ -f "$BUNDLE_INFO_PATH" ]]; then
+    version="$(sed -n 's/.*"bundle_version": "\(.*\)".*/\1/p' "$BUNDLE_INFO_PATH" | head -n1)"
+    if [[ -n "${version}" ]]; then
+      printf '%s\n' "${version}"
+      return 0
+    fi
+  fi
+
+  resolve_bundle_version_fallback
 }
 
 print_bundle_info_json() {
@@ -337,6 +368,96 @@ addon_yaml_get() {
   ' "${file}"
 }
 
+stack_yaml_get() {
+  local file="$1"
+  local key="$2"
+  awk -v key="${key}" '
+    /^metadata:/ { section="metadata"; subsection=""; next }
+    /^spec:/ { section="spec"; subsection=""; next }
+    section == "spec" && /^  addons:/ { subsection="addons"; next }
+    section == "spec" && /^  resolution:/ { subsection="resolution"; next }
+    section == "spec" && /^  runtime:/ { subsection="runtime"; runtime_subsection=""; compatibility_subsection=""; next }
+    section == "spec" && subsection == "runtime" && /^    compatibility:/ { runtime_subsection="compatibility"; compatibility_subsection=""; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && /^      core:/ { compatibility_subsection="core"; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && /^      kubernetes:/ { compatibility_subsection="kubernetes"; next }
+    section == "metadata" && key == "metadata.name" && /^  name:/ { print; exit }
+    section == "metadata" && key == "metadata.version" && /^  version:/ { print; exit }
+    section == "spec" && subsection == "resolution" && key == "spec.resolution.mode" && /^    mode:/ { print; exit }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "core" && key == "spec.runtime.compatibility.core.minVersion" && /^        minVersion:/ { print; exit }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && key == "spec.runtime.compatibility.kubernetes.minVersion" && /^        minVersion:/ { print; exit }
+  ' "${file}"
+}
+
+stack_yaml_list() {
+  local file="$1"
+  local key="$2"
+  awk -v key="${key}" '
+    /^spec:/ { section="spec"; subsection=""; runtime_subsection=""; compatibility_subsection=""; kubernetes_subsection=""; next }
+    section == "spec" && /^  runtime:/ { subsection="runtime"; runtime_subsection=""; compatibility_subsection=""; kubernetes_subsection=""; next }
+    section == "spec" && subsection == "runtime" && /^    compatibility:/ { runtime_subsection="compatibility"; compatibility_subsection=""; kubernetes_subsection=""; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && /^      kubernetes:/ { compatibility_subsection="kubernetes"; kubernetes_subsection=""; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && /^        distros:/ { kubernetes_subsection="distros"; next }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && kubernetes_subsection == "distros" && key == "spec.runtime.compatibility.kubernetes.distros" && /^          - / {
+      line=$0
+      sub(/^          - /, "", line)
+      print line
+      next
+    }
+    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && kubernetes_subsection == "distros" && !/^          - / { exit }
+  ' "${file}"
+}
+
+stack_manifest_addon_records() {
+  local manifest="$1"
+  awk '
+    /^spec:/ { in_spec=1; next }
+    in_spec && /^  addons:/ { in_addons=1; next }
+    in_addons && /^  / && !/^    / { exit }
+    !in_addons { next }
+    /^    - / {
+      flush_record()
+      line=$0
+      sub(/^    - /, "", line)
+      current_name=""
+      current_version=""
+      current_source=""
+      if (line ~ /^name:[[:space:]]*/) {
+        sub(/^name:[[:space:]]*/, "", line)
+        current_name=line
+      } else if (line !~ /:/) {
+        current_name=line
+      }
+      in_record=1
+      next
+    }
+    in_record && /^      / {
+      line=$0
+      sub(/^      /, "", line)
+      if (line ~ /^name:[[:space:]]*/) {
+        sub(/^name:[[:space:]]*/, "", line)
+        current_name=line
+      } else if (line ~ /^version:[[:space:]]*/) {
+        sub(/^version:[[:space:]]*/, "", line)
+        current_version=line
+      } else if (line ~ /^source:[[:space:]]*/) {
+        sub(/^source:[[:space:]]*/, "", line)
+        current_source=line
+      }
+      next
+    }
+    in_record { flush_record(); in_record=0 }
+    END { flush_record() }
+    function flush_record() {
+      if (!in_record) {
+        return
+      }
+      if (current_name != "" || current_version != "" || current_source != "") {
+        printf "name=%s\tversion=%s\tsource=%s\n", current_name, current_version, current_source
+      }
+    }
+  ' "${manifest}"
+}
+
 extract_tgz_to_temp() {
   local archive="$1"
   [[ -f "${archive}" ]] || {
@@ -364,6 +485,17 @@ resolve_addon_manifest() {
   printf '%s\n' "${manifest}"
 }
 
+resolve_stack_manifest() {
+  local package_root="$1"
+  local manifest
+  manifest="$(find "${package_root}" -type f -name 'stack.yaml' | head -n1)"
+  [[ -n "${manifest}" ]] || {
+    printf 'stack source is missing stack.yaml\n' >&2
+    return 4
+  }
+  printf '%s\n' "${manifest}"
+}
+
 validate_addon_manifest() {
   local manifest="$1"
   local addon_name addon_type install_script
@@ -385,6 +517,206 @@ validate_addon_manifest() {
   }
 
   printf '%s\n%s\n%s\n' "${addon_name}" "${addon_type}" "${install_script}"
+}
+
+validate_stack_manifest() {
+  local manifest="$1"
+  local stack_name stack_version resolution_mode addon_count=0
+  local core_min_version kubernetes_min_version compatible_distros compatible_distro
+  local seen_addon_names="" has_structured_source="n"
+  stack_name="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "metadata.name")")"
+  stack_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "metadata.version")")"
+  resolution_mode="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "spec.resolution.mode")")"
+  core_min_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "spec.runtime.compatibility.core.minVersion")")"
+  kubernetes_min_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "spec.runtime.compatibility.kubernetes.minVersion")")"
+
+  [[ -n "${stack_name}" ]] || {
+    printf 'stack source metadata.name is required\n' >&2
+    return 4
+  }
+  [[ -n "${stack_version}" ]] || {
+    printf 'stack source metadata.version is required\n' >&2
+    return 4
+  }
+  if [[ -n "${resolution_mode}" && "${resolution_mode}" != "catalog" && "${resolution_mode}" != "bundled" ]]; then
+    printf 'stack source spec.resolution.mode must be either catalog or bundled\n' >&2
+    return 4
+  fi
+  while IFS= read -r addon_record; do
+    [[ -n "${addon_record}" ]] || continue
+    local addon_name addon_source
+    addon_name="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^name=/) {
+            sub(/^name=/, "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    ')"
+    [[ -n "${addon_name}" ]] || {
+      printf 'stack source addon entries require a name\n' >&2
+      return 4
+    }
+    if printf '%s\n' "${seen_addon_names}" | grep -Fxq "${addon_name}"; then
+      printf 'stack source addon entries must be unique: %s\n' "${addon_name}" >&2
+      return 4
+    fi
+    seen_addon_names+="${addon_name}"$'\n'
+    addon_source="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^source=/) {
+            sub(/^source=/, "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    ')"
+    if [[ -n "${addon_source}" ]]; then
+      has_structured_source="y"
+      [[ "${addon_source}" == addons/*.tgz ]] || {
+        printf 'stack addon source must stay within addons/ and point to a .tgz: %s\n' "${addon_source}" >&2
+        return 4
+      }
+    fi
+    addon_count=$((addon_count + 1))
+  done < <(stack_manifest_addon_records "${manifest}")
+  (( addon_count > 0 )) || {
+    printf 'stack source spec.addons must include at least one addon\n' >&2
+    return 4
+  }
+  if [[ "${resolution_mode}" == "bundled" && "${has_structured_source}" != "y" ]]; then
+    printf 'stack source spec.resolution.mode=bundled requires at least one addon source under addons/\n' >&2
+    return 4
+  fi
+
+  compatible_distros="$(stack_yaml_list "${manifest}" "spec.runtime.compatibility.kubernetes.distros" || true)"
+  if [[ -n "${compatible_distros}" ]]; then
+    local seen_distros=""
+    while IFS= read -r compatible_distro; do
+      [[ -n "${compatible_distro}" ]] || continue
+      case "${compatible_distro}" in
+        k3s|rke2) ;;
+        *)
+          printf 'stack source runtime compatibility distro is not supported: %s\n' "${compatible_distro}" >&2
+          return 4
+          ;;
+      esac
+      if printf '%s\n' "${seen_distros}" | grep -Fxq "${compatible_distro}"; then
+        printf 'stack source runtime compatibility distros must be unique: %s\n' "${compatible_distro}" >&2
+        return 4
+      fi
+      seen_distros+="${compatible_distro}"$'\n'
+    done <<< "${compatible_distros}"
+  fi
+
+  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    "${stack_name}" \
+    "${stack_version}" \
+    "${addon_count}" \
+    "${resolution_mode}" \
+    "${core_min_version}" \
+    "${kubernetes_min_version}" \
+    "${compatible_distros}"
+}
+
+validate_stack_bundled_sources() {
+  local manifest="$1"
+  local package_root="$2"
+  while IFS= read -r addon_record; do
+    [[ -n "${addon_record}" ]] || continue
+    local addon_source
+    addon_source="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^source=/) {
+            sub(/^source=/, "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    ')"
+    [[ -n "${addon_source}" ]] || continue
+    [[ "${addon_source}" == addons/* ]] || {
+      printf 'stack addon source must stay within addons/: %s\n' "${addon_source}" >&2
+      return 4
+    }
+    [[ -f "${package_root}/${addon_source}" ]] || {
+      printf 'Bundled addon package not found: %s\n' "${addon_source}" >&2
+      return 4
+    }
+  done < <(stack_manifest_addon_records "${manifest}")
+}
+
+normalize_semver() {
+  local version="${1#v}"
+  printf '%s\n' "${version}"
+}
+
+semver_is_comparable() {
+  local version
+  version="$(normalize_semver "${1:-}")"
+  [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+}
+
+semver_gte() {
+  local left right
+  left="$(normalize_semver "${1:-}")"
+  right="$(normalize_semver "${2:-}")"
+  [[ "$(printf '%s\n%s\n' "${right}" "${left}" | sort -V | head -n1)" == "${right}" ]]
+}
+
+stack_runtime_compatible_distro_list() {
+  local manifest="$1"
+  stack_yaml_list "${manifest}" "spec.runtime.compatibility.kubernetes.distros" || true
+}
+
+enforce_stack_runtime_compatibility() {
+  local manifest="$1"
+  local current_distro required_core_min_version current_core_version allowed_distro compatible_distro_list
+
+  compatible_distro_list="$(stack_runtime_compatible_distro_list "${manifest}")"
+  current_distro="${PRODUCTIVE_K3S_DISTRO:-k3s}"
+  if [[ -n "${compatible_distro_list}" ]]; then
+    local distro_allowed="n"
+    while IFS= read -r allowed_distro; do
+      [[ -n "${allowed_distro}" ]] || continue
+      if [[ "${allowed_distro}" == "${current_distro}" ]]; then
+        distro_allowed="y"
+        break
+      fi
+    done <<< "${compatible_distro_list}"
+    if [[ "${distro_allowed}" != "y" ]]; then
+      printf 'stack runtime compatibility does not support distro %s (allowed: %s)\n' \
+        "${current_distro}" \
+        "$(printf '%s' "${compatible_distro_list}" | paste -sd ', ' -)" >&2
+      return 4
+    fi
+  fi
+
+  required_core_min_version="$(trim_yaml_value "$(stack_yaml_get "${manifest}" "spec.runtime.compatibility.core.minVersion")")"
+  [[ -n "${required_core_min_version}" ]] || return 0
+
+  current_core_version="$(resolve_current_core_version || true)"
+  if ! semver_is_comparable "${required_core_min_version}"; then
+    printf 'stack runtime compatibility core.minVersion is not comparable: %s\n' "${required_core_min_version}" >&2
+    return 4
+  fi
+  if ! semver_is_comparable "${current_core_version}"; then
+    printf 'warning: skipping stack core version compatibility check because current productive-k3s-core version is not semver-like: %s\n' "${current_core_version:-unknown}" >&2
+    return 0
+  fi
+  if ! semver_gte "${current_core_version}" "${required_core_min_version}"; then
+    printf 'stack runtime compatibility requires productive-k3s-core >= %s (current: %s)\n' \
+      "${required_core_min_version}" \
+      "${current_core_version}" >&2
+    return 4
+  fi
 }
 
 resolve_addon_public_ingress_support() {
@@ -449,7 +781,7 @@ metadata:
     app.kubernetes.io/managed-by: productive-k3s-core
     addons.productive-k3s.io/name: ${addon_name}
 spec:
-  ingressClassName: traefik
+  ingressClassName: ${PK3S_INGRESS_CLASS_NAME:-$(pk3s_runtime_default_ingress_class)}
   rules:
     - host: ${public_host}
       http:
@@ -506,45 +838,35 @@ run_addon_validate() {
   rm -rf "${tmp_dir}"
 }
 
-run_addon_install() {
-  local tgz_path=""
-  local kubeconfig_path="${KUBECONFIG:-}"
-  local cluster_context="${PK3S_KUBE_CONTEXT:-}"
-  local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
-  while (($# > 0)); do
-    case "$1" in
-      --tgz)
-        tgz_path="${2:-}"
-        shift 2
-        ;;
-      --kubeconfig)
-        kubeconfig_path="${2:-}"
-        shift 2
-        ;;
-      --cluster-context)
-        cluster_context="${2:-}"
-        shift 2
-        ;;
-      --public-host)
-        public_host="${2:-}"
-        shift 2
-        ;;
-      *)
-        printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)\n' >&2
-        return 2
-        ;;
-    esac
+resolve_local_cluster_kubeconfig() {
+  local system_kubeconfig_path="${PRODUCTIVE_K3S_SYSTEM_KUBECONFIG_PATH:-$(pk3s_runtime_system_kubeconfig_path)}"
+  local distro_user_kubeconfig
+  distro_user_kubeconfig="$(pk3s_runtime_default_user_kubeconfig_path)"
+  local candidate
+  for candidate in \
+    "${KUBECONFIG:-}" \
+    "${distro_user_kubeconfig}" \
+    "${HOME}/.kube/config" \
+    "${system_kubeconfig_path}"
+  do
+    [[ -n "${candidate}" && -r "${candidate}" ]] || continue
+    printf '%s\n' "${candidate}"
+    return 0
   done
-  [[ -n "${tgz_path}" ]] || {
-    printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>] (--kubeconfig <file> | --cluster-context <name>)\n' >&2
-    return 2
-  }
-  [[ -n "${kubeconfig_path}" || -n "${cluster_context}" ]] || {
-    printf 'addon install requires an explicit target; use --kubeconfig <file> or --cluster-context <name>\n' >&2
-    return 2
+  return 1
+}
+
+run_packaged_addon_install() {
+  local tgz_path="$1"
+  local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
+  local target_kubeconfig=""
+  local core_repo_dir tmp_root addon_name package_root
+  target_kubeconfig="$(resolve_local_cluster_kubeconfig)" || {
+    printf 'addon install could not find a readable local kubeconfig. Run apply first or set KUBECONFIG.\n' >&2
+    return 4
   }
 
-  local tmp_dir manifest metadata install_script manifest_dir install_path target_kubeconfig cleanup_kubeconfig=""
+  local tmp_dir manifest metadata install_script manifest_dir install_path
   tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
   manifest="$(resolve_addon_manifest "${tmp_dir}")" || {
     local rc=$?
@@ -556,57 +878,205 @@ run_addon_install() {
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
+  addon_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
   install_script="$(printf '%s\n' "${metadata}" | sed -n '3p')"
-  manifest_dir="$(dirname "${manifest}")"
+  core_repo_dir="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  tmp_root="$(mktemp -d)"
+  package_root="${tmp_root}/addons/${addon_name}"
+  mkdir -p "${package_root}" "${tmp_root}/scripts"
+  cp -R "${tmp_dir}/." "${package_root}/"
+  cp "${SCRIPT_DIR}/addon-host-runtime.sh" "${tmp_root}/scripts/addon-host-runtime.sh"
+  manifest_dir="${package_root}"
   install_path="${manifest_dir}/${install_script}"
   [[ -f "${install_path}" ]] || {
-    rm -rf "${tmp_dir}"
+    rm -rf "${tmp_dir}" "${tmp_root}"
     printf 'addon package install script not found: %s\n' "${install_script}" >&2
     return 4
   }
-  if [[ -n "${cluster_context}" ]]; then
-    local source_kubeconfig
-    source_kubeconfig="${kubeconfig_path:-${KUBECONFIG:-${HOME}/.kube/config}}"
-    [[ -f "${source_kubeconfig}" ]] || {
-      rm -rf "${tmp_dir}"
-      printf 'kubeconfig not found for requested cluster context: %s\n' "${source_kubeconfig}" >&2
-      return 4
-    }
-    command -v kubectl >/dev/null 2>&1 || {
-      rm -rf "${tmp_dir}"
-      printf 'kubectl is required to resolve cluster contexts for addon installs\n' >&2
-      return 4
-    }
-    cleanup_kubeconfig="$(mktemp)"
-    cp "${source_kubeconfig}" "${cleanup_kubeconfig}"
-    if ! kubectl --kubeconfig "${cleanup_kubeconfig}" config use-context "${cluster_context}" >/dev/null 2>&1; then
-      rm -rf "${tmp_dir}"
-      rm -f "${cleanup_kubeconfig}"
-      printf 'cluster context not found in kubeconfig: %s\n' "${cluster_context}" >&2
-      return 4
-    fi
-    target_kubeconfig="${cleanup_kubeconfig}"
-  else
-    [[ -f "${kubeconfig_path}" ]] || {
-      rm -rf "${tmp_dir}"
-      printf 'kubeconfig not found: %s\n' "${kubeconfig_path}" >&2
-      return 4
-    }
-    target_kubeconfig="${kubeconfig_path}"
-  fi
 
   printf 'Executing packaged addon installer: %s\n' "${install_script}"
   (
     cd "${manifest_dir}"
     export KUBECONFIG="${target_kubeconfig}"
+    export PRODUCTIVE_K3S_CORE_REPO_DIR="${core_repo_dir}"
+    export PK3S_KUBECTL_MODE="${PK3S_KUBECTL_MODE:-$(pk3s_runtime_addon_kubectl_mode)}"
+    export PK3S_KUBECTL_BIN="${PK3S_KUBECTL_BIN:-$(pk3s_runtime_addon_kubectl_bin)}"
+    export PK3S_INGRESS_CLASS_NAME="${PK3S_INGRESS_CLASS_NAME:-$(pk3s_runtime_default_ingress_class)}"
     bash "${install_path}"
   )
   local rc=$?
   if (( rc == 0 )) && [[ -n "${public_host}" ]]; then
     apply_addon_public_ingress "${manifest}" "$(printf '%s\n' "${metadata}" | sed -n '1p')" "${target_kubeconfig}" "${public_host}" || rc=$?
   fi
-  rm -f "${cleanup_kubeconfig}"
+  rm -rf "${tmp_dir}" "${tmp_root}"
+  return "${rc}"
+}
+
+with_stack_source_env() {
+  local repo_dir="$1"
+  local stack_name="$2"
+  shift 2
+  (
+    export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${repo_dir}"
+    export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
+    "$@"
+  )
+}
+
+create_overlay_repo_for_stack_manifest() {
+  local manifest_path="$1"
+  local overlay_root real_repo metadata stack_name
+  real_repo="$(resolve_addons_repo_dir)" || {
+    printf 'could not resolve productive-k3s-addons source repository. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR.\n' >&2
+    return 4
+  }
+  metadata="$(validate_stack_manifest "${manifest_path}")" || return $?
+  stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
+
+  overlay_root="$(mktemp -d)"
+  mkdir -p "${overlay_root}/stacks/${stack_name}"
+  ln -s "${real_repo}/addons" "${overlay_root}/addons"
+  cp "${manifest_path}" "${overlay_root}/stacks/${stack_name}/stack.yaml"
+
+  printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
+}
+
+create_overlay_repo_for_stack_tgz() {
+  local tgz_path="$1"
+  local tmp_dir manifest metadata stack_name overlay_root real_repo
+  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
+  manifest="$(resolve_stack_manifest "${tmp_dir}")" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  metadata="$(validate_stack_manifest "${manifest}")" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  validate_stack_bundled_sources "${manifest}" "${tmp_dir}" || {
+    local rc=$?
+    rm -rf "${tmp_dir}"
+    return "${rc}"
+  }
+  stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
+  real_repo="$(resolve_addons_repo_dir || true)"
+  overlay_root="$(mktemp -d)"
+  mkdir -p "${overlay_root}/stacks/${stack_name}" "${overlay_root}/bundled-addons"
+  if [[ -n "${real_repo}" ]]; then
+    ln -s "${real_repo}/addons" "${overlay_root}/addons"
+  else
+    mkdir -p "${overlay_root}/addons"
+  fi
+  cp "${manifest}" "${overlay_root}/stacks/${stack_name}/stack.yaml"
+  if [[ -d "${tmp_dir}/addons" ]]; then
+    cp -R "${tmp_dir}/addons/." "${overlay_root}/bundled-addons/"
+  fi
   rm -rf "${tmp_dir}"
+  printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
+}
+
+create_overlay_repo_for_addon_name() {
+  local addon_name="$1"
+  local real_repo overlay_root stack_name
+  real_repo="$(resolve_addons_repo_dir)" || {
+    printf 'could not resolve productive-k3s-addons source repository. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR.\n' >&2
+    return 4
+  }
+  resolve_addon_source_dir "${addon_name}" >/dev/null || {
+    printf 'addon source not found: %s\n' "${addon_name}" >&2
+    return 4
+  }
+
+  overlay_root="$(mktemp -d)"
+  stack_name="addon-${addon_name}"
+  mkdir -p "${overlay_root}/stacks/${stack_name}"
+  ln -s "${real_repo}/addons" "${overlay_root}/addons"
+  {
+    printf 'apiVersion: addons.productive-k3s.io/v1\n'
+    printf 'kind: Stack\n'
+    printf 'metadata:\n'
+    printf '  name: %s\n' "${stack_name}"
+    printf '  version: 0.1.0\n'
+    printf 'spec:\n'
+    printf '  addons:\n'
+    case "${addon_name}" in
+      rancher|registry)
+        printf '    - cert-manager\n'
+        ;;
+    esac
+    printf '    - %s\n' "${addon_name}"
+  } > "${overlay_root}/stacks/${stack_name}/stack.yaml"
+
+  printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
+}
+
+run_stack_install_from_overlay() {
+  local overlay_repo="$1"
+  local stack_name="$2"
+  shift 2
+  local manifest_path
+  manifest_path="${overlay_repo}/stacks/${stack_name}/stack.yaml"
+  enforce_stack_runtime_compatibility "${manifest_path}" || return $?
+  (
+    export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${overlay_repo}"
+    export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
+    export PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR="${overlay_repo}/bundled-addons"
+    "${SCRIPT_DIR}/apply.sh" --mode stack "$@"
+  )
+}
+
+run_addon_install() {
+  local tgz_path=""
+  local addon_name=""
+  local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
+  while (($# > 0)); do
+    case "$1" in
+      --tgz)
+        tgz_path="${2:-}"
+        shift 2
+        ;;
+      --public-host)
+        public_host="${2:-}"
+        shift 2
+        ;;
+      *)
+        if [[ -n "${addon_name}" ]]; then
+          printf 'Usage: ./productive-k3s-core.sh addon install (--tgz <file> | <name>) [--public-host <fqdn>]\n' >&2
+          return 2
+        fi
+        if [[ "$1" == -* ]]; then
+          break
+        fi
+        addon_name="$1"
+        shift
+        break
+        ;;
+    esac
+  done
+
+  if [[ -n "${tgz_path}" ]]; then
+    PK3S_ADDON_PUBLIC_HOST="${public_host}" run_packaged_addon_install "${tgz_path}"
+    return $?
+  fi
+
+  [[ -n "${addon_name}" ]] || {
+    printf 'Usage: ./productive-k3s-core.sh addon install (--tgz <file> | <name>) [--public-host <fqdn>]\n' >&2
+    return 2
+  }
+
+  local overlay_repo stack_name
+  mapfile -t _addon_overlay < <(create_overlay_repo_for_addon_name "${addon_name}") || return $?
+  overlay_repo="${_addon_overlay[0]:-}"
+  stack_name="${_addon_overlay[1]:-}"
+  [[ -n "${overlay_repo}" && -n "${stack_name}" ]] || {
+    printf 'failed to build a temporary stack overlay for addon install\n' >&2
+    return 4
+  }
+  local rc=0
+  run_stack_install_from_overlay "${overlay_repo}" "${stack_name}" "$@" || rc=$?
+  rm -rf "${overlay_repo}"
   return "${rc}"
 }
 
@@ -638,6 +1108,45 @@ run_dev_addon_validate() {
   printf 'Addon source validation passed\n'
 }
 
+run_dev_stack_validate() {
+  local source_dir=""
+  while (($# > 0)); do
+    case "$1" in
+      --source)
+        source_dir="${2:-}"
+        shift 2
+        ;;
+      *)
+        printf 'Usage: ./productive-k3s-core.sh dev stack validate --source <dir>\n' >&2
+        return 2
+        ;;
+    esac
+  done
+  [[ -n "${source_dir}" ]] || {
+    printf 'Usage: ./productive-k3s-core.sh dev stack validate --source <dir>\n' >&2
+    return 2
+  }
+  local manifest metadata stack_name stack_version addon_count resolution_mode core_min_version kubernetes_min_version compatible_distros compatible_distro_summary
+  manifest="$(resolve_stack_manifest "${source_dir}")" || return $?
+  metadata="$(validate_stack_manifest "${manifest}")" || return $?
+  stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
+  stack_version="$(printf '%s\n' "${metadata}" | sed -n '2p')"
+  addon_count="$(printf '%s\n' "${metadata}" | sed -n '3p')"
+  resolution_mode="$(printf '%s\n' "${metadata}" | sed -n '4p')"
+  core_min_version="$(printf '%s\n' "${metadata}" | sed -n '5p')"
+  kubernetes_min_version="$(printf '%s\n' "${metadata}" | sed -n '6p')"
+  compatible_distros="$(printf '%s\n' "${metadata}" | tail -n +7)"
+  compatible_distro_summary="$(printf '%s' "${compatible_distros}" | paste -sd ', ' -)"
+  printf 'Stack source: %s\n' "${stack_name}"
+  printf 'Stack version: %s\n' "${stack_version}"
+  printf 'Referenced addons: %s\n' "${addon_count}"
+  printf 'Stack resolution mode: %s\n' "${resolution_mode:-catalog-or-legacy}"
+  printf 'Minimum core version: %s\n' "${core_min_version:-none}"
+  printf 'Minimum Kubernetes version: %s\n' "${kubernetes_min_version:-none}"
+  printf 'Compatible distros: %s\n' "${compatible_distro_summary:-any}"
+  printf 'Stack source validation passed\n'
+}
+
 run_addon() {
   local action="${1:-}"
   shift || true
@@ -655,6 +1164,88 @@ run_addon() {
   esac
 }
 
+run_stack() {
+  local action="${1:-}"
+  shift || true
+  local stack_name="" tgz_path=""
+  case "${action}" in
+    install)
+      while (($# > 0)); do
+        case "$1" in
+          --tgz)
+            tgz_path="${2:-}"
+            shift 2
+            ;;
+          -*)
+            break
+            ;;
+          *)
+            if [[ -z "${stack_name}" ]]; then
+              stack_name="$1"
+              shift
+            else
+              break
+            fi
+            ;;
+        esac
+      done
+
+      if [[ -n "${tgz_path}" ]]; then
+        local overlay_repo_tgz stack_name_tgz
+        mapfile -t _stack_overlay < <(create_overlay_repo_for_stack_tgz "${tgz_path}") || return $?
+        overlay_repo_tgz="${_stack_overlay[0]:-}"
+        stack_name_tgz="${_stack_overlay[1]:-}"
+        [[ -n "${overlay_repo_tgz}" && -n "${stack_name_tgz}" ]] || {
+          printf 'failed to build a temporary stack overlay for stack install\n' >&2
+          return 4
+        }
+        local rc=0
+        run_stack_install_from_overlay "${overlay_repo_tgz}" "${stack_name_tgz}" "$@" || rc=$?
+        rm -rf "${overlay_repo_tgz}"
+        return "${rc}"
+      fi
+
+      [[ -n "${stack_name}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack install <name> [apply args...]\n' >&2
+        printf '   or: ./productive-k3s-core.sh stack install --tgz <file> [apply args...]\n' >&2
+        return 2
+      }
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/apply.sh" --mode stack "$@"
+      ;;
+    validate)
+      stack_name="${1:-}"
+      [[ -n "${stack_name}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack validate <name> [validate args...]\n' >&2
+        return 2
+      }
+      shift
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/validate.sh" "$@"
+      ;;
+    backup)
+      stack_name="${1:-}"
+      [[ -n "${stack_name}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack backup <name> [backup args...]\n' >&2
+        return 2
+      }
+      shift
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/backup.sh" "$@"
+      ;;
+    cleanup)
+      stack_name="${1:-}"
+      [[ -n "${stack_name}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack cleanup <name> [cleanup args...]\n' >&2
+        return 2
+      }
+      shift
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/cleanup.sh" "$@"
+      ;;
+    *)
+      printf 'Usage: ./productive-k3s-core.sh stack <install|validate|backup|cleanup> ...\n' >&2
+      return 2
+      ;;
+  esac
+}
+
 run_dev() {
   local area="${1:-}"
   local action="${2:-}"
@@ -663,8 +1254,11 @@ run_dev() {
     addon:validate)
       run_dev_addon_validate "$@"
       ;;
+    stack:validate)
+      run_dev_stack_validate "$@"
+      ;;
     *)
-      printf 'Usage: ./productive-k3s-core.sh dev addon validate --source <dir>\n' >&2
+      printf 'Usage: ./productive-k3s-core.sh dev <addon|stack> validate --source <dir>\n' >&2
       return 2
       ;;
   esac
@@ -700,15 +1294,15 @@ run_validate() {
     shift
   done
 
-  "${SCRIPT_DIR}/validate-k3s-stack.sh" "${translated_args[@]}"
+  "${SCRIPT_DIR}/validate.sh" "${translated_args[@]}"
 }
 
 main() {
-  local command="${1:-bootstrap}"
+  local command="${1:-apply}"
   local rc=0
 
   if (($# == 0)); then
-    command="bootstrap"
+    command="apply"
   fi
 
   if core_command_emits_telemetry "${command}" "$@"; then
@@ -734,9 +1328,9 @@ main() {
       shift
       run_preflight "$@" || rc=$?
       ;;
-    bootstrap)
+    apply)
       shift
-      run_bootstrap "$@" || rc=$?
+      run_apply "$@" || rc=$?
       ;;
     backup)
       shift
@@ -750,13 +1344,17 @@ main() {
       shift
       run_addon "$@" || rc=$?
       ;;
+    stack)
+      shift
+      run_stack "$@" || rc=$?
+      ;;
     dev)
       shift
       run_dev "$@" || rc=$?
       ;;
     -*)
-      command="bootstrap"
-      run_bootstrap "$@" || rc=$?
+      command="apply"
+      run_apply "$@" || rc=$?
       ;;
     *)
       printf 'Unsupported command: %s\n\n' "$command" >&2
