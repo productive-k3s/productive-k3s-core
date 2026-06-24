@@ -304,9 +304,11 @@ runtime_mount_points() {
 
 unmount_runtime_state_dirs() {
   local runtime_path mount_path
+  local -a runtime_paths=()
+  mapfile -t runtime_paths < <(pk3s_runtime_state_dirs)
   while IFS= read -r mount_path; do
     [[ -n "${mount_path}" ]] || continue
-    while IFS= read -r runtime_path; do
+    for runtime_path in "${runtime_paths[@]}"; do
       [[ -n "${runtime_path}" ]] || continue
       if path_is_within_dir "${mount_path}" "${runtime_path}"; then
         sudo umount "${mount_path}" >/dev/null 2>&1 \
@@ -314,7 +316,7 @@ unmount_runtime_state_dirs() {
           || true
         break
       fi
-    done < <(pk3s_runtime_state_dirs)
+    done
   done < <(runtime_mount_points)
 }
 
