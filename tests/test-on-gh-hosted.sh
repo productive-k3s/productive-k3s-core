@@ -14,12 +14,46 @@ HOST_VALIDATE_STATUS="not-run"
 HOST_CLEAN_STATUS="not-run"
 OVERALL_STATUS="failed"
 HOST_MANIFEST_PATH=""
+ADDONS_REPO_DIR_IS_TEMP=0
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
     echo "[ERROR] Missing required command: $1" >&2
     exit 1
   }
+}
+
+resolve_addons_repo_dir() {
+  if [[ -n "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" && -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/addons" ]]; then
+    printf '%s\n' "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}"
+    return 0
+  fi
+
+  local sibling_dir
+  sibling_dir="$(cd "${REPO_DIR}/.." && pwd)/productive-k3s-addons"
+  if [[ -d "${sibling_dir}/addons" ]]; then
+    printf '%s\n' "${sibling_dir}"
+    return 0
+  fi
+
+  return 1
+}
+
+prepare_addons_repo_dir() {
+  local resolved_dir
+  if resolved_dir="$(resolve_addons_repo_dir)"; then
+    ADDONS_REPO_DIR_IS_TEMP=0
+    printf '%s\n' "${resolved_dir}"
+    return 0
+  fi
+
+  local repo_url repo_ref temp_dir
+  repo_url="${PRODUCTIVE_K3S_ADDONS_REPO_URL:-https://github.com/productive-k3s/productive-k3s-addons.git}"
+  repo_ref="${PRODUCTIVE_K3S_ADDONS_REPO_REF:-development}"
+  temp_dir="$(mktemp -d)"
+  git clone --depth 1 --branch "${repo_ref}" "${repo_url}" "${temp_dir}" >/dev/null 2>&1
+  ADDONS_REPO_DIR_IS_TEMP=1
+  printf '%s\n' "${temp_dir}"
 }
 
 json_escape() {
@@ -116,8 +150,14 @@ main() {
 
   need_cmd bash
   need_cmd jq
+  need_cmd git
 
   cd "$REPO_DIR"
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR="$(prepare_addons_repo_dir)"
+  export PRODUCTIVE_K3S_ADDONS_REPO_DIR
+  if [[ "${ADDONS_REPO_DIR_IS_TEMP:-0}" == "1" ]]; then
+    trap 'rm -rf "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}"; cleanup_and_write_summary $?' EXIT
+  fi
 
   echo "[INFO] Checking shell syntax"
   bash -n scripts/apply.sh
