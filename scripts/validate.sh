@@ -449,7 +449,11 @@ check_ingress() {
   if printf '%s\n' "$ingress" | awk 'NR>1 {print}' | grep -q .; then
     record_ok "ingress resources are present"
   else
-    record_warn "no ingress resources found"
+    if [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]]; then
+      record_warn "no ingress resources found"
+    else
+      info "no ingress resources found; skipping optional ingress checks for core-only validation"
+    fi
   fi
 }
 
