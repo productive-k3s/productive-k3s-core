@@ -1,4 +1,4 @@
-# ARM Support
+# Soporte ARM
 
 Esta página documenta la baseline pública actual de soporte ARM para `productive-k3s-core`.
 

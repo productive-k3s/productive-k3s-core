@@ -2,6 +2,8 @@
 
 Esta página resume los targets soportados por Productive K3S Core y la guía práctica de dimensionamiento para un host de nodo único.
 
+La idea de esta matriz de soporte no es reclamar cualquier entorno con forma de Kubernetes. La idea es mantener confiable y explícito el camino simple de entrada.
+
 La herramienta está preparada para entornos orientados a producción basados en los sistemas operativos no propietarios más utilizados en plataformas comunes de cloud y de VMs. En la práctica, por eso los targets de runtime soportados terminan siendo distribuciones Linux.
 
 Al mismo tiempo, el flujo de desarrollo da una forma práctica para que contribuidores que usan Windows o macOS puedan trabajar en mejoras sobre los scripts de la herramienta usando Multipass y VMs Linux soportadas.

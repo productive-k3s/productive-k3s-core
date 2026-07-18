@@ -1,6 +1,6 @@
 # Productive K3S Core
 
-`productive-k3s-core` is the bootstrap, validation, and operations engine for a production-oriented `k3s` platform on a supported single host or VM.
+`productive-k3s-core` is the simplest practical way to install a real Kubernetes base with Productive K3S.
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-yellow.svg)](./LICENSE)
 ![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04%20LTS-E95420?logo=ubuntu&logoColor=white)
@@ -8,7 +8,7 @@
 ![Debian 13](https://img.shields.io/badge/Debian-13%20trixie-A81D33?logo=debian&logoColor=white)
 ![Debian 12](https://img.shields.io/badge/Debian-12%20bookworm-A81D33?logo=debian&logoColor=white)
 
-The engine manages:
+It manages:
 
 - `k3s`
 - `helm`
@@ -21,6 +21,8 @@ The default `base` stack lives outside this repository and currently includes:
 - `Rancher`
 - internal registry
 
+It can start simple and still grow into more demanding scenarios.
+
 Bootstrap modes:
 
 - `single-node`: legacy all-in-one path that installs the core and the default stack together
@@ -28,13 +30,15 @@ Bootstrap modes:
 - `agent`: join a node to an existing K3S server
 - `stack`: install or reuse an explicit stack on top of an existing cluster
 
-Optional install engine:
+Advanced install engines:
 
 - `PRODUCTIVE_K3S_ENGINE=native`: default and expected path
 - `PRODUCTIVE_K3S_ENGINE=k3sup`: experimental complementary backend for the base K3S install step
 
 `k3sup` integration does not redefine the scope of `productive-k3s-core`.
 The repository support guarantees are still the tested platform and mode matrix documented in the project, not arbitrary third-party orchestration combinations.
+
+Advanced users can also work with `rke2` through the same technical model when they need a more demanding path than the default `k3s` flow. `k3s` remains the natural starting point.
 
 Current public support baseline:
 
@@ -95,6 +99,17 @@ Repository references and maintainer guidance:
 - [Debian 12 supported platform](https://core.productive-k3s.io/en/developer-docs/debian-12-supported/)
 
 ## Practical Summary
+
+When to use Core directly:
+
+- when you want the most explicit base-installation contract
+- when you want to understand or validate the cluster bootstrap path itself
+- when you do not need the higher-level deployment layer from `productive-k3s-infra`
+
+When to use the Productive K3S CLI instead:
+
+- when you want the simplest and recommended interface for the ecosystem
+- when you want one coherent UX across `core` and `infra`
 
 If you only want to install and operate the stack locally, the practical host-side prerequisites are:
 

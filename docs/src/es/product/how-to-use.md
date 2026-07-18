@@ -1,6 +1,14 @@
 # Cómo usar Productive K3S Core
 
-La forma más simple de usar `productive-k3s-core` es ejecutar el instalador del release sobre una de las [plataformas soportadas](supported-platforms.md), en un host o una VM con esos sistemas operativos.
+La forma más simple de usar `productive-k3s-core` es tratarlo como el camino directo hacia una base real de Kubernetes.
+
+Usá Core directo cuando:
+
+- quieras el contrato base de instalación más claro;
+- quieras entender exactamente cómo se arma la base del cluster;
+- quieras control explícito sobre la instalación de addons o stacks una vez que la base existe.
+
+Si preferís la experiencia más simple y recomendada del ecosistema, usá `pk3s` y volvé a Core solo cuando necesites detalle a nivel componente.
 
 Comandos requeridos en el host o la VM para este camino de instalación:
 
@@ -57,9 +65,9 @@ Por defecto, el destino práctico es una única VM soportada o un host Linux sop
 
 Esto no está pensado para cualquier distribución Linux. El destino tiene que coincidir con la página de [plataformas soportadas](supported-platforms.md), ya sea como host real o como VM.
 
-## Engine opcional de instalación
+## Engines avanzados de instalación
 
-El engine por default y esperado es el camino nativo de bootstrap del repositorio.
+El engine por default y esperado es el camino nativo de bootstrap incorporado en Core.
 
 También existe una variable de entorno opcional y experimental:
 
@@ -71,7 +79,9 @@ PRODUCTIVE_K3S_ENGINE=native|k3sup
 - `k3sup`: backend experimental opcional para la etapa base de instalación de K3S
 
 `k3sup` se integró como una opción complementaria, no como un reemplazo de `productive-k3s-core`.
-Su propósito es permitir que usuarios avanzados experimenten con las mismas decisiones de bootstrap y stack de Productive K3S usando una herramienta de instalación de K3S con la que ya se sientan cómodos.
+Su propósito es permitir que usuarios avanzados experimenten con las mismas decisiones base de Productive K3S usando una herramienta de instalación de K3S con la que ya se sientan cómodos.
+
+Ese mismo contrato es el que también deja espacio para decisiones más avanzadas de engine como `rke2` dentro de la evolución más amplia de Productive K3S.
 
 Límites importantes de scope:
 

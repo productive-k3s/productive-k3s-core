@@ -1,8 +1,15 @@
 # Product Overview
 
-`Productive K3S Core` is a tool for bootstrapping, validating, and operating a production-oriented `k3s` stack on a supported single host or VM.
+`Productive K3S Core` is the simplest way to start with a real Kubernetes base inside the Productive K3S ecosystem.
 
-In the pages below you can see how it is used, why it exists, and which platforms are supported.
+It can be used directly when you want the clearest path to base installation, validation, and curated addon or stack execution.
+
+It also sits underneath the broader ecosystem:
+
+- `productive-k3s-infra` builds deployment orchestration on top of it
+- `productive-k3s-cli` is the recommended unified interface on top of it
+
+The default path starts with `k3s`, while more advanced users can also understand how the same contract grows toward options such as `rke2` or alternate engine wiring.
 
 ## Pages
 

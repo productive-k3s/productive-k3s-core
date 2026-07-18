@@ -1,5 +1,5 @@
 site_name: Productive K3S Core
-site_description: Production-like Kubernetes on a single VM, with bilingual documentation.
+site_description: Real Kubernetes made simpler with bilingual documentation for Productive K3S Core.
 site_author: Productive K3S Core
 site_url: https://core.productive-k3s.io/
 repo_url: https://github.com/productive-k3s/productive-k3s-core
@@ -110,7 +110,7 @@ nav:
       - Documentación para usuarios:
           - es/user-docs/index.md
           - Preflight del host: es/user-docs/host-preflight.md
-          - ARM Support: es/user-docs/arm-support.md
+          - Soporte ARM: es/user-docs/arm-support.md
           - Verificaciones:
               - K3s: es/user-docs/k3s-checks.md
               - Ingress: es/user-docs/ingress-checks.md
@@ -122,7 +122,7 @@ nav:
           - Privacidad y telemetría: es/user-docs/privacy-and-telemetry.md
       - Documentación para desarrolladores:
           - es/developer-docs/index.md
-          - Targets de Make: es/developer-docs/make-targets.md
+          - Objetivos de Make: es/developer-docs/make-targets.md
           - Modos de Productive K3S Core: es/developer-docs/productive-k3s-modes.md
           - Parámetros de scripts: es/developer-docs/script-parameters.md
           - Guías:
@@ -139,8 +139,8 @@ nav:
 
 extra:
   pk3s:
-    footer_slogan_en: "Productive K3S: a simple way to run Kubernetes on a single VM, without the overhead of a full cluster."
-    footer_slogan_es: "Productive K3S: una forma simple de ejecutar Kubernetes en una sola VM, sin la sobrecarga de un cluster completo."
+    footer_slogan_en: "Productive K3S Core: start with a real Kubernetes base in the simplest practical way."
+    footer_slogan_es: "Productive K3S Core: empeza con una base real de Kubernetes de la forma mas simple y practica."
     contact_label_en: "Contact"
     contact_label_es: "Contacto"
     contact_value: "contact@productive-k3s.io"

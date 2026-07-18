@@ -1,6 +1,14 @@
 # How to Use Productive K3S Core
 
-The simplest way to use `productive-k3s-core` is to run the release installer on one of the [supported platforms](supported-platforms.md), in a host or a VM with those operating systems.
+The simplest way to use `productive-k3s-core` is to treat it as the direct path into a real Kubernetes base.
+
+Use Core directly when:
+
+- you want the clearest base installation contract;
+- you want to understand exactly how the cluster base is assembled;
+- you want explicit control over addon or stack installation after the base cluster exists.
+
+If you prefer the simplest and recommended ecosystem experience, use `pk3s` and come back to Core only when you need component-level detail.
 
 Required host/VM commands for this install path:
 
@@ -57,9 +65,9 @@ By default, the practical target is a single supported VM or Linux host, and the
 
 This is not intended for an arbitrary Linux distribution. The target must match the [supported platforms](supported-platforms.md) page, whether it is a real host or a VM.
 
-## Optional install engine
+## Advanced install engines
 
-The default and expected install engine is the native repository bootstrap path.
+The default and expected install engine is the native repository bootstrap path built into Core.
 
 An optional experimental environment variable is also available:
 
@@ -71,7 +79,9 @@ PRODUCTIVE_K3S_ENGINE=native|k3sup
 - `k3sup`: optional experimental backend for the base K3S installation step
 
 `k3sup` was integrated as a complementary option, not as a replacement for `productive-k3s-core`.
-Its purpose is to let advanced users experiment with the same Productive K3S bootstrap and stack decisions while using a K3S install tool they already know.
+Its purpose is to let advanced users experiment with the same Productive K3S base decisions while using a K3S install tool they already know.
+
+The same contract is also what leaves room for more advanced engine choices such as `rke2` in broader Productive K3S evolution.
 
 Important scope boundaries:
 
