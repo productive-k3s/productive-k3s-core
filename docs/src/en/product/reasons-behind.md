@@ -1,6 +1,8 @@
 # Reasons Behind the `productive-k3s-core` Setup
 
-The `productive-k3s-core` setup was designed to provide a lightweight but production-oriented local Kubernetes environment on a single host. The goal is to move beyond ad hoc local deployments and offer a stack that is closer to real Kubernetes operations, while still being simple enough to run and validate locally.
+`productive-k3s-core` exists to make the first step into Kubernetes feel useful instead of painful.
+
+The goal is not to build the heaviest platform possible on day one. The goal is to install a Kubernetes base that behaves like something real, stays simple enough to adopt, and still leaves room to grow toward more demanding scenarios later.
 
 ## k3s
 
@@ -104,7 +106,7 @@ It is intended to provide:
 - better observability and manageability than a minimal local setup
 - a practical foundation for deploying Helm-based applications and validating them against a realistic local cluster
 
-In short, the setup is meant to be small enough to run locally, but structured enough to reflect real deployment patterns.
+In short, the setup is meant to be simple enough to start with, but structured enough to reflect real deployment patterns.
 
 ## See Also
 
