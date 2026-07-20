@@ -230,11 +230,13 @@ body {
 
 .pk3s-footer-newsletter {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.38rem;
 }
 
 .pk3s-footer-newsletter__label {
+  width: 100%;
   color: var(--pk3s-muted);
   font-size: 0.82rem;
   font-weight: 700;
@@ -269,6 +271,28 @@ body {
   padding: 0 0.9rem;
   font-size: 1.15rem;
   cursor: pointer;
+}
+
+.pk3s-footer-newsletter__field button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.pk3s-footer-newsletter__message {
+  min-height: 1.2rem;
+  width: 100%;
+  color: var(--pk3s-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.pk3s-footer-newsletter__message.is-success {
+  color: #2d7a39;
+}
+
+.pk3s-footer-newsletter__message.is-error {
+  color: #a03838;
 }
 
 .pk3s-footer-argentina {
