@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --md-text-font: "Inter";
+      --md-code-font: "JetBrains Mono";
+    }
+  </style>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      var form = document.querySelector("[data-pk3s-newsletter-form]");
+      if (!form) {
+        return;
+      }
+
+      var input = form.querySelector("input[name='email']");
+      var button = form.querySelector("button[type='submit']");
+      var message = form.querySelector("[data-pk3s-newsletter-message]");
+      var isSpanish = document.documentElement.lang === "es" || window.location.pathname.indexOf("/es/") === 0;
+
+      function datasetValue(key) {
+        return form.dataset[key + (isSpanish ? "Es" : "En")] || "";
+      }
+
+      function setMessage(kind, text) {
+        if (!message) {
+          return;
+        }
+        message.textContent = text;
+        message.classList.remove("is-success", "is-error");
+        if (kind) {
+          message.classList.add(kind === "success" ? "is-success" : "is-error");
+        }
+      }
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        if (!input || !button) {
+          return;
+        }
+
+        if (!input.checkValidity()) {
+          setMessage("error", datasetValue("pk3sNewsletterInvalid"));
+          input.focus();
+          return;
+        }
+
+        var apiBaseUrl = form.dataset.pk3sNewsletterApiBaseUrl || "";
+        if (!apiBaseUrl) {
+          setMessage("error", datasetValue("pk3sNewsletterError"));
+          return;
+        }
+
+        button.disabled = true;
+        setMessage("", "");
+
+        try {
+          var response = await fetch(apiBaseUrl.replace(/\/$/, "") + "/subscribe", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              email: input.value.trim(),
+              source: window.location.hostname
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error("newsletter_submit_failed");
+          }
+
+          var payload = await response.json();
+          if (payload && payload.accepted) {
+            setMessage("success", payload.duplicate ? datasetValue("pk3sNewsletterDuplicate") : datasetValue("pk3sNewsletterSuccess"));
+            form.reset();
+          } else {
+            setMessage("error", datasetValue("pk3sNewsletterError"));
+          }
+        } catch (error) {
+          setMessage("error", datasetValue("pk3sNewsletterError"));
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+  </script>
+{% endblock %}

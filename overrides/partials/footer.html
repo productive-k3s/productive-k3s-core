@@ -1,0 +1,172 @@
+{#-
+  Custom footer for Productive K3S docs.
+-#}
+<footer class="md-footer">
+  {% if "navigation.footer" in features %}
+    {% if page.previous_page or page.next_page %}
+      {% if page.meta and page.meta.hide %}
+        {% set hidden = "hidden" if "footer" in page.meta.hide %}
+      {% endif %}
+      <nav class="md-footer__inner md-grid" aria-label="{{ lang.t('footer') }}" {{ hidden }}>
+        {% if page.previous_page %}
+          {% set direction = lang.t("footer.previous") %}
+          <a href="{{ page.previous_page.url | url }}" class="md-footer__link md-footer__link--prev" aria-label="{{ direction }}: {{ page.previous_page.title | e }}">
+            <div class="md-footer__button md-icon">
+              {% set icon = config.theme.icon.previous or "material/arrow-left" %}
+              {% include ".icons/" ~ icon ~ ".svg" %}
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                {{ direction }}
+              </span>
+              <div class="md-ellipsis">
+                {{ page.previous_page.title }}
+              </div>
+            </div>
+          </a>
+        {% endif %}
+        {% if page.next_page %}
+          {% set direction = lang.t("footer.next") %}
+          <a href="{{ page.next_page.url | url }}" class="md-footer__link md-footer__link--next" aria-label="{{ direction }}: {{ page.next_page.title | e }}">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                {{ direction }}
+              </span>
+              <div class="md-ellipsis">
+                {{ page.next_page.title }}
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              {% set icon = config.theme.icon.next or "material/arrow-right" %}
+              {% include ".icons/" ~ icon ~ ".svg" %}
+            </div>
+          </a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% endif %}
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      {% set pk3s_extra = config.extra.pk3s if config.extra and config.extra.pk3s else {} %}
+      <div class="pk3s-footer-slogan">
+        {% set footer_slogan_en = pk3s_extra.footer_slogan_en if pk3s_extra.footer_slogan_en else config.site_name %}
+        {% set footer_slogan_es = pk3s_extra.footer_slogan_es if pk3s_extra.footer_slogan_es else config.site_name %}
+        <span
+          class="pk3s-footer-slogan__text"
+          data-pk3s-footer-slogan
+          data-pk3s-footer-slogan-en="{{ footer_slogan_en }}"
+          data-pk3s-footer-slogan-es="{{ footer_slogan_es }}"
+        >
+          {{ footer_slogan_es if page and page.url and page.url.startswith('es/') else footer_slogan_en }}
+        </span>
+      </div>
+      {% set contact_label_en = pk3s_extra.contact_label_en if pk3s_extra.contact_label_en else "Contact" %}
+      {% set contact_label_es = pk3s_extra.contact_label_es if pk3s_extra.contact_label_es else "Contacto" %}
+      {% set newsletter_label_en = pk3s_extra.newsletter_label_en if pk3s_extra.newsletter_label_en else "Newsletter" %}
+      {% set newsletter_label_es = pk3s_extra.newsletter_label_es if pk3s_extra.newsletter_label_es else "Newsletter" %}
+      {% set newsletter_placeholder_en = pk3s_extra.newsletter_placeholder_en if pk3s_extra.newsletter_placeholder_en else "E-mail" %}
+      {% set newsletter_placeholder_es = pk3s_extra.newsletter_placeholder_es if pk3s_extra.newsletter_placeholder_es else "E-mail" %}
+      {% set newsletter_api_base_url = pk3s_extra.newsletter_api_base_url if pk3s_extra.newsletter_api_base_url else "https://productive-k3s-newsletter.jose-macchi.workers.dev" %}
+      {% set newsletter_success_en = pk3s_extra.newsletter_success_en if pk3s_extra.newsletter_success_en else "Thanks for subscribing." %}
+      {% set newsletter_success_es = pk3s_extra.newsletter_success_es if pk3s_extra.newsletter_success_es else "Gracias por suscribirte." %}
+      {% set newsletter_duplicate_en = pk3s_extra.newsletter_duplicate_en if pk3s_extra.newsletter_duplicate_en else "You are already subscribed." %}
+      {% set newsletter_duplicate_es = pk3s_extra.newsletter_duplicate_es if pk3s_extra.newsletter_duplicate_es else "Ya estabas suscripto." %}
+      {% set newsletter_invalid_en = pk3s_extra.newsletter_invalid_en if pk3s_extra.newsletter_invalid_en else "Enter a valid e-mail address." %}
+      {% set newsletter_invalid_es = pk3s_extra.newsletter_invalid_es if pk3s_extra.newsletter_invalid_es else "Ingresa un e-mail valido." %}
+      {% set newsletter_error_en = pk3s_extra.newsletter_error_en if pk3s_extra.newsletter_error_en else "Could not submit right now. Please try again." %}
+      {% set newsletter_error_es = pk3s_extra.newsletter_error_es if pk3s_extra.newsletter_error_es else "No se pudo enviar ahora. Intenta nuevamente." %}
+      {% set argentina_credit_en = pk3s_extra.argentina_credit_en if pk3s_extra.argentina_credit_en else "Made in Argentina" %}
+      {% set argentina_credit_es = pk3s_extra.argentina_credit_es if pk3s_extra.argentina_credit_es else "Hecho en Argentina" %}
+      {% set argentina_logo = "assets/images/argentina.png" %}
+      <div class="pk3s-footer-meta-row pk3s-footer-meta-row--top">
+        <div class="pk3s-footer-cluster">
+          {% if config.extra.social %}
+            <div class="pk3s-footer-social">
+              {% include "partials/social.html" %}
+            </div>
+          {% endif %}
+          <div class="pk3s-footer-contact">
+            <a
+              href="#"
+              onclick="return false;"
+              class="pk3s-footer-contact__link"
+              data-pk3s-footer-contact-label
+              data-pk3s-footer-contact-label-en="{{ contact_label_en }}"
+              data-pk3s-footer-contact-label-es="{{ contact_label_es }}"
+            >
+              {{ contact_label_es if page and page.url and page.url.startswith('es/') else contact_label_en }}
+            </a>
+          </div>
+        </div>
+        <form
+          class="pk3s-footer-newsletter"
+          action="#"
+          method="post"
+          data-pk3s-newsletter-form
+          data-pk3s-newsletter-api-base-url="{{ newsletter_api_base_url }}"
+          data-pk3s-newsletter-success-en="{{ newsletter_success_en }}"
+          data-pk3s-newsletter-success-es="{{ newsletter_success_es }}"
+          data-pk3s-newsletter-duplicate-en="{{ newsletter_duplicate_en }}"
+          data-pk3s-newsletter-duplicate-es="{{ newsletter_duplicate_es }}"
+          data-pk3s-newsletter-invalid-en="{{ newsletter_invalid_en }}"
+          data-pk3s-newsletter-invalid-es="{{ newsletter_invalid_es }}"
+          data-pk3s-newsletter-error-en="{{ newsletter_error_en }}"
+          data-pk3s-newsletter-error-es="{{ newsletter_error_es }}"
+        >
+          <label
+            class="pk3s-footer-newsletter__label"
+            for="pk3s-newsletter-email"
+            data-pk3s-footer-newsletter-label
+            data-pk3s-footer-newsletter-label-en="{{ newsletter_label_en }}"
+            data-pk3s-footer-newsletter-label-es="{{ newsletter_label_es }}"
+          >
+            {{ newsletter_label_es if page and page.url and page.url.startswith('es/') else newsletter_label_en }}
+          </label>
+          <div class="pk3s-footer-newsletter__field">
+            <input
+              id="pk3s-newsletter-email"
+              type="email"
+              name="email"
+              required
+              data-pk3s-footer-newsletter-placeholder-en="{{ newsletter_placeholder_en }}"
+              data-pk3s-footer-newsletter-placeholder-es="{{ newsletter_placeholder_es }}"
+              placeholder="{{ newsletter_placeholder_es if page and page.url and page.url.startswith('es/') else newsletter_placeholder_en }}"
+            />
+            <button type="submit" aria-label="Submit newsletter form">›</button>
+          </div>
+          <div
+            class="pk3s-footer-newsletter__message"
+            data-pk3s-newsletter-message
+            role="status"
+            aria-live="polite"
+          ></div>
+        </form>
+        <div class="pk3s-footer-argentina">
+          <img src="{{ argentina_logo | url }}" alt="Argentina" />
+        </div>
+      </div>
+      <div class="pk3s-footer-meta-row pk3s-footer-meta-row--bottom">
+        <div class="pk3s-footer-credit">
+          {% set footer_credit_en = "Made with" %}
+          {% set footer_credit_es = "Hecho con" %}
+          <span
+            data-pk3s-footer-credit-prefix
+            data-pk3s-footer-credit-prefix-en="{{ footer_credit_en }}"
+            data-pk3s-footer-credit-prefix-es="{{ footer_credit_es }}"
+          >
+            {{ footer_credit_es if page and page.url and page.url.startswith('es/') else footer_credit_en }}
+          </span>
+          <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">Material for MkDocs</a>
+        </div>
+        <div
+          class="pk3s-footer-argentina__credit"
+          data-pk3s-footer-argentina-credit
+          data-pk3s-footer-argentina-credit-en="{{ argentina_credit_en }}"
+          data-pk3s-footer-argentina-credit-es="{{ argentina_credit_es }}"
+        >
+          {{ argentina_credit_es if page and page.url and page.url.startswith('es/') else argentina_credit_en }}
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
