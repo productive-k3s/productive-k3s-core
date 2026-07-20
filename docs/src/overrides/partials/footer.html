@@ -66,6 +66,15 @@
       {% set newsletter_label_es = pk3s_extra.newsletter_label_es if pk3s_extra.newsletter_label_es else "Newsletter" %}
       {% set newsletter_placeholder_en = pk3s_extra.newsletter_placeholder_en if pk3s_extra.newsletter_placeholder_en else "E-mail" %}
       {% set newsletter_placeholder_es = pk3s_extra.newsletter_placeholder_es if pk3s_extra.newsletter_placeholder_es else "E-mail" %}
+      {% set newsletter_api_base_url = pk3s_extra.newsletter_api_base_url if pk3s_extra.newsletter_api_base_url else "https://productive-k3s-newsletter.jose-macchi.workers.dev" %}
+      {% set newsletter_success_en = pk3s_extra.newsletter_success_en if pk3s_extra.newsletter_success_en else "Thanks for subscribing." %}
+      {% set newsletter_success_es = pk3s_extra.newsletter_success_es if pk3s_extra.newsletter_success_es else "Gracias por suscribirte." %}
+      {% set newsletter_duplicate_en = pk3s_extra.newsletter_duplicate_en if pk3s_extra.newsletter_duplicate_en else "You are already subscribed." %}
+      {% set newsletter_duplicate_es = pk3s_extra.newsletter_duplicate_es if pk3s_extra.newsletter_duplicate_es else "Ya estabas suscripto." %}
+      {% set newsletter_invalid_en = pk3s_extra.newsletter_invalid_en if pk3s_extra.newsletter_invalid_en else "Enter a valid e-mail address." %}
+      {% set newsletter_invalid_es = pk3s_extra.newsletter_invalid_es if pk3s_extra.newsletter_invalid_es else "Ingresa un e-mail valido." %}
+      {% set newsletter_error_en = pk3s_extra.newsletter_error_en if pk3s_extra.newsletter_error_en else "Could not submit right now. Please try again." %}
+      {% set newsletter_error_es = pk3s_extra.newsletter_error_es if pk3s_extra.newsletter_error_es else "No se pudo enviar ahora. Intenta nuevamente." %}
       {% set argentina_credit_en = pk3s_extra.argentina_credit_en if pk3s_extra.argentina_credit_en else "Made in Argentina" %}
       {% set argentina_credit_es = pk3s_extra.argentina_credit_es if pk3s_extra.argentina_credit_es else "Hecho en Argentina" %}
       {% set argentina_logo = "assets/images/argentina.png" %}
@@ -89,7 +98,21 @@
             </a>
           </div>
         </div>
-        <form class="pk3s-footer-newsletter" action="#" method="post" onsubmit="return false;">
+        <form
+          class="pk3s-footer-newsletter"
+          action="#"
+          method="post"
+          data-pk3s-newsletter-form
+          data-pk3s-newsletter-api-base-url="{{ newsletter_api_base_url }}"
+          data-pk3s-newsletter-success-en="{{ newsletter_success_en }}"
+          data-pk3s-newsletter-success-es="{{ newsletter_success_es }}"
+          data-pk3s-newsletter-duplicate-en="{{ newsletter_duplicate_en }}"
+          data-pk3s-newsletter-duplicate-es="{{ newsletter_duplicate_es }}"
+          data-pk3s-newsletter-invalid-en="{{ newsletter_invalid_en }}"
+          data-pk3s-newsletter-invalid-es="{{ newsletter_invalid_es }}"
+          data-pk3s-newsletter-error-en="{{ newsletter_error_en }}"
+          data-pk3s-newsletter-error-es="{{ newsletter_error_es }}"
+        >
           <label
             class="pk3s-footer-newsletter__label"
             for="pk3s-newsletter-email"
@@ -104,12 +127,19 @@
               id="pk3s-newsletter-email"
               type="email"
               name="email"
+              required
               data-pk3s-footer-newsletter-placeholder-en="{{ newsletter_placeholder_en }}"
               data-pk3s-footer-newsletter-placeholder-es="{{ newsletter_placeholder_es }}"
               placeholder="{{ newsletter_placeholder_es if page and page.url and page.url.startswith('es/') else newsletter_placeholder_en }}"
             />
             <button type="submit" aria-label="Submit newsletter form">›</button>
           </div>
+          <div
+            class="pk3s-footer-newsletter__message"
+            data-pk3s-newsletter-message
+            role="status"
+            aria-live="polite"
+          ></div>
         </form>
         <div class="pk3s-footer-argentina">
           <img src="{{ argentina_logo | url }}" alt="Argentina" />
