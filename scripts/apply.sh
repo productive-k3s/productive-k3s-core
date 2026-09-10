@@ -1598,7 +1598,10 @@ install_helm_if_needed() {
   track_install "helm"
   ensure_packages "Helm installation" curl ca-certificates
   log "Installing Helm (${PRODUCTIVE_K3S_HELM_VERSION})..."
-  run_shell "Installing Helm (${PRODUCTIVE_K3S_HELM_VERSION})" "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=${PRODUCTIVE_K3S_HELM_VERSION} bash"
+  if ! run_shell "Installing Helm (${PRODUCTIVE_K3S_HELM_VERSION})" "curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=${PRODUCTIVE_K3S_HELM_VERSION} bash"; then
+    err "Helm installation failed."
+    exit 1
+  fi
   manifest_complete_component "helm" "$(result_for_mode installed)"
 }
 
