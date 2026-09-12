@@ -721,7 +721,7 @@ run_shell() {
     return 0
   fi
 
-  bash -lc "$cmd" </dev/null
+  bash -o pipefail -lc "$cmd" </dev/null
 }
 
 apply_manifest() {
@@ -1758,9 +1758,167 @@ stack_addon_record_name_value() {
   '
 }
 
+stack_addon_package_manifest_content() {
+  local bundled_path="$1"
+  tar -xOzf "${bundled_path}" ./addon.yaml 2>/dev/null || tar -xOzf "${bundled_path}" addon.yaml 2>/dev/null
+}
+
+stack_addon_runtime_input_records() {
+  local manifest_file="$1"
+  awk '
+    function trim(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      if (value ~ /^".*"$/) {
+        sub(/^"/, "", value)
+        sub(/"$/, "", value)
+      }
+      return value
+    }
+    function flush_record() {
+      if (current_name != "") {
+        printf "name=%s\tsource=%s\tvalueFrom=%s\tdefault=%s\trequired=%s\n", current_name, current_source, current_value_from, current_default, current_required
+      }
+      current_name=""
+      current_source=""
+      current_value_from=""
+      current_default=""
+      current_required=""
+    }
+    /^spec:/ { in_spec=1; in_pk3s=0; in_stack=0; in_runtime=0; in_inputs=0; next }
+    in_spec && /^  productiveK3s:/ { in_pk3s=1; in_stack=0; in_runtime=0; in_inputs=0; next }
+    in_pk3s && /^    stack:/ { in_stack=1; in_runtime=0; in_inputs=0; next }
+    in_stack && /^      runtime:/ { in_runtime=1; in_inputs=0; next }
+    in_runtime && /^        inputs:/ { in_inputs=1; next }
+    in_inputs && /^          - name:/ {
+      flush_record()
+      line=$0
+      sub(/^          - name:[[:space:]]*/, "", line)
+      current_name=trim(line)
+      next
+    }
+    in_inputs && current_name != "" && /^            source:/ {
+      line=$0
+      sub(/^            source:[[:space:]]*/, "", line)
+      current_source=trim(line)
+      next
+    }
+    in_inputs && current_name != "" && /^            valueFrom:/ {
+      line=$0
+      sub(/^            valueFrom:[[:space:]]*/, "", line)
+      current_value_from=trim(line)
+      next
+    }
+    in_inputs && current_name != "" && /^            default:/ {
+      line=$0
+      sub(/^            default:[[:space:]]*/, "", line)
+      current_default=trim(line)
+      next
+    }
+    in_inputs && current_name != "" && /^            required:/ {
+      line=$0
+      sub(/^            required:[[:space:]]*/, "", line)
+      current_required=trim(line)
+      next
+    }
+    in_inputs && /^[^ ]/ { flush_record(); exit }
+    in_inputs && /^  [^ ]/ { flush_record(); exit }
+    in_inputs && /^    [^ ]/ { flush_record(); exit }
+    in_inputs && /^      [^ ]/ { flush_record(); exit }
+    in_inputs && /^        [^ ]/ { flush_record(); exit }
+    END { flush_record() }
+  ' "${manifest_file}"
+}
+
+stack_addon_runtime_value_from() {
+  local value_from="$1"
+  case "${value_from}" in
+    core.clusterIssuerAction)
+      clusterissuer_action
+      ;;
+    core.tlsSource)
+      if [[ "${TLS_CHOICE}" == "1" ]]; then
+        printf 'letsencrypt'
+      else
+        printf 'secret'
+      fi
+      ;;
+    *)
+      err "Unsupported addon runtime valueFrom source: ${value_from}"
+      return 1
+      ;;
+  esac
+}
+
+stack_addon_runtime_env_from_manifest() {
+  local manifest_file="$1"
+  local output_array_name="$2"
+  local -n output_env="${output_array_name}"
+  local has_inputs="n"
+  local record name_field source_field value_from_field default_field required_field
+  local input_name source_name value_from default_value required_value input_value
+
+  while IFS=$'\t' read -r name_field source_field value_from_field default_field required_field; do
+    input_name="${name_field#name=}"
+    source_name="${source_field#source=}"
+    value_from="${value_from_field#valueFrom=}"
+    default_value="${default_field#default=}"
+    required_value="${required_field#required=}"
+    [[ -n "${input_name}" ]] || continue
+    has_inputs="y"
+
+    if [[ ! "${input_name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      err "Invalid addon runtime input name: ${input_name}"
+      return 1
+    fi
+
+    if [[ -n "${value_from}" ]]; then
+      input_value="$(stack_addon_runtime_value_from "${value_from}")" || return 1
+    elif [[ -n "${source_name}" ]]; then
+      if [[ ! "${source_name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        err "Invalid addon runtime input source for ${input_name}: ${source_name}"
+        return 1
+      fi
+      input_value="${!source_name-}"
+    else
+      input_value=""
+    fi
+
+    if [[ -z "${input_value}" && -n "${default_value}" ]]; then
+      input_value="${default_value}"
+    fi
+    if [[ -z "${input_value}" && "${required_value,,}" == "true" ]]; then
+      err "Required addon runtime input ${input_name} resolved to an empty value."
+      return 1
+    fi
+
+    output_env+=("${input_name}=${input_value}")
+  done < <(stack_addon_runtime_input_records "${manifest_file}")
+
+  [[ "${has_inputs}" == "y" ]] || return 10
+}
+
+stack_addon_runtime_env_from_package() {
+  local bundled_path="$1"
+  local output_array_name="$2"
+  local manifest_file rc
+  manifest_file="$(mktemp)"
+  if ! stack_addon_package_manifest_content "${bundled_path}" > "${manifest_file}"; then
+    rm -f "${manifest_file}"
+    return 10
+  fi
+  stack_addon_runtime_env_from_manifest "${manifest_file}" "${output_array_name}"
+  rc=$?
+  if [[ "${rc}" -ne 0 ]]; then
+    rm -f "${manifest_file}"
+    return "${rc}"
+  fi
+  rm -f "${manifest_file}"
+}
+
 install_stack_addon_record() {
   local addon_record="$1"
-  local addon_name addon_source bundled_path
+  local addon_name addon_source bundled_path runtime_metadata_rc
   addon_name="$(stack_addon_record_name_value "${addon_record}")"
   addon_source="$(stack_addon_record_source_value "${addon_record}")"
   [[ -n "${addon_name}" ]] || {
@@ -1779,7 +1937,15 @@ install_stack_addon_record() {
       return
     fi
     log "Installing bundled addon package '${addon_source}' for stack '${PRODUCTIVE_K3S_STACK_NAME}'"
-    case "${addon_name}" in
+    local -a addon_runtime_env=()
+    if stack_addon_runtime_env_from_package "${bundled_path}" addon_runtime_env; then
+      env "${addon_runtime_env[@]}" "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
+    else
+      runtime_metadata_rc=$?
+      if [[ "${runtime_metadata_rc}" -ne 10 ]]; then
+        exit "${runtime_metadata_rc}"
+      fi
+      case "${addon_name}" in
       cert-manager)
         PK3S_CERT_MANAGER_VERSION="${PRODUCTIVE_K3S_CERT_MANAGER_VERSION}" \
         PK3S_CLUSTER_ISSUER_ACTION="$(clusterissuer_action)" \
@@ -1828,7 +1994,8 @@ install_stack_addon_record() {
       *)
         "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
         ;;
-    esac
+      esac
+    fi
     return
   fi
   install_stack_addon_by_name "${addon_name}"

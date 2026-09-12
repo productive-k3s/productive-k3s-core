@@ -148,4 +148,10 @@ Describe 'bootstrap package and engine helpers'
     The output should include '[dry-run] Adding Helm repo rancher-latest'
     The output should include 'helm repo add rancher-latest https://releases.rancher.com/server-charts/latest'
   End
+
+  It 'propagates pipeline failures from run_shell'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      run_shell "failing pipeline" "false | true"'
+    The status should equal 1
+  End
 End
