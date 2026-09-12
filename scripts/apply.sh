@@ -724,6 +724,35 @@ run_shell() {
   bash -o pipefail -lc "$cmd" </dev/null
 }
 
+run_shell_with_retries() {
+  local desc="$1"
+  local timeout_secs="$2"
+  local sleep_secs="$3"
+  local cmd="$4"
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    run_shell "$desc" "$cmd"
+    return 0
+  fi
+
+  local start_ts now_ts
+  start_ts="$(date +%s)"
+
+  while true; do
+    if run_shell "$desc" "$cmd"; then
+      return 0
+    fi
+
+    now_ts="$(date +%s)"
+    if (( now_ts - start_ts >= timeout_secs )); then
+      return 1
+    fi
+
+    warn "${desc} did not succeed yet. Waiting ${sleep_secs}s before retrying."
+    sleep "$sleep_secs"
+  done
+}
+
 apply_manifest() {
   local desc="$1" manifest="$2"
 
@@ -1598,7 +1627,7 @@ install_helm_if_needed() {
   track_install "helm"
   ensure_packages "Helm installation" curl ca-certificates
   log "Installing Helm (${PRODUCTIVE_K3S_HELM_VERSION})..."
-  if ! run_shell "Installing Helm (${PRODUCTIVE_K3S_HELM_VERSION})" "curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=${PRODUCTIVE_K3S_HELM_VERSION} bash"; then
+  if ! run_shell_with_retries "Installing Helm (${PRODUCTIVE_K3S_HELM_VERSION})" 600 15 "curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=${PRODUCTIVE_K3S_HELM_VERSION} bash"; then
     err "Helm installation failed."
     exit 1
   fi
