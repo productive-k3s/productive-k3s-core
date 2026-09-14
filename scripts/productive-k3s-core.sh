@@ -1232,7 +1232,9 @@ run_stack_export_from_tgz() {
   cp "${tgz_path}" "${bundle_root}/stack.tgz"
   export_runtime_write_install_config "${bundle_root}/install-config.env"
   export_runtime_write_manifest "${bundle_root}/manifest.json"
+  export_runtime_write_stack_preflight_script "${bundle_root}/preflight.sh" "stack.tgz"
   export_runtime_write_readme "${bundle_root}/README.md" "${stack_name}" "stack.tgz"
+  export_runtime_write_stack_agents_md "${bundle_root}/AGENTS.md" "${stack_name}" "stack.tgz"
   export_runtime_write_stack_install_script "${bundle_root}/install.sh" "stack.tgz" "$@"
   materialize_export_output "${bundle_root}" "${output_path}" || rc=$?
   if (( rc == 0 )); then

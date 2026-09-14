@@ -41,6 +41,8 @@ INCLUDE_PATHS=(
   "scripts/rollback.sh"
   "scripts/send-telemetry.sh"
   "scripts/send-telemetry-event.sh"
+  "scripts/export-templates/stack/README.md"
+  "scripts/export-templates/stack/AGENTS.md"
 )
 
 cleanup() {

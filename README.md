@@ -187,6 +187,14 @@ The exported installer contract is intentionally narrow:
   Typical examples are downloading `k3s` or `rke2`, resolving Helm charts and chart dependencies, and pulling container images.
 - it consumes packaged stack artifacts; catalog resolution belongs above `core`, not inside it
 
+Each exported stack bundle includes human and agent-oriented bootstrap context:
+
+- `README.md` describes the bundle contents and operator workflow
+- `AGENTS.md` describes the origin, vendored runtime boundary, and editing guidance for automation agents
+- `preflight.sh` validates bundle structure, packaged stack metadata, and host stack prerequisites
+- `install.sh` runs `preflight.sh` by default before replaying `stack install`
+- `install.sh --preflight-only` validates without installing, and `install.sh --skip-preflight` replays after an already-passed preflight
+
 The same separation applies to add-ons:
 
 - catalog naming and source curation belong in repositories such as `productive-k3s-addons`

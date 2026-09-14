@@ -175,6 +175,8 @@ main() {
 
   log "Checking exported installer contents"
   assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/install.sh$'" "exported installer archive is missing install.sh"
+  assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/preflight.sh$'" "exported installer archive is missing preflight.sh"
+  assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/AGENTS.md$'" "exported installer archive is missing AGENTS.md"
   assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/stack.tgz$'" "exported installer archive is missing stack.tgz"
   assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/manifest.json$'" "exported installer archive is missing manifest.json"
 

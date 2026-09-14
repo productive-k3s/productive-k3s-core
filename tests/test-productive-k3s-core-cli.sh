@@ -112,7 +112,9 @@ for required_path in \
   "productive-k3s-core-HEAD/scripts/cleanup.sh" \
   "productive-k3s-core-HEAD/scripts/rollback.sh" \
   "productive-k3s-core-HEAD/scripts/send-telemetry.sh" \
-  "productive-k3s-core-HEAD/scripts/send-telemetry-event.sh"
+  "productive-k3s-core-HEAD/scripts/send-telemetry-event.sh" \
+  "productive-k3s-core-HEAD/scripts/export-templates/stack/README.md" \
+  "productive-k3s-core-HEAD/scripts/export-templates/stack/AGENTS.md"
 do
   printf '%s\n' "$bundle_listing" | grep -q "^${required_path}$" || fail "bundle release is missing required runtime file: ${required_path}"
 done
@@ -388,6 +390,7 @@ cp "${REPO_DIR}/scripts/backup.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/rollback.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/send-telemetry.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/send-telemetry-event.sh" "${STACK_DISPATCH_DIR}/scripts/"
+cp -R "${REPO_DIR}/scripts/export-templates" "${STACK_DISPATCH_DIR}/scripts/"
 cat > "${STACK_DISPATCH_DIR}/scripts/apply.sh" <<EOF
 #!/usr/bin/env bash
 printf 'stack=%s repo=%s bundled=%s args=%s\n' "\${PRODUCTIVE_K3S_STACK_NAME:-}" "\${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" "\${PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR:-}" "\$*" > "${STACK_APPLY_CAPTURE}"
@@ -477,11 +480,15 @@ STACK_EXPORT_DIR="${ADDON_TMP_DIR}/stack-export"
 [[ -f "${STACK_EXPORT_DIR}/install-config.env" ]] || fail "stack export did not emit install-config.env"
 [[ -f "${STACK_EXPORT_DIR}/manifest.json" ]] || fail "stack export did not emit manifest.json"
 [[ -f "${STACK_EXPORT_DIR}/README.md" ]] || fail "stack export did not emit README.md"
+[[ -f "${STACK_EXPORT_DIR}/AGENTS.md" ]] || fail "stack export did not emit AGENTS.md"
+[[ -x "${STACK_EXPORT_DIR}/preflight.sh" ]] || fail "stack export did not emit executable preflight.sh"
 [[ -x "${STACK_EXPORT_DIR}/productive-k3s-core.sh" ]] || fail "stack export did not emit the runtime entrypoint"
 [[ -f "${STACK_EXPORT_DIR}/scripts/productive-k3s-core.sh" ]] || fail "stack export did not emit runtime scripts"
 tar -tzf "${STACK_EXPORT_DIR}/stack.tgz" | grep -q '^./stack.yaml$' || fail "stack export stack.tgz is missing stack.yaml"
 cmp -s "${STACK_TGZ_ARCHIVE}" "${STACK_EXPORT_DIR}/stack.tgz" || fail "stack export did not preserve the packaged stack artifact"
 grep -q 'stack install --tgz' "${STACK_EXPORT_DIR}/install.sh" || fail "stack export install.sh did not replay stack install"
+grep -q './preflight.sh' "${STACK_EXPORT_DIR}/README.md" || fail "stack export README did not document preflight"
+grep -q 'exported Productive K3S stack' "${STACK_EXPORT_DIR}/AGENTS.md" || fail "stack export AGENTS.md did not describe the agent contract"
 grep -q '"kind": "stack"' "${STACK_EXPORT_DIR}/manifest.json" || fail "stack export manifest did not describe the stack subject"
 grep -q '"artifact_name": "stack.tgz"' "${STACK_EXPORT_DIR}/manifest.json" || fail "stack export manifest did not record stack.tgz"
 grep -q "export PRODUCTIVE_K3S_DISTRO='rke2'" "${STACK_EXPORT_DIR}/install-config.env" || fail "stack export did not freeze PRODUCTIVE_K3S_DISTRO"
