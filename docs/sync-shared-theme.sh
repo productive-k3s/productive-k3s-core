@@ -6,6 +6,7 @@ SHARED_THEME_DIR="${SHARED_THEME_DIR:-${ROOT_DIR}/../.shared/productive-k3s-docs
 
 if [[ ! -d "${SHARED_THEME_DIR}" ]]; then
   printf '[ERROR] Shared theme directory not found: %s\n' "${SHARED_THEME_DIR}" >&2
+  printf '[ERROR] Run: git submodule update --init --recursive\n' >&2
   exit 1
 fi
 
