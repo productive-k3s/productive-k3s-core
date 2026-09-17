@@ -634,7 +634,7 @@ body {
 }
 
 .md-footer-meta {
-  background: transparent;
+  background: darkgrey;
   border-top: 1px solid rgba(216, 226, 241, 0.9);
   color: var(--pk3s-text);
 }
