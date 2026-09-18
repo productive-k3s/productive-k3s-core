@@ -233,6 +233,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 0.38rem;
+  min-width: 17.8rem;
 }
 
 .pk3s-footer-newsletter__label {
@@ -279,7 +280,11 @@ body {
 }
 
 .pk3s-footer-newsletter__challenge {
-  min-height: 65px;
+  width: 150px;
+  min-width: 150px;
+  height: 140px;
+  min-height: 140px;
+  overflow: visible;
 }
 
 .pk3s-footer-newsletter__message {

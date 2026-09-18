@@ -21,7 +21,6 @@
       var input = form.querySelector("input[name='email']");
       var button = form.querySelector("button[type='submit']");
       var message = form.querySelector("[data-pk3s-newsletter-message]");
-      var turnstileInput = form.querySelector("[name='cf-turnstile-response']");
       var isSpanish = document.documentElement.lang === "es" || window.location.pathname.indexOf("/es/") === 0;
 
       function datasetValue(key) {
@@ -59,6 +58,7 @@
         }
 
         var turnstileSiteKey = form.dataset.pk3sNewsletterTurnstileSiteKey || "";
+        var turnstileInput = form.querySelector("[name='cf-turnstile-response']");
         var turnstileToken = turnstileInput ? turnstileInput.value.trim() : "";
         if (turnstileSiteKey && !turnstileToken) {
           setMessage("error", datasetValue("pk3sNewsletterChallenge"));
@@ -99,7 +99,6 @@
           setMessage("error", datasetValue("pk3sNewsletterError"));
         } finally {
           button.disabled = false;
-          turnstileInput = form.querySelector("[name='cf-turnstile-response']");
         }
       });
     });
