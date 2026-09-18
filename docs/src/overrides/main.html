@@ -21,6 +21,7 @@
       var input = form.querySelector("input[name='email']");
       var button = form.querySelector("button[type='submit']");
       var message = form.querySelector("[data-pk3s-newsletter-message]");
+      var turnstileInput = form.querySelector("[name='cf-turnstile-response']");
       var isSpanish = document.documentElement.lang === "es" || window.location.pathname.indexOf("/es/") === 0;
 
       function datasetValue(key) {
@@ -57,6 +58,13 @@
           return;
         }
 
+        var turnstileSiteKey = form.dataset.pk3sNewsletterTurnstileSiteKey || "";
+        var turnstileToken = turnstileInput ? turnstileInput.value.trim() : "";
+        if (turnstileSiteKey && !turnstileToken) {
+          setMessage("error", datasetValue("pk3sNewsletterChallenge"));
+          return;
+        }
+
         button.disabled = true;
         setMessage("", "");
 
@@ -68,7 +76,8 @@
             },
             body: JSON.stringify({
               email: input.value.trim(),
-              source: window.location.hostname
+              source: window.location.hostname,
+              turnstile_token: turnstileToken
             })
           });
 
@@ -80,6 +89,9 @@
           if (payload && payload.accepted) {
             setMessage("success", payload.duplicate ? datasetValue("pk3sNewsletterDuplicate") : datasetValue("pk3sNewsletterSuccess"));
             form.reset();
+            if (window.turnstile && turnstileSiteKey) {
+              window.turnstile.reset();
+            }
           } else {
             setMessage("error", datasetValue("pk3sNewsletterError"));
           }
@@ -87,8 +99,13 @@
           setMessage("error", datasetValue("pk3sNewsletterError"));
         } finally {
           button.disabled = false;
+          turnstileInput = form.querySelector("[name='cf-turnstile-response']");
         }
       });
     });
   </script>
+  {% set pk3s_extra_head = config.extra.pk3s if config.extra and config.extra.pk3s else {} %}
+  {% if pk3s_extra_head.newsletter_turnstile_site_key %}
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  {% endif %}
 {% endblock %}

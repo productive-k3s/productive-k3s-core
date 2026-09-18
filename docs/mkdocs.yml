@@ -148,6 +148,7 @@ extra:
     newsletter_label_es: "Newsletter"
     newsletter_placeholder_en: "E-mail"
     newsletter_placeholder_es: "E-mail"
+    newsletter_turnstile_site_key: !ENV [NEWSLETTER_TURNSTILE_SITE_KEY, ""]
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/productive-k3s/productive-k3s-core

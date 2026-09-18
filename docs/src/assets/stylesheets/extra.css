@@ -278,6 +278,10 @@ body {
   opacity: 0.65;
 }
 
+.pk3s-footer-newsletter__challenge {
+  min-height: 65px;
+}
+
 .pk3s-footer-newsletter__message {
   min-height: 1.2rem;
   width: 100%;

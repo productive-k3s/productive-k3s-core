@@ -75,6 +75,9 @@
       {% set newsletter_invalid_es = pk3s_extra.newsletter_invalid_es if pk3s_extra.newsletter_invalid_es else "Ingresa un e-mail valido." %}
       {% set newsletter_error_en = pk3s_extra.newsletter_error_en if pk3s_extra.newsletter_error_en else "Could not submit right now. Please try again." %}
       {% set newsletter_error_es = pk3s_extra.newsletter_error_es if pk3s_extra.newsletter_error_es else "No se pudo enviar ahora. Intenta nuevamente." %}
+      {% set newsletter_challenge_en = pk3s_extra.newsletter_challenge_en if pk3s_extra.newsletter_challenge_en else "Complete the verification and try again." %}
+      {% set newsletter_challenge_es = pk3s_extra.newsletter_challenge_es if pk3s_extra.newsletter_challenge_es else "Completa la verificacion e intenta nuevamente." %}
+      {% set newsletter_turnstile_site_key = pk3s_extra.newsletter_turnstile_site_key if pk3s_extra.newsletter_turnstile_site_key else "" %}
       {% set argentina_credit_en = pk3s_extra.argentina_credit_en if pk3s_extra.argentina_credit_en else "Made in Argentina" %}
       {% set argentina_credit_es = pk3s_extra.argentina_credit_es if pk3s_extra.argentina_credit_es else "Hecho en Argentina" %}
       {% set argentina_logo = "assets/images/argentina.png" %}
@@ -112,6 +115,9 @@
           data-pk3s-newsletter-invalid-es="{{ newsletter_invalid_es }}"
           data-pk3s-newsletter-error-en="{{ newsletter_error_en }}"
           data-pk3s-newsletter-error-es="{{ newsletter_error_es }}"
+          data-pk3s-newsletter-challenge-en="{{ newsletter_challenge_en }}"
+          data-pk3s-newsletter-challenge-es="{{ newsletter_challenge_es }}"
+          data-pk3s-newsletter-turnstile-site-key="{{ newsletter_turnstile_site_key }}"
         >
           <label
             class="pk3s-footer-newsletter__label"
@@ -134,6 +140,14 @@
             />
             <button type="submit" aria-label="Submit newsletter form">›</button>
           </div>
+          {% if newsletter_turnstile_site_key %}
+            <div
+              class="pk3s-footer-newsletter__challenge cf-turnstile"
+              data-sitekey="{{ newsletter_turnstile_site_key }}"
+              data-theme="light"
+              data-size="compact"
+            ></div>
+          {% endif %}
           <div
             class="pk3s-footer-newsletter__message"
             data-pk3s-newsletter-message
