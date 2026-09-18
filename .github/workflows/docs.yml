@@ -21,6 +21,8 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-24.04
+    env:
+      NEWSLETTER_TURNSTILE_SITE_KEY: ${{ vars.NEWSLETTER_TURNSTILE_SITE_KEY }}
 
     steps:
       - name: Check out repository
