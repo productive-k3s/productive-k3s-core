@@ -42,13 +42,17 @@ jobs:
           mkdir -p "$HOME/.local/bin" "$HOME/.local/share"
 
           curl -fsSLO https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  shellcheck-v0.11.0.linux.x86_64.tar.xz" | sha256sum -c -
           tar -xJf shellcheck-v0.11.0.linux.x86_64.tar.xz
           install shellcheck-v0.11.0/shellcheck "$HOME/.local/bin/shellcheck"
 
-          curl -fsSLo "$HOME/.local/bin/shfmt" https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64
+          curl -fsSLO https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64
+          echo "fb096c5d1ac6beabbdbaa2874d025badb03ee07929f0c9ff67563ce8c75398b1  shfmt_v3.13.1_linux_amd64" | sha256sum -c -
+          install shfmt_v3.13.1_linux_amd64 "$HOME/.local/bin/shfmt"
           chmod +x "$HOME/.local/bin/shfmt"
 
           curl -fsSLO https://github.com/shellspec/shellspec/releases/download/0.28.1/shellspec-dist.tar.gz
+          echo "350d3de04ba61505c54eda31a3c2ee912700f1758b1a80a284bc08fd8b6c5992  shellspec-dist.tar.gz" | sha256sum -c -
           mkdir -p "$HOME/.local/share/shellspec"
           tar -xzf shellspec-dist.tar.gz -C "$HOME/.local/share/shellspec"
           cat > "$HOME/.local/bin/shellspec" <<'EOF'
@@ -57,7 +61,7 @@ jobs:
           EOF
           chmod +x "$HOME/.local/bin/shellspec"
 
-          python3 -m pip install --user codespell
+          python3 -m pip install --user codespell==2.4.3
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run quick checks
