@@ -53,7 +53,7 @@ write_payload() {
     printf '{\n'
     printf '  "schema_version": "1",\n'
     printf '  "event_family": "install",\n'
-    printf '  "event_name": "apply.completed",\n'
+    printf '  "event_name": "bootstrap.completed",\n'
     printf '  "sent_at": "%s",\n' "$(json_escape "$(date -Iseconds)")"
     printf '  "delivery_attempt": %s,\n' "${delivery_attempt}"
     printf '  "retry_attempt": %s,\n' "${retry_attempt}"

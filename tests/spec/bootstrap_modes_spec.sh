@@ -13,6 +13,16 @@ Describe 'bootstrap mode helpers'
     The status should equal 0
   End
 
+  It 'allows helm installation in stack mode'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'MODE=stack; mode_allows_helm_install'
+    The status should equal 0
+  End
+
+  It 'does not allow helm installation in agent mode'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'MODE=agent; mode_allows_helm_install'
+    The status should equal 1
+  End
+
   It 'does not treat server as single-node defaults'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'MODE=server; mode_uses_single_node_defaults'
     The status should equal 1

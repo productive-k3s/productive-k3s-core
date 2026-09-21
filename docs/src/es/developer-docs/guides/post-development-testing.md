@@ -118,7 +118,7 @@ jq . test-artifacts/<artifact>.json
 Para fallos en VM, podés preservar la VM cuando haga falta:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full --keep-vm
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full --keep-vm
 ```
 
 Y después inspeccionarla:

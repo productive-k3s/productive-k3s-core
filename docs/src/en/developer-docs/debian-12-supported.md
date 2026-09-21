@@ -43,7 +43,7 @@ The VM harness supports:
 
 When `--platform debian12` is used, the harness defaults to:
 
-- image: `https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2`
+- image: `https://cloud.debian.org/images/cloud/bookworm/20260821-2577/debian-12-generic-amd64-20260821-2577.qcow2`
 - remote user: `ubuntu`
 - remote directory: `/home/ubuntu/productive-k3s-core`
 
@@ -69,31 +69,31 @@ Reference commands:
 ### 1. Smoke
 
 ```bash
-./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 --profile smoke
+./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/20260821-2577/debian-12-generic-amd64-20260821-2577.qcow2 --profile smoke
 ```
 
 ### 2. Core
 
 ```bash
-./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 --profile core
+./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/20260821-2577/debian-12-generic-amd64-20260821-2577.qcow2 --profile core
 ```
 
 ### 3. Full
 
 ```bash
-./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 --profile full
+./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/20260821-2577/debian-12-generic-amd64-20260821-2577.qcow2 --profile full
 ```
 
 ### 4. Full Rollback
 
 ```bash
-./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 --profile full-rollback
+./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/20260821-2577/debian-12-generic-amd64-20260821-2577.qcow2 --profile full-rollback
 ```
 
 ### 5. Full Clean
 
 ```bash
-./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 --profile full-clean
+./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/20260821-2577/debian-12-generic-amd64-20260821-2577.qcow2 --profile full-clean
 ```
 
 ## Artifact Review

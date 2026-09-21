@@ -134,10 +134,10 @@ Reason:
 
 The following validations remain local responsibilities:
 
-- `./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full`
-- `./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-rollback`
-- `./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-clean`
-- `./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 --profile ...`
+- `./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full`
+- `./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full-rollback`
+- `./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full-clean`
+- `./tests/test-in-vm.sh --platform debian12 --image https://cloud.debian.org/images/cloud/bookworm/20260821-2577/debian-12-generic-amd64-20260821-2577.qcow2 --profile ...`
 - `make test-matrix-core`
 - `make test-matrix-full`
 - `make test-matrix-full-rollback`

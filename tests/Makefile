@@ -1,10 +1,14 @@
 SHELL := /bin/bash
 
+include ./vm-images.env
+
 VM_TEST := ./test-in-vm.sh
 ARTIFACT_CHECK := ./check-test-artifacts.sh
 PUBLIC_ARTIFACT_PRIVACY_CHECK := ./check-public-test-artifacts.sh
-DEBIAN12_IMAGE := https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2
-DEBIAN13_IMAGE := https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2
+DEBIAN12_IMAGE := $(DEBIAN_12_IMAGE)
+DEBIAN13_IMAGE := $(DEBIAN_13_IMAGE)
+UBUNTU2204_IMAGE := $(UBUNTU_22_04_IMAGE)
+UBUNTU2404_IMAGE := $(UBUNTU_24_04_IMAGE)
 DEV_WRAPPER := ../scripts/productive-k3s-core-dev.sh
 
 .PHONY: \
@@ -202,10 +206,10 @@ test-exported-stack-installer-debian12:
 	bash ./test-exported-stack-installer-in-vm.sh
 
 test-exported-stack-installer-k3s-ubuntu24:
-	STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=24.04 PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native bash ./test-exported-stack-installer-in-vm.sh
+	STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=$(UBUNTU2404_IMAGE) PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native bash ./test-exported-stack-installer-in-vm.sh
 
 test-exported-stack-installer-k3s-ubuntu22:
-	STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=22.04 PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native bash ./test-exported-stack-installer-in-vm.sh
+	STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=$(UBUNTU2204_IMAGE) PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native bash ./test-exported-stack-installer-in-vm.sh
 
 test-exported-stack-installer-k3s-debian12:
 	STACK_TEST_PLATFORM=debian12 STACK_TEST_IMAGE=$(DEBIAN12_IMAGE) PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native bash ./test-exported-stack-installer-in-vm.sh
@@ -214,10 +218,10 @@ test-exported-stack-installer-k3s-debian13:
 	STACK_TEST_PLATFORM=debian13 STACK_TEST_IMAGE=$(DEBIAN13_IMAGE) PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native bash ./test-exported-stack-installer-in-vm.sh
 
 test-exported-stack-installer-rke2-ubuntu24:
-	STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=24.04 PRODUCTIVE_K3S_DISTRO=rke2 PRODUCTIVE_K3S_ENGINE=native bash ./test-exported-stack-installer-in-vm.sh
+	STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=$(UBUNTU2404_IMAGE) PRODUCTIVE_K3S_DISTRO=rke2 PRODUCTIVE_K3S_ENGINE=native bash ./test-exported-stack-installer-in-vm.sh
 
 test-exported-stack-installer-k3sup-ubuntu24:
-	STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=24.04 PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=k3sup bash ./test-exported-stack-installer-in-vm.sh
+	STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=$(UBUNTU2404_IMAGE) PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=k3sup bash ./test-exported-stack-installer-in-vm.sh
 
 test-in-vm-engine-propagation:
 	bash $(DEV_WRAPPER) test-in-vm-engine-propagation
@@ -299,61 +303,61 @@ check-test-status:
 
 verify-smoke-artifacts:
 	$(ARTIFACT_CHECK) --profile smoke \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 	$(PUBLIC_ARTIFACT_PRIVACY_CHECK) --profile smoke \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
 verify-core-artifacts:
 	$(ARTIFACT_CHECK) --profile core \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 	$(PUBLIC_ARTIFACT_PRIVACY_CHECK) --profile core \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
 verify-full-artifacts:
 	$(ARTIFACT_CHECK) --profile full \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 	$(PUBLIC_ARTIFACT_PRIVACY_CHECK) --profile full \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
 verify-full-rollback-artifacts:
 	$(ARTIFACT_CHECK) --profile full-rollback \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 	$(PUBLIC_ARTIFACT_PRIVACY_CHECK) --profile full-rollback \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
 verify-full-clean-artifacts:
 	$(ARTIFACT_CHECK) --profile full-clean \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 	$(PUBLIC_ARTIFACT_PRIVACY_CHECK) --profile full-clean \
-		--expect 'ubuntu|24.04' \
-		--expect 'ubuntu|22.04' \
+		--expect 'ubuntu|$(UBUNTU2404_IMAGE)' \
+		--expect 'ubuntu|$(UBUNTU2204_IMAGE)' \
 		--expect 'debian12|$(DEBIAN12_IMAGE)' \
 		--expect 'debian13|$(DEBIAN13_IMAGE)'
 
@@ -380,10 +384,10 @@ run-all-tests: clean-test-state \
 	full-clean-ubuntu-24.04 full-clean-ubuntu-22.04 full-clean-debian12 full-clean-debian13 verify-full-clean-artifacts
 
 smoke-ubuntu-24.04:
-	$(VM_TEST) --platform ubuntu --image 24.04 --profile smoke --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2404_IMAGE) --profile smoke --purge-on-cleanup
 
 smoke-ubuntu-22.04:
-	$(VM_TEST) --platform ubuntu --image 22.04 --profile smoke --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2204_IMAGE) --profile smoke --purge-on-cleanup
 
 smoke-debian12:
 	$(VM_TEST) --platform debian12 --image $(DEBIAN12_IMAGE) --profile smoke --purge-on-cleanup
@@ -392,10 +396,10 @@ smoke-debian13:
 	$(VM_TEST) --platform debian13 --image $(DEBIAN13_IMAGE) --profile smoke --purge-on-cleanup
 
 core-ubuntu-24.04:
-	$(VM_TEST) --platform ubuntu --image 24.04 --profile core --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2404_IMAGE) --profile core --purge-on-cleanup
 
 core-ubuntu-22.04:
-	$(VM_TEST) --platform ubuntu --image 22.04 --profile core --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2204_IMAGE) --profile core --purge-on-cleanup
 
 core-debian12:
 	$(VM_TEST) --platform debian12 --image $(DEBIAN12_IMAGE) --profile core --purge-on-cleanup
@@ -404,10 +408,10 @@ core-debian13:
 	$(VM_TEST) --platform debian13 --image $(DEBIAN13_IMAGE) --profile core --purge-on-cleanup
 
 full-ubuntu-24.04:
-	$(VM_TEST) --platform ubuntu --image 24.04 --profile full --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2404_IMAGE) --profile full --purge-on-cleanup
 
 full-ubuntu-22.04:
-	$(VM_TEST) --platform ubuntu --image 22.04 --profile full --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2204_IMAGE) --profile full --purge-on-cleanup
 
 full-debian12:
 	$(VM_TEST) --platform debian12 --image $(DEBIAN12_IMAGE) --profile full --purge-on-cleanup
@@ -416,10 +420,10 @@ full-debian13:
 	$(VM_TEST) --platform debian13 --image $(DEBIAN13_IMAGE) --profile full --purge-on-cleanup
 
 full-rollback-ubuntu-24.04:
-	$(VM_TEST) --platform ubuntu --image 24.04 --profile full-rollback --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2404_IMAGE) --profile full-rollback --purge-on-cleanup
 
 full-rollback-ubuntu-22.04:
-	$(VM_TEST) --platform ubuntu --image 22.04 --profile full-rollback --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2204_IMAGE) --profile full-rollback --purge-on-cleanup
 
 full-rollback-debian12:
 	$(VM_TEST) --platform debian12 --image $(DEBIAN12_IMAGE) --profile full-rollback --purge-on-cleanup
@@ -428,10 +432,10 @@ full-rollback-debian13:
 	$(VM_TEST) --platform debian13 --image $(DEBIAN13_IMAGE) --profile full-rollback --purge-on-cleanup
 
 full-clean-ubuntu-24.04:
-	$(VM_TEST) --platform ubuntu --image 24.04 --profile full-clean --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2404_IMAGE) --profile full-clean --purge-on-cleanup
 
 full-clean-ubuntu-22.04:
-	$(VM_TEST) --platform ubuntu --image 22.04 --profile full-clean --purge-on-cleanup
+	$(VM_TEST) --platform ubuntu --image $(UBUNTU2204_IMAGE) --profile full-clean --purge-on-cleanup
 
 full-clean-debian12:
 	$(VM_TEST) --platform debian12 --image $(DEBIAN12_IMAGE) --profile full-clean --purge-on-cleanup

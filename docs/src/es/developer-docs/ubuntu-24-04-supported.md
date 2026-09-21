@@ -47,7 +47,7 @@ El harness de VM soporta:
 
 Cuando se usa `--platform ubuntu`, el harness deja por defecto:
 
-- image: `24.04`
+- image: `https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img`
 - remote user: `ubuntu`
 - remote directory: `/home/ubuntu/productive-k3s-core`
 
@@ -73,31 +73,31 @@ Comandos de referencia:
 ### 1. Smoke
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile smoke
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile smoke
 ```
 
 ### 2. Core
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile core
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile core
 ```
 
 ### 3. Full
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full
 ```
 
 ### 4. Full rollback
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-rollback
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full-rollback
 ```
 
 ### 5. Full clean
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-clean
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full-clean
 ```
 
 ## Revisión de artefactos

@@ -49,7 +49,11 @@ VM_NAME="productive-k3s-core-test-ubuntu-full-fixture"
 VM_CREATED="y"
 KEEP_VM="n"
 PURGE_ON_CLEANUP="y"
-VM_IMAGE="24.04"
+VM_IMAGE="${UBUNTU_24_04_IMAGE}"
+VM_IMAGE_REQUESTED="${UBUNTU_24_04_IMAGE}"
+VM_IMAGE_RESOLVED="${UBUNTU_24_04_IMAGE}"
+VM_IMAGE_VERSION="${UBUNTU_24_04_IMAGE_VERSION}"
+VM_IMAGE_LABEL="${UBUNTU_24_04_IMAGE_LABEL}"
 REMOTE_USER="ubuntu"
 REMOTE_DIR="/home/ubuntu/productive-k3s-core"
 VM_CPUS="4"
@@ -66,9 +70,11 @@ assert_file_contains "${ARTIFACT_PATH}" '"vm_name": "productive-k3s-core-test-ub
 assert_file_contains "${ARTIFACT_PATH}" '"remote_dir": "/home/ubuntu/productive-k3s-core"'
 assert_file_contains "${ARTIFACT_PATH}" '"repo_dir": "/home/example/work/productive-k3s"'
 assert_file_contains "${ARTIFACT_PATH}" '"bootstrap_manifest_local": "/home/example/work/productive-k3s/test-artifacts/test-in-vm-fixture-apply-manifest.json"'
+assert_file_contains "${ARTIFACT_PATH}" "\"image_version\": \"${UBUNTU_24_04_IMAGE_VERSION}\""
 
 assert_file_contains "${PUBLIC_ARTIFACT_PATH}" '"artifact_scope": "public"'
 assert_file_contains "${PUBLIC_ARTIFACT_PATH}" '"bootstrap_manifest_copied": "y"'
+assert_file_contains "${PUBLIC_ARTIFACT_PATH}" "\"image_version\": \"${UBUNTU_24_04_IMAGE_VERSION}\""
 assert_file_not_contains "${PUBLIC_ARTIFACT_PATH}" '"vm_name"'
 assert_file_not_contains "${PUBLIC_ARTIFACT_PATH}" '"remote_user"'
 assert_file_not_contains "${PUBLIC_ARTIFACT_PATH}" '"remote_dir"'

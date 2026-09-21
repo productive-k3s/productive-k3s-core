@@ -13,13 +13,14 @@ source "${SCRIPT_DIR}/export-runtime.sh"
 BUNDLE_INFO_PATH="${SCRIPT_DIR}/../bundle-info.json"
 TELEMETRY_EVENT_SENDER="${SCRIPT_DIR}/send-telemetry-event.sh"
 TELEMETRY_MARKER="${TELEMETRY_MARKER:-pk3s-public-v1}"
+GLOBAL_EVENTS_FORMAT=""
 
 usage() {
   cat <<'EOF'
 Usage:
   ./productive-k3s-core.sh <command> [args...]
   ./productive-k3s-core.sh addon validate --tgz <file>
-  ./productive-k3s-core.sh addon install (--tgz <file> | <name>) [--public-host <fqdn>]
+  ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>]
   ./productive-k3s-core.sh stack <install|export|validate|backup|cleanup> <name> [args...]
   ./productive-k3s-core.sh stack install --tgz <file> [args...]
   ./productive-k3s-core.sh stack export --tgz <file> --output <dir|archive>
@@ -51,7 +52,7 @@ Examples:
   ./productive-k3s-core.sh validate --strict
   ./productive-k3s-core.sh addon validate --tgz ./longhorn-addon.tgz
   ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal
-  ./productive-k3s-core.sh addon install nginx
+  ./productive-k3s-core.sh addon install --events ndjson --tgz ./nginx-addon.tgz
 
 If no command is provided, or the first argument is an option, the wrapper
 defaults to `apply` for release-installer compatibility.
@@ -114,6 +115,78 @@ json_escape() {
     -e ':a;N;$!ba;s/\n/\\n/g' \
     -e 's/\r/\\r/g' \
     -e 's/\t/\\t/g'
+}
+
+operation_events_enabled() {
+  [[ "${GLOBAL_EVENTS_FORMAT:-}" == "ndjson" ]]
+}
+
+setup_operation_event_output() {
+  [[ -z "${GLOBAL_EVENTS_FORMAT:-}" ]] && return 0
+  if [[ "${GLOBAL_EVENTS_FORMAT}" != "ndjson" ]]; then
+    printf 'unsupported --events format: %s; supported format: ndjson\n' "${GLOBAL_EVENTS_FORMAT}" >&2
+    exit 2
+  fi
+  exec 3>&1
+  export PK3S_OPERATION_EVENTS_FD=3
+  exec 1>&2
+}
+
+emit_operation_event() {
+  operation_events_enabled || return 0
+  local operation="$1"
+  local step="$2"
+  local status="$3"
+  local message="${4:-}"
+  local subject="${5:-}"
+  local fd="${PK3S_OPERATION_EVENTS_FD:-1}"
+  printf '{"schema_version":"productive-k3s-operation-event/v1","component":"core","operation":"%s","step":"%s","status":"%s","message":"%s","subject":"%s","emitted_at":"%s"}\n' \
+    "$(json_escape "${operation}")" \
+    "$(json_escape "${step}")" \
+    "$(json_escape "${status}")" \
+    "$(json_escape "${message}")" \
+    "$(json_escape "${subject}")" \
+    "$(json_escape "$(date -Iseconds)")" >&"${fd}"
+}
+
+emit_operation_completed_event() {
+  local operation="$1"
+  local rc="$2"
+  local subject="${3:-}"
+  if (( rc == 0 )); then
+    emit_operation_event "${operation}" "operation.completed" "success" "Operation completed" "${subject}"
+  else
+    emit_operation_event "${operation}" "operation.completed" "failed" "Operation failed with exit code ${rc}" "${subject}"
+  fi
+}
+
+operation_name_for_args() {
+  local command="${1:-apply}"
+  local subcommand="${2:-}"
+  case "${command}" in
+    addon)
+      printf 'addon.%s\n' "${subcommand:-unknown}"
+      ;;
+    stack)
+      printf 'stack.%s\n' "${subcommand:-unknown}"
+      ;;
+    dev)
+      printf 'dev.%s.%s\n' "${subcommand:-unknown}" "${3:-unknown}"
+      ;;
+    -*)
+      printf 'core.apply\n'
+      ;;
+    *)
+      printf 'core.%s\n' "${command}"
+      ;;
+  esac
+}
+
+events_exit_trap() {
+  local rc=$?
+  if operation_events_enabled && [[ "${OPERATION_COMPLETED_EMITTED:-0}" -ne 1 && -n "${OPERATION_NAME:-}" ]]; then
+    emit_operation_completed_event "${OPERATION_NAME}" "${rc}" "${OPERATION_SUBJECT:-}"
+  fi
 }
 
 write_generic_telemetry_event() {
@@ -194,20 +267,44 @@ core_command_emits_telemetry() {
 }
 
 run_preflight() {
-  "${SCRIPT_DIR}/preflight-host.sh" "$@"
+  emit_operation_event "core.preflight" "core.preflight.run" "running" "Running host preflight"
+  "${SCRIPT_DIR}/preflight-host.sh" "$@" || {
+    local rc=$?
+    emit_operation_event "core.preflight" "core.preflight.run" "failed" "Host preflight failed"
+    return "${rc}"
+  }
+  emit_operation_event "core.preflight" "core.preflight.run" "success" "Host preflight completed"
 }
 
 run_apply() {
   local parent_run_id="${TELEMETRY_RUN_ID:-}"
-  TELEMETRY_PARENT_RUN_ID="${parent_run_id}" TELEMETRY_RUN_ID="" TELEMETRY_COMPONENT="core" "${SCRIPT_DIR}/apply.sh" "$@"
+  emit_operation_event "core.apply" "core.apply.run" "running" "Running Productive K3S core apply"
+  TELEMETRY_PARENT_RUN_ID="${parent_run_id}" TELEMETRY_RUN_ID="" TELEMETRY_COMPONENT="core" "${SCRIPT_DIR}/apply.sh" "$@" || {
+    local rc=$?
+    emit_operation_event "core.apply" "core.apply.run" "failed" "Productive K3S core apply failed"
+    return "${rc}"
+  }
+  emit_operation_event "core.apply" "core.apply.run" "success" "Productive K3S core apply completed"
 }
 
 run_backup() {
-  "${SCRIPT_DIR}/backup.sh" "$@"
+  emit_operation_event "core.backup" "core.backup.run" "running" "Running Productive K3S backup"
+  "${SCRIPT_DIR}/backup.sh" "$@" || {
+    local rc=$?
+    emit_operation_event "core.backup" "core.backup.run" "failed" "Productive K3S backup failed"
+    return "${rc}"
+  }
+  emit_operation_event "core.backup" "core.backup.run" "success" "Productive K3S backup completed"
 }
 
 run_cleanup() {
-  "${SCRIPT_DIR}/cleanup.sh" "$@"
+  emit_operation_event "core.cleanup" "core.cleanup.run" "running" "Running Productive K3S cleanup"
+  "${SCRIPT_DIR}/cleanup.sh" "$@" || {
+    local rc=$?
+    emit_operation_event "core.cleanup" "core.cleanup.run" "failed" "Productive K3S cleanup failed"
+    return "${rc}"
+  }
+  emit_operation_event "core.cleanup" "core.cleanup.run" "success" "Productive K3S cleanup completed"
 }
 
 resolve_bundle_version_fallback() {
@@ -820,25 +917,38 @@ run_addon_validate() {
   }
 
   local tmp_dir manifest metadata addon_name addon_type install_script
-  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
+  emit_operation_event "addon.validate" "addon.package.extract" "running" "Extracting add-on package" "${tgz_path}"
+  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || {
+    local rc=$?
+    emit_operation_event "addon.validate" "addon.package.extract" "failed" "Could not extract add-on package" "${tgz_path}"
+    return "${rc}"
+  }
+  emit_operation_event "addon.validate" "addon.package.extract" "success" "Add-on package extracted" "${tgz_path}"
+  emit_operation_event "addon.validate" "addon.manifest.resolve" "running" "Resolving add-on manifest" "${tgz_path}"
   manifest="$(resolve_addon_manifest "${tmp_dir}")" || {
     local rc=$?
+    emit_operation_event "addon.validate" "addon.manifest.resolve" "failed" "Add-on manifest could not be resolved" "${tgz_path}"
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
+  emit_operation_event "addon.validate" "addon.manifest.resolve" "success" "Add-on manifest resolved" "${tgz_path}"
+  emit_operation_event "addon.validate" "addon.package.validate" "running" "Validating add-on package metadata" "${tgz_path}"
   metadata="$(validate_addon_manifest "${manifest}")" || {
     local rc=$?
+    emit_operation_event "addon.validate" "addon.package.validate" "failed" "Add-on package validation failed" "${tgz_path}"
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
   addon_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
   addon_type="$(printf '%s\n' "${metadata}" | sed -n '2p')"
   install_script="$(printf '%s\n' "${metadata}" | sed -n '3p')"
+  OPERATION_SUBJECT="${addon_name}"
 
   printf 'Addon package: %s\n' "${addon_name}"
   printf 'Addon type: %s\n' "${addon_type}"
   printf 'Install script: %s\n' "${install_script}"
   printf 'Addon package validation passed\n'
+  emit_operation_event "addon.validate" "addon.package.validate" "success" "Add-on package validation passed" "${addon_name}"
   rm -rf "${tmp_dir}"
 }
 
@@ -865,25 +975,41 @@ run_packaged_addon_install() {
   local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
   local target_kubeconfig=""
   local core_repo_dir tmp_root addon_name package_root
+  emit_operation_event "addon.install" "addon.kubeconfig.resolve" "running" "Resolving target kubeconfig"
   target_kubeconfig="$(resolve_local_cluster_kubeconfig)" || {
+    emit_operation_event "addon.install" "addon.kubeconfig.resolve" "failed" "Target kubeconfig could not be resolved"
     printf 'addon install could not find a readable local kubeconfig. Run apply first or set KUBECONFIG.\n' >&2
     return 4
   }
+  emit_operation_event "addon.install" "addon.kubeconfig.resolve" "success" "Target kubeconfig resolved"
 
   local tmp_dir manifest metadata install_script manifest_dir install_path
-  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
+  emit_operation_event "addon.install" "addon.package.extract" "running" "Extracting add-on package" "${tgz_path}"
+  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || {
+    local rc=$?
+    emit_operation_event "addon.install" "addon.package.extract" "failed" "Could not extract add-on package" "${tgz_path}"
+    return "${rc}"
+  }
+  emit_operation_event "addon.install" "addon.package.extract" "success" "Add-on package extracted" "${tgz_path}"
+  emit_operation_event "addon.install" "addon.manifest.resolve" "running" "Resolving add-on manifest" "${tgz_path}"
   manifest="$(resolve_addon_manifest "${tmp_dir}")" || {
     local rc=$?
+    emit_operation_event "addon.install" "addon.manifest.resolve" "failed" "Add-on manifest could not be resolved" "${tgz_path}"
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
+  emit_operation_event "addon.install" "addon.manifest.resolve" "success" "Add-on manifest resolved" "${tgz_path}"
+  emit_operation_event "addon.install" "addon.package.validate" "running" "Validating add-on package metadata" "${tgz_path}"
   metadata="$(validate_addon_manifest "${manifest}")" || {
     local rc=$?
+    emit_operation_event "addon.install" "addon.package.validate" "failed" "Add-on package validation failed" "${tgz_path}"
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
   addon_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
   install_script="$(printf '%s\n' "${metadata}" | sed -n '3p')"
+  OPERATION_SUBJECT="${addon_name}"
+  emit_operation_event "addon.install" "addon.package.validate" "success" "Add-on package validation passed" "${addon_name}"
   core_repo_dir="$(cd "${SCRIPT_DIR}/.." && pwd)"
   tmp_root="$(mktemp -d)"
   package_root="${tmp_root}/addons/${addon_name}"
@@ -893,12 +1019,14 @@ run_packaged_addon_install() {
   manifest_dir="${package_root}"
   install_path="${manifest_dir}/${install_script}"
   [[ -f "${install_path}" ]] || {
+    emit_operation_event "addon.install" "addon.install.script" "failed" "Add-on install script not found" "${addon_name}"
     rm -rf "${tmp_dir}" "${tmp_root}"
     printf 'addon package install script not found: %s\n' "${install_script}" >&2
     return 4
   }
 
   printf 'Executing packaged addon installer: %s\n' "${install_script}"
+  emit_operation_event "addon.install" "addon.install.run" "running" "Executing packaged add-on installer" "${addon_name}"
   (
     cd "${manifest_dir}"
     export KUBECONFIG="${target_kubeconfig}"
@@ -907,10 +1035,22 @@ run_packaged_addon_install() {
     export PK3S_KUBECTL_BIN="${PK3S_KUBECTL_BIN:-$(pk3s_runtime_addon_kubectl_bin)}"
     export PK3S_INGRESS_CLASS_NAME="${PK3S_INGRESS_CLASS_NAME:-$(pk3s_runtime_default_ingress_class)}"
     bash "${install_path}"
-  )
+  ) || {
+    local rc=$?
+    emit_operation_event "addon.install" "addon.install.run" "failed" "Packaged add-on installer failed" "${addon_name}"
+    rm -rf "${tmp_dir}" "${tmp_root}"
+    return "${rc}"
+  }
+  emit_operation_event "addon.install" "addon.install.run" "success" "Packaged add-on installer completed" "${addon_name}"
   local rc=$?
   if (( rc == 0 )) && [[ -n "${public_host}" ]]; then
+    emit_operation_event "addon.install" "addon.public-ingress.apply" "running" "Applying add-on public ingress" "${addon_name}"
     apply_addon_public_ingress "${manifest}" "$(printf '%s\n' "${metadata}" | sed -n '1p')" "${target_kubeconfig}" "${public_host}" || rc=$?
+    if (( rc == 0 )); then
+      emit_operation_event "addon.install" "addon.public-ingress.apply" "success" "Add-on public ingress applied" "${addon_name}"
+    else
+      emit_operation_event "addon.install" "addon.public-ingress.apply" "failed" "Add-on public ingress failed" "${addon_name}"
+    fi
   fi
   rm -rf "${tmp_dir}" "${tmp_root}"
   return "${rc}"
@@ -981,54 +1121,27 @@ create_overlay_repo_for_stack_tgz() {
   printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
 }
 
-create_overlay_repo_for_addon_name() {
-  local addon_name="$1"
-  local real_repo overlay_root stack_name
-  real_repo="$(resolve_addons_repo_dir)" || {
-    printf 'could not resolve productive-k3s-addons source repository. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR.\n' >&2
-    return 4
-  }
-  resolve_addon_source_dir "${addon_name}" >/dev/null || {
-    printf 'addon source not found: %s\n' "${addon_name}" >&2
-    return 4
-  }
-
-  overlay_root="$(mktemp -d)"
-  stack_name="addon-${addon_name}"
-  mkdir -p "${overlay_root}/stacks/${stack_name}"
-  ln -s "${real_repo}/addons" "${overlay_root}/addons"
-  {
-    printf 'apiVersion: addons.productive-k3s.io/v1\n'
-    printf 'kind: Stack\n'
-    printf 'metadata:\n'
-    printf '  name: %s\n' "${stack_name}"
-    printf '  version: 0.1.0\n'
-    printf 'spec:\n'
-    printf '  addons:\n'
-    case "${addon_name}" in
-      rancher|registry)
-        printf '    - cert-manager\n'
-        ;;
-    esac
-    printf '    - %s\n' "${addon_name}"
-  } > "${overlay_root}/stacks/${stack_name}/stack.yaml"
-
-  printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
-}
-
 run_stack_install_from_overlay() {
   local overlay_repo="$1"
   local stack_name="$2"
   shift 2
   local manifest_path
   manifest_path="${overlay_repo}/stacks/${stack_name}/stack.yaml"
+  emit_operation_event "stack.install" "stack.runtime.validate" "running" "Validating stack runtime compatibility" "${stack_name}"
   enforce_stack_runtime_compatibility "${manifest_path}" || return $?
+  emit_operation_event "stack.install" "stack.runtime.validate" "success" "Stack runtime compatibility validated" "${stack_name}"
+  emit_operation_event "stack.install" "stack.install.run" "running" "Running stack install" "${stack_name}"
   (
     export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${overlay_repo}"
     export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
     export PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR="${overlay_repo}/bundled-addons"
     "${SCRIPT_DIR}/apply.sh" --mode stack "$@"
-  )
+  ) || {
+    local rc=$?
+    emit_operation_event "stack.install" "stack.install.run" "failed" "Stack install failed" "${stack_name}"
+    return "${rc}"
+  }
+  emit_operation_event "stack.install" "stack.install.run" "success" "Stack install completed" "${stack_name}"
 }
 
 materialize_export_output() {
@@ -1066,27 +1179,41 @@ run_stack_export_from_tgz() {
   local repo_root tmp_dir manifest metadata stack_name stage_root bundle_root rc=0
 
   repo_root="$(cd "${SCRIPT_DIR}/.." && pwd)"
-  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
+  emit_operation_event "stack.export" "stack.package.extract" "running" "Extracting stack package" "${tgz_path}"
+  tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || {
+    local rc=$?
+    emit_operation_event "stack.export" "stack.package.extract" "failed" "Could not extract stack package" "${tgz_path}"
+    return "${rc}"
+  }
+  emit_operation_event "stack.export" "stack.package.extract" "success" "Stack package extracted" "${tgz_path}"
+  emit_operation_event "stack.export" "stack.manifest.resolve" "running" "Resolving stack manifest" "${tgz_path}"
   manifest="$(resolve_stack_manifest "${tmp_dir}")" || {
     rc=$?
+    emit_operation_event "stack.export" "stack.manifest.resolve" "failed" "Stack manifest could not be resolved" "${tgz_path}"
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
+  emit_operation_event "stack.export" "stack.manifest.resolve" "success" "Stack manifest resolved" "${tgz_path}"
+  emit_operation_event "stack.export" "stack.package.validate" "running" "Validating stack package metadata" "${tgz_path}"
   metadata="$(validate_stack_manifest "${manifest}")" || {
     rc=$?
+    emit_operation_event "stack.export" "stack.package.validate" "failed" "Stack package validation failed" "${tgz_path}"
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
   validate_stack_bundled_sources "${manifest}" "${tmp_dir}" || {
     rc=$?
+    emit_operation_event "stack.export" "stack.package.validate" "failed" "Stack bundled sources validation failed" "${tgz_path}"
     rm -rf "${tmp_dir}"
     return "${rc}"
   }
   stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
+  emit_operation_event "stack.export" "stack.package.validate" "success" "Stack package validation passed" "${stack_name}"
 
   stage_root="$(mktemp -d)"
   bundle_root="${stage_root}/stack-export-${stack_name}"
 
+  emit_operation_event "stack.export" "stack.export.materialize" "running" "Materializing stack export" "${stack_name}"
   mkdir -p "${bundle_root}"
   export_runtime_init
   export_runtime_set_metadata "command" "stack export"
@@ -1105,9 +1232,16 @@ run_stack_export_from_tgz() {
   cp "${tgz_path}" "${bundle_root}/stack.tgz"
   export_runtime_write_install_config "${bundle_root}/install-config.env"
   export_runtime_write_manifest "${bundle_root}/manifest.json"
+  export_runtime_write_stack_preflight_script "${bundle_root}/preflight.sh" "stack.tgz"
   export_runtime_write_readme "${bundle_root}/README.md" "${stack_name}" "stack.tgz"
+  export_runtime_write_stack_agents_md "${bundle_root}/AGENTS.md" "${stack_name}" "stack.tgz"
   export_runtime_write_stack_install_script "${bundle_root}/install.sh" "stack.tgz" "$@"
   materialize_export_output "${bundle_root}" "${output_path}" || rc=$?
+  if (( rc == 0 )); then
+    emit_operation_event "stack.export" "stack.export.materialize" "success" "Stack export materialized" "${stack_name}"
+  else
+    emit_operation_event "stack.export" "stack.export.materialize" "failed" "Stack export materialization failed" "${stack_name}"
+  fi
 
   rm -rf "${tmp_dir}" "${stage_root}"
   return "${rc}"
@@ -1115,7 +1249,6 @@ run_stack_export_from_tgz() {
 
 run_addon_install() {
   local tgz_path=""
-  local addon_name=""
   local public_host="${PK3S_ADDON_PUBLIC_HOST:-}"
   while (($# > 0)); do
     case "$1" in
@@ -1128,16 +1261,9 @@ run_addon_install() {
         shift 2
         ;;
       *)
-        if [[ -n "${addon_name}" ]]; then
-          printf 'Usage: ./productive-k3s-core.sh addon install (--tgz <file> | <name>) [--public-host <fqdn>]\n' >&2
-          return 2
-        fi
-        if [[ "$1" == -* ]]; then
-          break
-        fi
-        addon_name="$1"
-        shift
-        break
+        printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>]\n' >&2
+        printf 'source-name addon install is no longer part of the public core contract; package the addon as .tgz first.\n' >&2
+        return 2
         ;;
     esac
   done
@@ -1147,23 +1273,10 @@ run_addon_install() {
     return $?
   fi
 
-  [[ -n "${addon_name}" ]] || {
-    printf 'Usage: ./productive-k3s-core.sh addon install (--tgz <file> | <name>) [--public-host <fqdn>]\n' >&2
+  [[ -n "${tgz_path}" ]] || {
+    printf 'Usage: ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>]\n' >&2
     return 2
   }
-
-  local overlay_repo stack_name
-  mapfile -t _addon_overlay < <(create_overlay_repo_for_addon_name "${addon_name}") || return $?
-  overlay_repo="${_addon_overlay[0]:-}"
-  stack_name="${_addon_overlay[1]:-}"
-  [[ -n "${overlay_repo}" && -n "${stack_name}" ]] || {
-    printf 'failed to build a temporary stack overlay for addon install\n' >&2
-    return 4
-  }
-  local rc=0
-  run_stack_install_from_overlay "${overlay_repo}" "${stack_name}" "$@" || rc=$?
-  rm -rf "${overlay_repo}"
-  return "${rc}"
 }
 
 run_dev_addon_validate() {
@@ -1278,13 +1391,16 @@ run_stack() {
 
       if [[ -n "${tgz_path}" ]]; then
         local overlay_repo_tgz stack_name_tgz
+        emit_operation_event "stack.install" "stack.overlay.prepare" "running" "Preparing stack overlay from package" "${tgz_path}"
         mapfile -t _stack_overlay < <(create_overlay_repo_for_stack_tgz "${tgz_path}") || return $?
         overlay_repo_tgz="${_stack_overlay[0]:-}"
         stack_name_tgz="${_stack_overlay[1]:-}"
         [[ -n "${overlay_repo_tgz}" && -n "${stack_name_tgz}" ]] || {
+          emit_operation_event "stack.install" "stack.overlay.prepare" "failed" "Stack overlay preparation failed" "${tgz_path}"
           printf 'failed to build a temporary stack overlay for stack install\n' >&2
           return 4
         }
+        emit_operation_event "stack.install" "stack.overlay.prepare" "success" "Stack overlay prepared" "${stack_name_tgz}"
         local rc=0
         run_stack_install_from_overlay "${overlay_repo_tgz}" "${stack_name_tgz}" "$@" || rc=$?
         rm -rf "${overlay_repo_tgz}"
@@ -1296,7 +1412,13 @@ run_stack() {
         printf '   or: ./productive-k3s-core.sh stack install --tgz <file> [apply args...]\n' >&2
         return 2
       }
-      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/apply.sh" --mode stack "$@"
+      emit_operation_event "stack.install" "stack.install.run" "running" "Running source stack install" "${stack_name}"
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/apply.sh" --mode stack "$@" || {
+        local rc=$?
+        emit_operation_event "stack.install" "stack.install.run" "failed" "Source stack install failed" "${stack_name}"
+        return "${rc}"
+      }
+      emit_operation_event "stack.install" "stack.install.run" "success" "Source stack install completed" "${stack_name}"
       ;;
     export)
       local output_path=""
@@ -1340,7 +1462,13 @@ run_stack() {
         return 2
       }
       shift
-      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/validate.sh" "$@"
+      emit_operation_event "stack.validate" "stack.validate.run" "running" "Running stack validation" "${stack_name}"
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/validate.sh" "$@" || {
+        local rc=$?
+        emit_operation_event "stack.validate" "stack.validate.run" "failed" "Stack validation failed" "${stack_name}"
+        return "${rc}"
+      }
+      emit_operation_event "stack.validate" "stack.validate.run" "success" "Stack validation completed" "${stack_name}"
       ;;
     backup)
       stack_name="${1:-}"
@@ -1349,7 +1477,13 @@ run_stack() {
         return 2
       }
       shift
-      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/backup.sh" "$@"
+      emit_operation_event "stack.backup" "stack.backup.run" "running" "Running stack backup" "${stack_name}"
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/backup.sh" "$@" || {
+        local rc=$?
+        emit_operation_event "stack.backup" "stack.backup.run" "failed" "Stack backup failed" "${stack_name}"
+        return "${rc}"
+      }
+      emit_operation_event "stack.backup" "stack.backup.run" "success" "Stack backup completed" "${stack_name}"
       ;;
     cleanup)
       stack_name="${1:-}"
@@ -1358,7 +1492,13 @@ run_stack() {
         return 2
       }
       shift
-      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/cleanup.sh" "$@"
+      emit_operation_event "stack.cleanup" "stack.cleanup.run" "running" "Running stack cleanup" "${stack_name}"
+      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/cleanup.sh" "$@" || {
+        local rc=$?
+        emit_operation_event "stack.cleanup" "stack.cleanup.run" "failed" "Stack cleanup failed" "${stack_name}"
+        return "${rc}"
+      }
+      emit_operation_event "stack.cleanup" "stack.cleanup.run" "success" "Stack cleanup completed" "${stack_name}"
       ;;
     *)
       printf 'Usage: ./productive-k3s-core.sh stack <install|export|validate|backup|cleanup> ...\n' >&2
@@ -1415,16 +1555,50 @@ run_validate() {
     shift
   done
 
-  "${SCRIPT_DIR}/validate.sh" "${translated_args[@]}"
+  emit_operation_event "core.validate" "core.validate.run" "running" "Running Productive K3S validation"
+  "${SCRIPT_DIR}/validate.sh" "${translated_args[@]}" || {
+    local rc=$?
+    emit_operation_event "core.validate" "core.validate.run" "failed" "Productive K3S validation failed"
+    return "${rc}"
+  }
+  emit_operation_event "core.validate" "core.validate.run" "success" "Productive K3S validation completed"
 }
 
 main() {
+  local parsed_args=()
   local command="${1:-apply}"
   local rc=0
 
+  while (($# > 0)); do
+    case "$1" in
+      --events)
+        [[ $# -ge 2 ]] || {
+          printf '%s\n' "--events requires a value" >&2
+          return 2
+        }
+        GLOBAL_EVENTS_FORMAT="$2"
+        shift 2
+        ;;
+      *)
+        parsed_args+=("$1")
+        shift
+        ;;
+    esac
+  done
+  set -- "${parsed_args[@]}"
+
   if (($# == 0)); then
     command="apply"
+  else
+    command="${1:-apply}"
   fi
+
+  setup_operation_event_output
+  OPERATION_NAME="$(operation_name_for_args "$@")"
+  OPERATION_SUBJECT=""
+  OPERATION_COMPLETED_EMITTED=0
+  trap events_exit_trap EXIT
+  emit_operation_event "${OPERATION_NAME}" "operation.started" "running" "Operation started" "${OPERATION_SUBJECT}"
 
   if core_command_emits_telemetry "${command}" "$@"; then
     prepare_telemetry_context
@@ -1492,6 +1666,8 @@ main() {
     fi
   fi
 
+  emit_operation_completed_event "${OPERATION_NAME}" "${rc}" "${OPERATION_SUBJECT}"
+  OPERATION_COMPLETED_EMITTED=1
   return "${rc}"
 }
 

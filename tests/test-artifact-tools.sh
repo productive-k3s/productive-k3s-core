@@ -3,6 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+VM_IMAGES_ENV="${SCRIPT_DIR}/vm-images.env"
+
+# shellcheck disable=SC1090
+source "${VM_IMAGES_ENV}"
 
 fail() {
   printf '[FAIL] %s\n' "$1" >&2
@@ -38,12 +42,12 @@ FAKE_BIN_DIR="${TMP_DIR}/bin"
 MULTIPASS_LOG="${TMP_DIR}/multipass.log"
 mkdir -p "${ARTIFACTS_DIR}" "${RUNS_DIR}/telemetry-outbox" "${FAKE_BIN_DIR}"
 
-cat > "${ARTIFACTS_DIR}/test-in-vm-20260508-000001-core-ubuntu.json" <<'EOF'
+cat > "${ARTIFACTS_DIR}/test-in-vm-20260508-000001-core-ubuntu.json" <<EOF
 {
   "test_type": "vm",
   "profile": "core",
   "platform": "ubuntu",
-  "image": "24.04",
+  "image": "${UBUNTU_24_04_IMAGE}",
   "vm_name": "pk3s-core-ubuntu",
   "status": "success"
 }
@@ -63,12 +67,12 @@ cat > "${ARTIFACTS_DIR}/test-in-vm-20260508-000001-core-ubuntu-public.json" <<'E
 }
 EOF
 
-cat > "${ARTIFACTS_DIR}/test-in-vm-20260508-000002-full-debian12.json" <<'EOF'
+cat > "${ARTIFACTS_DIR}/test-in-vm-20260508-000002-full-debian12.json" <<EOF
 {
   "test_type": "vm",
   "profile": "full",
   "platform": "debian12",
-  "image": "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2",
+  "image": "${DEBIAN_12_IMAGE}",
   "vm_name": "pk3s-full-debian12",
   "status": "failed"
 }
@@ -135,7 +139,7 @@ status_rc=$?
 set -e
 
 [[ "$status_rc" -ne 0 ]] || fail "check-test-status should fail when at least one test result is failed"
-assert_contains "$status_output" "[OK] vm profile=core platform=ubuntu image=24.04"
+assert_contains "$status_output" "[OK] vm profile=core platform=ubuntu image=${UBUNTU_24_04_IMAGE}"
 assert_contains "$status_output" "[FAIL] vm profile=full platform=debian12"
 assert_contains "$status_output" "[OK] github-hosted runner_os=ubuntu-24.04"
 assert_contains "$status_output" "Summary: 2 success, 1 failed, 0 unknown"

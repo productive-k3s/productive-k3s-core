@@ -54,7 +54,25 @@ When telemetry is enabled, it remains:
 Core emits two telemetry families:
 
 - bootstrap manifest delivery through `scripts/send-telemetry.sh`
-- command and bootstrap lifecycle events such as `core.command.started`, `core.command.completed`, `core.apply.server.started`, and `core.apply.server.completed`
+- command and bootstrap lifecycle events such as `core.command.started`, `core.command.completed`, `core.bootstrap.server.started`, and `core.bootstrap.server.completed`
+
+## Local Operation Events
+
+Core also exposes a local operation event stream for callers that need structured progress, such as the Productive K3S CLI TUI:
+
+```bash
+./productive-k3s-core.sh --events ndjson addon validate --tgz ./nginx-addon.tgz >events.ndjson 2>human.log
+```
+
+This stream is deliberately separate from telemetry:
+
+- it is enabled only by the local `--events ndjson` flag
+- it is written to stdout as newline-delimited JSON
+- human-readable logs and child process output are written to stderr
+- it is not sent to a remote endpoint
+- disabling or enabling telemetry does not affect it
+
+The event schema is `productive-k3s-operation-event/v1`. Events include `component`, `operation`, `step`, `status`, `message`, `subject`, and `emitted_at`.
 
 Examples of safe event categories:
 

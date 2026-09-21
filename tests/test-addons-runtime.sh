@@ -97,3 +97,46 @@ structured_stack_addons="$(
 )"
 [[ "${structured_stack_addons}" == $'prometheus\ngrafana' ]] || fail "did not normalize structured stack addon names"
 pass "addons runtime normalizes structured stack addon names"
+
+git init --bare "${WORK_DIR}/productive-k3s-addons-remote.git" >/dev/null
+git init "${WORK_DIR}/productive-k3s-addons-worktree" >/dev/null
+git -C "${WORK_DIR}/productive-k3s-addons-worktree" checkout -b main >/dev/null
+git -C "${WORK_DIR}/productive-k3s-addons-worktree" config user.name "Test User"
+git -C "${WORK_DIR}/productive-k3s-addons-worktree" config user.email "test@example.com"
+mkdir -p "${WORK_DIR}/productive-k3s-addons-worktree/addons/registry/scripts"
+mkdir -p "${WORK_DIR}/productive-k3s-addons-worktree/stacks/base"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${WORK_DIR}/productive-k3s-addons-worktree/addons/registry/scripts/validate.sh"
+chmod +x "${WORK_DIR}/productive-k3s-addons-worktree/addons/registry/scripts/validate.sh"
+cat >"${WORK_DIR}/productive-k3s-addons-worktree/stacks/base/stack.yaml" <<'EOF'
+apiVersion: addons.productive-k3s.io/v1
+kind: Stack
+metadata:
+  name: base
+  version: 0.1.0
+spec:
+  addons:
+    - registry
+EOF
+git -C "${WORK_DIR}/productive-k3s-addons-worktree" add .
+git -C "${WORK_DIR}/productive-k3s-addons-worktree" commit -m "seed main" >/dev/null
+git -C "${WORK_DIR}/productive-k3s-addons-worktree" remote add origin "${WORK_DIR}/productive-k3s-addons-remote.git"
+git -C "${WORK_DIR}/productive-k3s-addons-worktree" push origin main >/dev/null
+
+mkdir -p "${WORK_DIR}/feature-core/scripts"
+cp "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" "${WORK_DIR}/feature-core/scripts/productive-k3s-core-dev.sh"
+git init "${WORK_DIR}/feature-core" >/dev/null
+git -C "${WORK_DIR}/feature-core" checkout -b feature-only >/dev/null
+
+fallback_checkout_branch="$(
+  PRODUCTIVE_K3S_ADDONS_REPO_URL="file://${WORK_DIR}/productive-k3s-addons-remote.git" \
+  bash -c '
+    set -euo pipefail
+    source "'"${WORK_DIR}"'/feature-core/scripts/productive-k3s-core-dev.sh"
+    REPO_DIR="'"${WORK_DIR}"'/feature-core"
+    prepare_addons_repo_checkout
+    [[ -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/addons" && -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/stacks" ]] || exit 1
+    git -C "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}" rev-parse --abbrev-ref HEAD
+  ' | tail -n 1
+)"
+[[ "${fallback_checkout_branch}" == "main" ]] || fail "did not fall back to main when current core branch is missing in addons remote"
+pass "addons checkout falls back to main when matching branch is missing remotely"

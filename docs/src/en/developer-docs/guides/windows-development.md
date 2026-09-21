@@ -114,7 +114,7 @@ For a persistent alias, add it to `~/.bashrc`.
 ### 2. Run the smoke VM profile
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile smoke
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile smoke
 ```
 
 This is the first check to run from Windows. It validates that:
@@ -128,7 +128,7 @@ This is the first check to run from Windows. It validates that:
 ### 3. Run the core VM profile
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile core
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile core
 ```
 
 This validates the minimal install path:
@@ -144,9 +144,9 @@ This validates the minimal install path:
 After `smoke` and `core` pass:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-rollback
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-clean
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full-rollback
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full-clean
 ```
 
 These profiles are slower and heavier. They install and validate the full stack in a supported Linux VM.
@@ -164,8 +164,8 @@ The VM image defaults to Ubuntu `24.04`.
 To test Ubuntu `22.04`:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 22.04 --profile core
-./tests/test-in-vm.sh --platform ubuntu --image 22.04 --profile full
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/jammy/release-20260807/ubuntu-22.04-server-cloudimg-amd64.img --profile core
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/jammy/release-20260807/ubuntu-22.04-server-cloudimg-amd64.img --profile full
 ```
 
 Use this when you want to validate compatibility with the current real-host baseline.
@@ -177,7 +177,7 @@ By default, the test harness deletes the VM after the run.
 To keep the VM for troubleshooting:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full --keep-vm
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full --keep-vm
 ```
 
 Then inspect it:
@@ -313,7 +313,7 @@ Example:
 
 ```bash
 multipass find --force-update
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile core
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile core
 ```
 
 ### VM launches but networking fails
@@ -393,7 +393,7 @@ Run `smoke` and `core` first. Only run the full profiles when the cheaper checks
 Increase disk size:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full --disk 60G
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full --disk 60G
 ```
 
 For repeated full-stack testing, use at least:
@@ -409,7 +409,7 @@ More headroom is better for `full`, `full-rollback`, and `full-clean`.
 Rerun with:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile <profile> --keep-vm
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile <profile> --keep-vm
 ```
 
 Then inspect with:
@@ -436,11 +436,11 @@ For a Windows contributor validating changes:
 2. Install WSL 2 with Ubuntu.
 3. Clone the repository inside the WSL filesystem.
 4. Confirm `multipass version` works from WSL.
-5. Run `./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile smoke`.
-6. Run `./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile core`.
-7. Run `./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full` when needed.
-8. Run `./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-rollback` for rollback changes.
-9. Run `./tests/test-in-vm.sh --platform ubuntu --image 24.04 --profile full-clean` for cleanup changes.
+5. Run `./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile smoke`.
+6. Run `./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile core`.
+7. Run `./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full` when needed.
+8. Run `./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full-rollback` for rollback changes.
+9. Run `./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img --profile full-clean` for cleanup changes.
 10. Confirm the relevant artifact JSON files report `status: "success"`.
 11. Clean up with `./tests/test-in-vm-cleanup.sh --all --purge`.
 

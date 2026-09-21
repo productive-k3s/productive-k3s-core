@@ -71,10 +71,10 @@ TELEMETRY_PARENT_RUN_ID="infra-run-xyz"
 emit_bootstrap_lifecycle_event "started" "started"
 emit_bootstrap_lifecycle_event "completed" "success"
 
-assert_file_contains "${TMP_DIR}/requests/request-1.json" '"event_name": "core.apply.server.started"'
+assert_file_contains "${TMP_DIR}/requests/request-1.json" '"event_name": "core.bootstrap.server.started"'
 assert_file_contains "${TMP_DIR}/requests/request-1.json" '"session_id": "session-abc"'
 assert_file_contains "${TMP_DIR}/requests/request-1.json" '"parent_run_id": "infra-run-xyz"'
-assert_file_contains "${TMP_DIR}/requests/request-2.json" '"event_name": "core.apply.server.completed"'
+assert_file_contains "${TMP_DIR}/requests/request-2.json" '"event_name": "core.bootstrap.server.completed"'
 assert_file_contains "${TMP_DIR}/requests/request-2.json" '"result": "success"'
 
 printf '[PASS] bootstrap telemetry helper emits correlated mode-specific events\n'

@@ -43,7 +43,7 @@ El harness de VM soporta:
 
 Cuando se usa `--platform debian13`, el harness deja por defecto:
 
-- image: `https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2`
+- image: `https://cloud.debian.org/images/cloud/trixie/20260819-2575/debian-13-generic-amd64-20260819-2575.qcow2`
 - remote user: `ubuntu`
 - remote directory: `/home/ubuntu/productive-k3s-core`
 
@@ -69,31 +69,31 @@ Comandos de referencia:
 ### 1. Smoke
 
 ```bash
-./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 --profile smoke
+./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/20260819-2575/debian-13-generic-amd64-20260819-2575.qcow2 --profile smoke
 ```
 
 ### 2. Core
 
 ```bash
-./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 --profile core
+./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/20260819-2575/debian-13-generic-amd64-20260819-2575.qcow2 --profile core
 ```
 
 ### 3. Full
 
 ```bash
-./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 --profile full
+./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/20260819-2575/debian-13-generic-amd64-20260819-2575.qcow2 --profile full
 ```
 
 ### 4. Full rollback
 
 ```bash
-./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 --profile full-rollback
+./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/20260819-2575/debian-13-generic-amd64-20260819-2575.qcow2 --profile full-rollback
 ```
 
 ### 5. Full clean
 
 ```bash
-./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2 --profile full-clean
+./tests/test-in-vm.sh --platform debian13 --image https://cloud.debian.org/images/cloud/trixie/20260819-2575/debian-13-generic-amd64-20260819-2575.qcow2 --profile full-clean
 ```
 
 ## Revisión de artefactos

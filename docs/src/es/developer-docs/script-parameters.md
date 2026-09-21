@@ -71,8 +71,30 @@ La separación pública importante ahora es:
   instala sólo el core local
 - `./productive-k3s-core.sh stack install <name>`
   instala un stack explícito como `base`
-- `./productive-k3s-core.sh addon install`
+- `./productive-k3s-core.sh addon install --tgz <artifact>`
   opera sobre el host local y el clúster local, no sobre un target externo vía kubeconfig
+
+## `productive-k3s-core.sh`
+
+### Stream de eventos de operación
+
+El wrapper público acepta el flag global `--events ndjson` para integraciones locales de UI y automatización.
+
+Ejemplo:
+
+```bash
+./productive-k3s-core.sh --events ndjson addon validate --tgz ./nginx-addon.tgz >events.ndjson 2>human.log
+```
+
+Cuando está habilitado:
+
+- stdout queda reservado para eventos JSON delimitados por newline
+- stderr lleva logs legibles para humanos y output de procesos hijos
+- cada evento usa `schema_version=productive-k3s-operation-event/v1`
+- los campos del evento son `component`, `operation`, `step`, `status`, `message`, `subject` y `emitted_at`
+- los estados soportados son `running`, `success` y `failed`
+
+Esto no es telemetría y Core no lo entrega a ningún destino remoto. Es sólo un contrato de salida local para callers como el TUI de `pk3s`. Sin `--events`, stdout y stderr se comportan como antes.
 
 ### Variables de entorno relacionadas con telemetría
 

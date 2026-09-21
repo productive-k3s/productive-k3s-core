@@ -48,6 +48,7 @@ The script internally treats the modes as capability switches:
 - does not install base `k3s`
 - focuses on stack-level components and cluster issuers
 - is the expected public path for `./productive-k3s-core.sh stack install <name>`
+- keeps named stack selection as part of the public contract, unlike public add-on installation which is package-first
 
 ## Why the mode split matters
 
@@ -61,6 +62,9 @@ The mode model is what makes `productive-k3s-infra` orchestration possible. It g
 
 !!! note
     `single-node` is retained as a legacy all-in-one path. The public contract now prefers `apply` for core-only installation and `stack install <name>` for explicit stack installation.
+
+!!! note
+    Public add-on installation follows a different boundary: `./productive-k3s-core.sh addon install --tgz <artifact>`. Direct source-name add-on installation is no longer part of the public `core` contract.
 
 !!! note
     `server`, `agent`, and `stack` are especially valuable when the bootstrap sequence is orchestrated by another layer.

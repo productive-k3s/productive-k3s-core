@@ -71,8 +71,30 @@ The important public split now is:
   installs the local core only
 - `./productive-k3s-core.sh stack install <name>`
   installs an explicit stack such as `base`
-- `./productive-k3s-core.sh addon install`
+- `./productive-k3s-core.sh addon install --tgz <artifact>`
   operates on the local host and local cluster, not on an external kubeconfig target
+
+## `productive-k3s-core.sh`
+
+### Operation event stream
+
+The public wrapper accepts the global flag `--events ndjson` for local UI and automation integrations.
+
+Example:
+
+```bash
+./productive-k3s-core.sh --events ndjson addon validate --tgz ./nginx-addon.tgz >events.ndjson 2>human.log
+```
+
+When enabled:
+
+- stdout is reserved for newline-delimited JSON events
+- stderr carries human-readable logs and child-process output
+- each event uses `schema_version=productive-k3s-operation-event/v1`
+- the event fields are `component`, `operation`, `step`, `status`, `message`, `subject`, and `emitted_at`
+- supported statuses are `running`, `success`, and `failed`
+
+This is not telemetry and it is not delivered anywhere by Core. It is only a local output contract for callers such as `pk3s` TUI. Without `--events`, stdout and stderr behave as they did before.
 
 ### Telemetry-related environment variables
 

@@ -19,6 +19,9 @@ mkdir -p "${WORK_DIR}/scripts"
 cp "${ROOT_DIR}/scripts/productive-k3s-core.sh" "${WORK_DIR}/scripts/"
 cp "${ROOT_DIR}/scripts/component-versions.sh" "${WORK_DIR}/scripts/"
 cp "${ROOT_DIR}/scripts/addons-runtime.sh" "${WORK_DIR}/scripts/"
+cp "${ROOT_DIR}/scripts/addon-host-runtime.sh" "${WORK_DIR}/scripts/"
+cp "${ROOT_DIR}/scripts/runtime-contract.sh" "${WORK_DIR}/scripts/"
+cp "${ROOT_DIR}/scripts/export-runtime.sh" "${WORK_DIR}/scripts/"
 cat > "${WORK_DIR}/bundle-info.json" <<'EOF'
 {
   "schema_version": "1",

@@ -148,4 +148,25 @@ Describe 'bootstrap package and engine helpers'
     The output should include '[dry-run] Adding Helm repo rancher-latest'
     The output should include 'helm repo add rancher-latest https://releases.rancher.com/server-charts/latest'
   End
+
+  It 'propagates pipeline failures from run_shell'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      run_shell "failing pipeline" "false | true"'
+    The status should equal 1
+  End
+
+  It 'retries shell commands until they succeed'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      attempts=0
+      run_shell() {
+        attempts=$((attempts + 1))
+        [[ "${attempts}" -ge 3 ]]
+      }
+      sleep() { :; }
+      run_shell_with_retries "unstable shell command" 60 1 "ignored"
+      printf "attempts=%s\n" "${attempts}"'
+    The status should equal 0
+    The output should include 'unstable shell command did not succeed yet'
+    The output should include 'attempts=3'
+  End
 End

@@ -38,19 +38,19 @@ The validated model is:
 The VM harness supports:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 22.04
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/jammy/release-20260807/ubuntu-22.04-server-cloudimg-amd64.img
 ```
 
 When `--platform ubuntu` is used, the harness defaults to:
 
-- image: `24.04`
+- image: `https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img`
 - remote user: `ubuntu`
 - remote directory: `/home/ubuntu/productive-k3s-core`
 
 To validate Ubuntu 22.04 specifically, override the image:
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 22.04 --remote-user ubuntu --remote-dir /home/ubuntu/productive-k3s-core
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/jammy/release-20260807/ubuntu-22.04-server-cloudimg-amd64.img --remote-user ubuntu --remote-dir /home/ubuntu/productive-k3s-core
 ```
 
 The bootstrap detects the host OS through `/etc/os-release`.
@@ -69,31 +69,31 @@ Reference commands:
 ### 1. Smoke
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 22.04 --profile smoke
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/jammy/release-20260807/ubuntu-22.04-server-cloudimg-amd64.img --profile smoke
 ```
 
 ### 2. Core
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 22.04 --profile core
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/jammy/release-20260807/ubuntu-22.04-server-cloudimg-amd64.img --profile core
 ```
 
 ### 3. Full
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 22.04 --profile full
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/jammy/release-20260807/ubuntu-22.04-server-cloudimg-amd64.img --profile full
 ```
 
 ### 4. Full Rollback
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 22.04 --profile full-rollback
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/jammy/release-20260807/ubuntu-22.04-server-cloudimg-amd64.img --profile full-rollback
 ```
 
 ### 5. Full Clean
 
 ```bash
-./tests/test-in-vm.sh --platform ubuntu --image 22.04 --profile full-clean
+./tests/test-in-vm.sh --platform ubuntu --image https://cloud-images.ubuntu.com/releases/jammy/release-20260807/ubuntu-22.04-server-cloudimg-amd64.img --profile full-clean
 ```
 
 ## Artifact Review

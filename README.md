@@ -139,6 +139,14 @@ The versions pinned for the managed stack components live in [scripts/component-
 
 Telemetry consent is only relevant for mutating public CLI flows such as `apply` and `addon install`. Read-only commands like `help`, `bundle info --json`, and `bom --json` do not prompt for telemetry and do not emit command-level telemetry events.
 
+For local UI and automation integrations, the public CLI also supports an operation event stream:
+
+```bash
+./productive-k3s-core.sh --events ndjson addon validate --tgz ./nginx-addon.tgz >events.ndjson 2>human.log
+```
+
+This stream is local process output, not telemetry. With `--events ndjson`, stdout is reserved for newline-delimited JSON operation events and human-readable logs are written to stderr. Without `--events`, command output behaves as before.
+
 Practical CLI examples:
 
 ```bash
@@ -154,8 +162,14 @@ Contract summary:
 - `apply` installs the local core only
 - `stack install <name>` installs an explicit stack such as `base`
 - `stack export --tgz <artifact>` produces a self-contained installer bundle from a packaged stack artifact
-- `addon install` runs on the local host against the local cluster
+- `addon install --tgz <artifact>` runs on the local host against the local cluster
 - packaged add-ons can still request a basic public ingress via `--public-host`
+
+Important boundary:
+
+- named stack installation remains part of the public `core` contract
+- named public add-on installation does not
+- add-ons must be packaged first and then passed to `core` as `.tgz` artifacts
 
 Current exported-installer test coverage lives in [tests/README.md](./tests/README.md) and includes:
 
@@ -172,6 +186,19 @@ The exported installer contract is intentionally narrow:
 - it may still require host prerequisites and network access
   Typical examples are downloading `k3s` or `rke2`, resolving Helm charts and chart dependencies, and pulling container images.
 - it consumes packaged stack artifacts; catalog resolution belongs above `core`, not inside it
+
+Each exported stack bundle includes human and agent-oriented bootstrap context:
+
+- `README.md` describes the bundle contents and operator workflow
+- `AGENTS.md` describes the origin, vendored runtime boundary, and editing guidance for automation agents
+- `preflight.sh` validates bundle structure, packaged stack metadata, and host stack prerequisites
+- `install.sh` runs `preflight.sh` by default before replaying `stack install`
+- `install.sh --preflight-only` validates without installing, and `install.sh --skip-preflight` replays after an already-passed preflight
+
+The same separation applies to add-ons:
+
+- catalog naming and source curation belong in repositories such as `productive-k3s-addons`
+- public `core` add-on installation consumes packaged artifacts and does not resolve add-on source names directly
 
 Core's responsibility is intentionally narrow for add-on public exposure:
 

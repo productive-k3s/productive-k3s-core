@@ -3,6 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+VM_IMAGES_ENV="${SCRIPT_DIR}/vm-images.env"
+
+# shellcheck disable=SC1090
+source "${VM_IMAGES_ENV}"
 
 STACK_TGZ_URL="${STACK_TGZ_URL:-https://downloads.productive-k3s.io/addons/base-0.1.0.tgz}"
 STACK_EXPECTED_NAME="${STACK_EXPECTED_NAME:-base}"
@@ -12,7 +16,7 @@ LOCAL_INSTALLER_TGZ_PATH="${LOCAL_INSTALLER_TGZ_PATH:-}"
 REMOTE_INSTALLER_TGZ_PATH="${REMOTE_INSTALLER_TGZ_PATH:-/tmp/pk3s-base-installer.tgz}"
 REMOTE_INSTALLER_ROOT="${REMOTE_INSTALLER_ROOT:-/tmp/pk3s-base-installer}"
 PLATFORM="${STACK_TEST_PLATFORM:-debian12}"
-IMAGE="${STACK_TEST_IMAGE:-https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2}"
+IMAGE="${STACK_TEST_IMAGE:-${DEBIAN_12_IMAGE}}"
 PROFILE="${STACK_TEST_PROFILE:-core}"
 DISTRO="${PRODUCTIVE_K3S_DISTRO:-k3s}"
 ENGINE="${PRODUCTIVE_K3S_ENGINE:-native}"
@@ -47,7 +51,7 @@ Environment:
   EXPORT_TELEMETRY_ENABLED   TELEMETRY_ENABLED value frozen into the exported installer (default: false)
   STACK_TEST_VM_NAME         Optional explicit Multipass VM name
   STACK_TEST_PLATFORM        Optional platform passed to tests/test-in-vm.sh (default: debian12)
-  STACK_TEST_IMAGE           Optional image passed to tests/test-in-vm.sh (default: Debian 12 bookworm cloud image)
+  STACK_TEST_IMAGE           Optional image passed to tests/test-in-vm.sh (default: pinned Debian 12 bookworm cloud image)
 EOF
 }
 
@@ -171,6 +175,8 @@ main() {
 
   log "Checking exported installer contents"
   assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/install.sh$'" "exported installer archive is missing install.sh"
+  assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/preflight.sh$'" "exported installer archive is missing preflight.sh"
+  assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/AGENTS.md$'" "exported installer archive is missing AGENTS.md"
   assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/stack.tgz$'" "exported installer archive is missing stack.tgz"
   assert_in_vm "tar -tzf '${REMOTE_INSTALLER_TGZ_PATH}' | grep -q '/manifest.json$'" "exported installer archive is missing manifest.json"
 

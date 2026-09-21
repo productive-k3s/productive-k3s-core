@@ -4,6 +4,10 @@ set -euo pipefail
 PROFILE="core"
 PLATFORM="ubuntu"
 VM_IMAGE=""
+VM_IMAGE_REQUESTED=""
+VM_IMAGE_RESOLVED=""
+VM_IMAGE_VERSION=""
+VM_IMAGE_LABEL=""
 VM_CPUS="4"
 VM_MEMORY="8G"
 VM_DISK="40G"
@@ -16,6 +20,7 @@ REMOTE_DIR=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_NAME="$(basename "$REPO_DIR")"
+VM_IMAGES_ENV="${SCRIPT_DIR}/vm-images.env"
 VM_CREATED="n"
 ARTIFACTS_DIR="$REPO_DIR/test-artifacts"
 RUN_TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
@@ -30,9 +35,17 @@ TRANSFER_STAGED_REPO=""
 TRANSFER_STAGED_ADDONS_REPO=""
 ADDONS_REPO_DIR=""
 REMOTE_ADDONS_DIR=""
+TEMP_ADDONS_CLONE_DIR=""
 REMOTE_COMMAND_STATUS=""
+REMOTE_COMMAND_LOG_REMOTE=""
+REMOTE_COMMAND_LOG_LOCAL=""
 VM_LAUNCH_TIMEOUT_SECONDS="${VM_LAUNCH_TIMEOUT_SECONDS:-}"
 VM_LAUNCH_RETRY_SLEEP_SECONDS="${VM_LAUNCH_RETRY_SLEEP_SECONDS:-15}"
+DEFAULT_GITHUB_OWNER="${PRODUCTIVE_K3S_GITHUB_OWNER:-productive-k3s}"
+DEFAULT_GITHUB_REPO_BASE_URL="${PRODUCTIVE_K3S_GITHUB_REPO_BASE_URL:-https://github.com/${DEFAULT_GITHUB_OWNER}}"
+
+# shellcheck disable=SC1090
+source "${VM_IMAGES_ENV}"
 
 usage() {
   cat <<'EOU'
@@ -47,9 +60,9 @@ Profiles:
   full-rollback  Run the full profile and then build/apply a rollback from the generated bootstrap manifest
 
 Platforms:
-  ubuntu         Supported baseline. Defaults to image 24.04 and user ubuntu
-  debian12       Supported path. Defaults to Debian 12 bookworm cloud image and user ubuntu
-  debian13       Supported path. Defaults to Debian 13 trixie cloud image and user ubuntu
+  ubuntu         Supported baseline. Defaults to the pinned Ubuntu 24.04 cloud image and user ubuntu
+  debian12       Supported path. Defaults to the pinned Debian 12 bookworm cloud image and user ubuntu
+  debian13       Supported path. Defaults to the pinned Debian 13 trixie cloud image and user ubuntu
 
 Notes:
   - Requires Multipass on the host.
@@ -62,28 +75,32 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+now_local() {
+  date +"%Y-%m-%d %H:%M:%S%z"
+}
+
 log() {
-  printf '[INFO] %s\n' "$1"
+  printf '[%s] [INFO] %s\n' "$(now_local)" "$1"
 }
 
 warn() {
-  printf '[WARN] %s\n' "$1"
+  printf '[%s] [WARN] %s\n' "$(now_local)" "$1"
 }
 
 err() {
-  printf '[ERROR] %s\n' "$1" >&2
+  printf '[%s] [ERROR] %s\n' "$(now_local)" "$1" >&2
 }
 
 default_image_for_platform() {
   case "$1" in
     ubuntu)
-      printf '24.04'
+      printf '%s' "${UBUNTU_24_04_IMAGE}"
       ;;
     debian12)
-      printf 'https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2'
+      printf '%s' "${DEBIAN_12_IMAGE}"
       ;;
     debian13)
-      printf 'https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2'
+      printf '%s' "${DEBIAN_13_IMAGE}"
       ;;
     *)
       return 1
@@ -119,6 +136,37 @@ default_launch_timeout_for_image() {
   esac
 }
 
+resolve_vm_image_metadata() {
+  VM_IMAGE_RESOLVED="${VM_IMAGE}"
+  VM_IMAGE_VERSION=""
+  VM_IMAGE_LABEL=""
+
+  case "${PLATFORM}|${VM_IMAGE}" in
+    "ubuntu|24.04"|"ubuntu|${UBUNTU_24_04_IMAGE}")
+      VM_IMAGE_RESOLVED="${UBUNTU_24_04_IMAGE}"
+      VM_IMAGE_VERSION="${UBUNTU_24_04_IMAGE_VERSION}"
+      VM_IMAGE_LABEL="${UBUNTU_24_04_IMAGE_LABEL}"
+      ;;
+    "ubuntu|22.04"|"ubuntu|${UBUNTU_22_04_IMAGE}")
+      VM_IMAGE_RESOLVED="${UBUNTU_22_04_IMAGE}"
+      VM_IMAGE_VERSION="${UBUNTU_22_04_IMAGE_VERSION}"
+      VM_IMAGE_LABEL="${UBUNTU_22_04_IMAGE_LABEL}"
+      ;;
+    "debian12|https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"|"debian12|${DEBIAN_12_IMAGE}")
+      VM_IMAGE_RESOLVED="${DEBIAN_12_IMAGE}"
+      VM_IMAGE_VERSION="${DEBIAN_12_IMAGE_VERSION}"
+      VM_IMAGE_LABEL="${DEBIAN_12_IMAGE_LABEL}"
+      ;;
+    "debian13|https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2"|"debian13|${DEBIAN_13_IMAGE}")
+      VM_IMAGE_RESOLVED="${DEBIAN_13_IMAGE}"
+      VM_IMAGE_VERSION="${DEBIAN_13_IMAGE_VERSION}"
+      VM_IMAGE_LABEL="${DEBIAN_13_IMAGE_LABEL}"
+      ;;
+  esac
+
+  VM_IMAGE="${VM_IMAGE_RESOLVED}"
+}
+
 resolve_addons_repo_dir() {
   if [[ -n "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" && -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/addons" ]]; then
     printf '%s\n' "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}"
@@ -135,6 +183,65 @@ resolve_addons_repo_dir() {
   return 1
 }
 
+default_addons_repo_url() {
+  printf '%s\n' "${DEFAULT_GITHUB_REPO_BASE_URL}/productive-k3s-addons.git"
+}
+
+remote_branch_exists() {
+  local repo_url="$1"
+  local branch_name="$2"
+  git ls-remote --exit-code --heads "${repo_url}" "${branch_name}" >/dev/null 2>&1
+}
+
+default_addons_repo_ref() {
+  local repo_url="${1:-$(default_addons_repo_url)}"
+  local branch_name=""
+  branch_name="$(git -C "${REPO_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [[ -n "${branch_name}" && "${branch_name}" != "HEAD" ]] && remote_branch_exists "${repo_url}" "${branch_name}"; then
+    printf '%s\n' "${branch_name}"
+    return 0
+  fi
+  printf '%s\n' "main"
+}
+
+profile_requires_addons_repo() {
+  case "$PROFILE" in
+    full|full-clean|full-rollback)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+prepare_addons_repo_dir() {
+  local resolved_dir=""
+  local source_url=""
+  local source_ref=""
+
+  if ! profile_requires_addons_repo; then
+    return 0
+  fi
+
+  if resolved_dir="$(resolve_addons_repo_dir)"; then
+    printf '%s\n' "${resolved_dir}"
+    return 0
+  fi
+
+  source_url="${PRODUCTIVE_K3S_ADDONS_REPO_URL:-$(default_addons_repo_url)}"
+  source_ref="${PRODUCTIVE_K3S_ADDONS_REPO_REF:-$(default_addons_repo_ref "${source_url}")}"
+  log "VM tests cloning productive-k3s-addons from URL: ${source_url} (ref: ${source_ref})" >&2
+
+  TEMP_ADDONS_CLONE_DIR="$(mktemp -d)"
+  if ! git clone --depth 1 --branch "${source_ref}" "${source_url}" "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons" >/dev/null 2>&1; then
+    err "Failed to clone productive-k3s-addons from ${source_url} (ref: ${source_ref})"
+    return 1
+  fi
+
+  printf '%s\n' "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"
+}
+
 apply_platform_defaults() {
   case "$PLATFORM" in
     ubuntu|debian12|debian13) ;;
@@ -148,6 +255,8 @@ apply_platform_defaults() {
   if [[ -z "$VM_IMAGE" ]]; then
     VM_IMAGE="$(default_image_for_platform "$PLATFORM")"
   fi
+  VM_IMAGE_REQUESTED="${VM_IMAGE}"
+  resolve_vm_image_metadata
   if [[ -z "$REMOTE_USER" ]]; then
     REMOTE_USER="$(default_remote_user_for_platform "$PLATFORM")"
   fi
@@ -160,6 +269,10 @@ apply_platform_defaults() {
 }
 
 cleanup() {
+  if [[ -n "$TEMP_ADDONS_CLONE_DIR" && -d "$TEMP_ADDONS_CLONE_DIR" ]]; then
+    rm -rf "$TEMP_ADDONS_CLONE_DIR"
+    TEMP_ADDONS_CLONE_DIR=""
+  fi
   if [[ -n "$TRANSFER_STAGING_ROOT" && -d "$TRANSFER_STAGING_ROOT" ]]; then
     rm -rf "$TRANSFER_STAGING_ROOT"
     TRANSFER_STAGING_ROOT=""
@@ -297,6 +410,10 @@ write_local_artifact() {
   "keep_vm": "$(json_escape "$KEEP_VM")",
   "purge_on_cleanup": "$(json_escape "$PURGE_ON_CLEANUP")",
   "image": "$(json_escape "$VM_IMAGE")",
+  "image_requested": "$(json_escape "$VM_IMAGE_REQUESTED")",
+  "image_resolved": "$(json_escape "$VM_IMAGE_RESOLVED")",
+  "image_version": "$(json_escape "$VM_IMAGE_VERSION")",
+  "image_label": "$(json_escape "$VM_IMAGE_LABEL")",
   "remote_user": "$(json_escape "$REMOTE_USER")",
   "remote_dir": "$(json_escape "$REMOTE_DIR")",
   "cpus": "$(json_escape "$VM_CPUS")",
@@ -305,7 +422,9 @@ write_local_artifact() {
   "repo_dir": "$(json_escape "$REPO_DIR")",
   "status": "$(json_escape "$ARTIFACT_STATUS")",
   "bootstrap_manifest_remote": "$(json_escape "$BOOTSTRAP_MANIFEST_REMOTE")",
-  "bootstrap_manifest_local": "$(json_escape "$BOOTSTRAP_MANIFEST_LOCAL")"
+  "bootstrap_manifest_local": "$(json_escape "$BOOTSTRAP_MANIFEST_LOCAL")",
+  "remote_command_log_remote": "$(json_escape "$REMOTE_COMMAND_LOG_REMOTE")",
+  "remote_command_log_local": "$(json_escape "$REMOTE_COMMAND_LOG_LOCAL")"
 }
 EOF
 }
@@ -323,6 +442,10 @@ write_public_artifact() {
   "keep_vm": "$(json_escape "$KEEP_VM")",
   "purge_on_cleanup": "$(json_escape "$PURGE_ON_CLEANUP")",
   "image": "$(json_escape "$VM_IMAGE")",
+  "image_requested": "$(json_escape "$VM_IMAGE_REQUESTED")",
+  "image_resolved": "$(json_escape "$VM_IMAGE_RESOLVED")",
+  "image_version": "$(json_escape "$VM_IMAGE_VERSION")",
+  "image_label": "$(json_escape "$VM_IMAGE_LABEL")",
   "cpus": "$(json_escape "$VM_CPUS")",
   "memory": "$(json_escape "$VM_MEMORY")",
   "disk": "$(json_escape "$VM_DISK")",
@@ -470,6 +593,7 @@ run_remote_command_with_status() {
   remote_log="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$.log"
   remote_status="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$.status"
   remote_pid="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$.pid"
+  REMOTE_COMMAND_LOG_REMOTE="${remote_log}"
   command="${command}; remote_rc=\$?; printf '%s\\n' \"\${remote_rc}\" > '${remote_status}'; exit \"\${remote_rc}\""
   quoted_command="$(printf '%q' "$command")"
 
@@ -479,6 +603,18 @@ run_remote_command_with_status() {
   command_status="$(run_in_vm "cat '$remote_status' 2>/dev/null || true" | tr -d '\r\n')"
   REMOTE_COMMAND_STATUS="${command_status}"
   [[ "${command_status}" == "0" ]]
+}
+
+capture_remote_command_log() {
+  local local_target
+  [[ -n "${REMOTE_COMMAND_LOG_REMOTE:-}" ]] || return 0
+  local_target="${ARTIFACTS_DIR}/${ARTIFACT_BASENAME}-remote-command.log"
+  ensure_artifacts_dir
+  multipass transfer "$VM_NAME:$REMOTE_COMMAND_LOG_REMOTE" "$local_target" >/dev/null 2>&1 || return 0
+  if [[ -f "$local_target" ]]; then
+    REMOTE_COMMAND_LOG_LOCAL="$local_target"
+    log "Remote command log copied to: $REMOTE_COMMAND_LOG_LOCAL"
+  fi
 }
 
 bootstrap_engine_env_prefix() {
@@ -541,9 +677,27 @@ run_core_cli_with_answers() {
       err "Remote core CLI command exited with status ${REMOTE_COMMAND_STATUS}."
     fi
     capture_bootstrap_manifest
+    capture_remote_command_log
     return 1
   fi
   capture_bootstrap_manifest
+}
+
+run_vm_command_with_status() {
+  local command="$1"
+  local timeout_secs="$2"
+  local timeout_description="$3"
+  local failure_description="$4"
+
+  if ! run_remote_command_with_status "$command" "$timeout_secs"; then
+    if [[ "${REMOTE_COMMAND_STATUS:-}" == "124" || -z "${REMOTE_COMMAND_STATUS:-}" ]]; then
+      err "${timeout_description}"
+    else
+      err "${failure_description} ${REMOTE_COMMAND_STATUS}."
+    fi
+    capture_remote_command_log
+    return 1
+  fi
 }
 
 run_validate_with_retries() {
@@ -601,9 +755,39 @@ run_stack_validate_with_retries() {
   done
 }
 
+run_stack_install_with_retries() {
+  local stack_name="$1"
+  local answers="$2"
+  local timeout_secs="${3:-1800}"
+  local sleep_secs="${4:-30}"
+  local extra_args="${5:-}"
+  local start_ts now_ts
+  start_ts=$(date +%s)
+
+  while true; do
+    if run_core_cli_with_answers "stack install" "${stack_name}${extra_args:+ ${extra_args}}" "${answers}"; then
+      return 0
+    fi
+
+    now_ts=$(date +%s)
+    if (( now_ts - start_ts >= timeout_secs )); then
+      err "Stack install for '${stack_name}' did not converge within ${timeout_secs}s"
+      return 1
+    fi
+
+    log "Stack install for '${stack_name}' is not clean yet; waiting ${sleep_secs}s before retrying"
+    sleep "$sleep_secs"
+  done
+}
+
 assert_in_vm() {
   local cmd="$1" description="$2"
-  if run_in_vm "$cmd"; then
+  if run_vm_command_with_status \
+    "$cmd" \
+    120 \
+    "Timed out waiting for verification completion marker: ${description}" \
+    "Verification command exited with status for: ${description}"
+  then
     log "Verified: $description"
   else
     err "Verification failed: $description"
@@ -619,7 +803,12 @@ assert_in_vm_with_retries() {
   start_ts=$(date +%s)
 
   while true; do
-    if run_in_vm "$cmd"; then
+    if run_vm_command_with_status \
+      "$cmd" \
+      120 \
+      "Timed out waiting for verification completion marker: ${description}" \
+      "Verification command exited with status for: ${description}"
+    then
       log "Verified: $description"
       return 0
     fi
@@ -630,9 +819,56 @@ assert_in_vm_with_retries() {
       return 1
     fi
 
-    log "Rollback verification is not clean yet; waiting ${sleep_secs}s before retrying"
+    log "Verification '${description}' is not clean yet; waiting ${sleep_secs}s before retrying"
     sleep "$sleep_secs"
   done
+}
+
+full_clean_verification_command() {
+  cat <<EOF
+source '$REMOTE_DIR/scripts/runtime-contract.sh'
+export PRODUCTIVE_K3S_DISTRO='${PRODUCTIVE_K3S_DISTRO:-k3s}'
+
+check_service_inactive() {
+  local unit="\$1"
+  local rc
+  [[ -n "\$unit" ]] || return 0
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --kill-after=5s 10s systemctl is-active --quiet "\$unit" >/dev/null 2>&1
+    rc=\$?
+  else
+    systemctl is-active --quiet "\$unit" >/dev/null 2>&1
+    rc=\$?
+  fi
+
+  case "\$rc" in
+    0)
+      return 1
+      ;;
+    3|4)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+check_runtime_paths_absent() {
+  local runtime_path
+  while IFS= read -r runtime_path; do
+    [[ -n "\$runtime_path" ]] || continue
+    [[ ! -e "\$runtime_path" ]] || return 1
+  done < <(pk3s_runtime_state_dirs)
+
+  [[ ! -e "\$(pk3s_runtime_system_kubeconfig_path)" ]]
+}
+
+check_service_inactive "\$(pk3s_runtime_server_service)" &&
+check_service_inactive "\$(pk3s_runtime_agent_service)" &&
+check_runtime_paths_absent
+EOF
 }
 
 smoke_answers() {
@@ -645,6 +881,7 @@ core_answers() {
 
 full_answers() {
   cat <<'EOF'
+y
 y
 y
 y
@@ -685,7 +922,7 @@ run_full() {
     export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true
   fi
   run_core_cli_with_answers "apply" "" "$(core_answers)"
-  run_core_cli_with_answers "stack install" "base" "$(full_answers)"
+  run_stack_install_with_retries "base" "$(full_answers)" 1800 30
   if [[ -n "${previous_auto_approve}" ]]; then
     export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS="${previous_auto_approve}"
   else
@@ -697,8 +934,12 @@ run_full() {
 run_full_clean() {
   run_full
   log "Running destructive clean profile inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack cleanup base --apply --yes --confirm-clean"
-  assert_in_vm "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then systemctl is-active --quiet rke2-server && exit 1 || exit 0; else systemctl is-active --quiet k3s && exit 1 || exit 0; fi" "cluster service is no longer active after clean"
+  run_vm_command_with_status \
+    "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack cleanup base --apply --yes --confirm-clean" \
+    3600 \
+    "Timed out waiting for stack cleanup completion marker." \
+    "Stack cleanup command exited with status"
+  assert_in_vm_with_retries "$(full_clean_verification_command)" "cluster runtime is fully removed after clean" 600 15
 }
 
 run_full_rollback() {
@@ -712,10 +953,18 @@ run_full_rollback() {
   fi
 
   log "Running rollback plan inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --plan"
+  run_vm_command_with_status \
+    "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --plan" \
+    1800 \
+    "Timed out waiting for rollback plan completion marker." \
+    "Rollback plan command exited with status"
 
   log "Applying rollback inside the VM"
-  run_in_vm "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --apply --yes"
+  run_vm_command_with_status \
+    "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --apply --yes" \
+    3600 \
+    "Timed out waiting for rollback apply completion marker." \
+    "Rollback apply command exited with status"
 
   assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace cert-manager >/dev/null 2>&1; else ! sudo k3s kubectl get namespace cert-manager >/dev/null 2>&1; fi" "cert-manager namespace was removed by rollback" 600 15
   assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace longhorn-system >/dev/null 2>&1; else ! sudo k3s kubectl get namespace longhorn-system >/dev/null 2>&1; fi" "longhorn-system namespace was removed by rollback" 600 15
@@ -729,7 +978,7 @@ run_full_rollback() {
 main() {
   parse_args "$@"
   need_cmd multipass || { err "multipass is required"; exit 1; }
-  ADDONS_REPO_DIR="$(resolve_addons_repo_dir || true)"
+  ADDONS_REPO_DIR="$(prepare_addons_repo_dir || true)"
   ensure_artifacts_dir
   trap cleanup EXIT
 

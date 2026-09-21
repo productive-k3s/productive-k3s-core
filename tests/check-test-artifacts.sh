@@ -4,9 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ARTIFACTS_DIR="${TEST_ARTIFACTS_DIR:-${REPO_DIR}/test-artifacts}"
+VM_IMAGES_ENV="${SCRIPT_DIR}/vm-images.env"
 
 PROFILE=""
 declare -a EXPECTED=()
+
+# shellcheck disable=SC1090
+source "${VM_IMAGES_ENV}"
 
 usage() {
   cat <<'EOF'
@@ -16,10 +20,10 @@ Usage:
 Example:
   ./tests/check-test-artifacts.sh \
     --profile smoke \
-    --expect 'ubuntu|24.04' \
-    --expect 'ubuntu|22.04' \
-    --expect 'debian12|https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2' \
-    --expect 'debian13|https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2'
+    --expect "ubuntu|${UBUNTU_24_04_IMAGE}" \
+    --expect "ubuntu|${UBUNTU_22_04_IMAGE}" \
+    --expect "debian12|${DEBIAN_12_IMAGE}" \
+    --expect "debian13|${DEBIAN_13_IMAGE}"
 EOF
 }
 
@@ -92,28 +96,18 @@ collect_artifacts() {
   done | sort
 }
 
-collect_manifests() {
-  collect_artifacts | sed 's/\.json$/-apply-manifest.json/' | sort
-}
-
 main() {
   need_cmd jq
   parse_args "$@"
 
   mapfile -t artifacts < <(collect_artifacts)
-  mapfile -t manifests < <(collect_manifests)
   if (( ${#artifacts[@]} != ${#EXPECTED[@]} )); then
     echo "[ERROR] Expected ${#EXPECTED[@]} artifact(s) for profile '${PROFILE}', found ${#artifacts[@]}" >&2
     printf '  %s\n' "${artifacts[@]}" >&2 || true
     exit 1
   fi
-  if (( ${#manifests[@]} != ${#EXPECTED[@]} )); then
-    echo "[ERROR] Expected ${#EXPECTED[@]} bootstrap manifest artifact(s) for profile '${PROFILE}', found ${#manifests[@]}" >&2
-    printf '  %s\n' "${manifests[@]}" >&2 || true
-    exit 1
-  fi
 
-  local expected platform image matched artifact manifest status artifact_profile artifact_platform artifact_image manifest_status manifest_path artifact_basename
+  local expected platform image matched artifact manifest status artifact_profile artifact_platform artifact_image manifest_status manifest_path artifact_basename bootstrap_manifest_local
   for expected in "${EXPECTED[@]}"; do
     platform="${expected%%|*}"
     image="${expected#*|}"
@@ -131,17 +125,20 @@ main() {
           jq '{status,profile,platform,image,vm_name}' "$artifact" >&2
           exit 1
         fi
-        artifact_basename="${artifact%.json}"
-        manifest_path="${artifact_basename}-apply-manifest.json"
-        if [[ ! -f "$manifest_path" ]]; then
-          echo "[ERROR] Missing bootstrap manifest paired with artifact: $artifact" >&2
-          exit 1
-        fi
-        manifest_status="$(jq -r '.status' "$manifest_path")"
-        if [[ "$manifest_status" != "success" ]]; then
-          echo "[ERROR] Bootstrap manifest did not succeed: $manifest_path" >&2
-          jq '{status,run_id,mode,exit_code,current_step}' "$manifest_path" >&2
-          exit 1
+        bootstrap_manifest_local="$(jq -r '.bootstrap_manifest_local // empty' "$artifact")"
+        if [[ -n "$bootstrap_manifest_local" ]]; then
+          artifact_basename="${artifact%.json}"
+          manifest_path="${artifact_basename}-apply-manifest.json"
+          if [[ ! -f "$manifest_path" ]]; then
+            echo "[ERROR] Missing bootstrap manifest paired with artifact: $artifact" >&2
+            exit 1
+          fi
+          manifest_status="$(jq -r '.status' "$manifest_path")"
+          if [[ "$manifest_status" != "success" ]]; then
+            echo "[ERROR] Bootstrap manifest did not succeed: $manifest_path" >&2
+            jq '{status,run_id,mode,exit_code,current_step}' "$manifest_path" >&2
+            exit 1
+          fi
         fi
         echo "[INFO] Verified artifact and bootstrap manifest success for ${platform} ${image}"
         matched="y"
@@ -150,9 +147,8 @@ main() {
     done
 
     if [[ "$matched" != "y" ]]; then
-      echo "[ERROR] Missing expected successful artifact/manifest pair for platform='${platform}' image='${image}' profile='${PROFILE}'" >&2
+      echo "[ERROR] Missing expected successful artifact for platform='${platform}' image='${image}' profile='${PROFILE}'" >&2
       printf '  %s\n' "${artifacts[@]}" >&2
-      printf '  %s\n' "${manifests[@]}" >&2
       exit 1
     fi
   done

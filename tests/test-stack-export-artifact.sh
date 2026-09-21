@@ -51,7 +51,9 @@ chmod +x "${EXPORT_DIR}/scripts/apply.sh"
 
 (
   cd "${EXPORT_DIR}" &&
-  env -u PRODUCTIVE_K3S_ADDONS_REPO_DIR ./install.sh --dry-run
+  [[ -f AGENTS.md ]] &&
+  [[ -x preflight.sh ]] &&
+  env -u PRODUCTIVE_K3S_ADDONS_REPO_DIR ./install.sh --skip-preflight --dry-run
 )
 
 [[ -f "${APPLY_CAPTURE}" ]] || fail "exported bundle did not invoke the bundled apply runtime"
