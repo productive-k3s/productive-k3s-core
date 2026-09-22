@@ -155,4 +155,169 @@ EOF
 
     rm -f "${event_file}"
   End
+
+  It 'falls back to three attempts when event TELEMETRY_MAX_RETRIES is invalid'
+    event_file="$(mktemp)"
+    cat >"${event_file}" <<'EOF'
+{"event_name":"core.command.started","sent_at":"2026-01-01T00:00:00Z"}
+EOF
+
+    When run bash -lc '
+      script="$1"
+      event_file="$2"
+      tmpdir="$(mktemp -d)"
+      mockdir="${tmpdir}/bin"
+      logdir="${tmpdir}/logs"
+      outbox="${tmpdir}/outbox"
+      mkdir -p "${mockdir}" "${logdir}" "${outbox}"
+      cat >"${mockdir}/curl" <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+set -eu
+attempt_file="${MOCK_LOG_DIR}/attempt"
+attempt=1
+if [[ -f "${attempt_file}" ]]; then
+  attempt=$(( $(cat "${attempt_file}") + 1 ))
+fi
+printf "%s" "${attempt}" >"${attempt_file}"
+exit 22
+EOF
+      chmod +x "${mockdir}/curl"
+      export PATH="${mockdir}:$PATH"
+      export MOCK_LOG_DIR="${logdir}"
+      export TELEMETRY_RUN_ID="event-retry"
+      export TELEMETRY_MAX_RETRIES="bogus"
+      export TELEMETRY_OUTBOX_DIR="${outbox}"
+      /usr/bin/bash "${script}" "${event_file}"
+      rc=$?
+      printf "\n__ATTEMPTS__\n"
+      cat "${logdir}/attempt"
+      printf "\n__STATUS__\n"
+      cat "${outbox}/event-event-retry-attempt-3.status"
+      exit "${rc}"
+    ' bash "$EVENT_SCRIPT" "$event_file"
+    The status should equal 1
+    The stderr should include "Invalid TELEMETRY_MAX_RETRIES value 'bogus'"
+    The output should include $'__ATTEMPTS__\n3'
+    The output should include 'attempt=3'
+    The output should include 'curl_exit=22'
+
+    rm -f "${event_file}"
+  End
+
+  It 'delivers event payloads and removes stale event outbox attempts'
+    event_file="$(mktemp)"
+    cat >"${event_file}" <<'EOF'
+{"event_name":"core.command.completed","sent_at":"2026-01-01T00:00:00Z"}
+EOF
+
+    When run bash -lc '
+      script="$1"
+      event_file="$2"
+      tmpdir="$(mktemp -d)"
+      mockdir="${tmpdir}/bin"
+      logdir="${tmpdir}/logs"
+      outbox="${tmpdir}/outbox"
+      mkdir -p "${mockdir}" "${logdir}" "${outbox}"
+      printf "stale\n" >"${outbox}/event-event-success-attempt-1.json"
+      printf "stale\n" >"${outbox}/event-event-success-attempt-1.status"
+      cat >"${mockdir}/curl" <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+set -eu
+printf "%s\n" "$@" >"${MOCK_LOG_DIR}/args.txt"
+for arg in "$@"; do
+  if [[ "${arg}" == @* ]]; then
+    cp "${arg#@}" "${MOCK_LOG_DIR}/payload.json"
+  fi
+done
+exit 0
+EOF
+      chmod +x "${mockdir}/curl"
+      export PATH="${mockdir}:$PATH"
+      export MOCK_LOG_DIR="${logdir}"
+      export TELEMETRY_RUN_ID="event-success"
+      export TELEMETRY_MAX_RETRIES="1"
+      export TELEMETRY_BEARER_TOKEN="event-token"
+      export TELEMETRY_OUTBOX_DIR="${outbox}"
+      /usr/bin/bash "${script}" "${event_file}"
+      rc=$?
+      printf "\n__ARGS__\n"
+      cat "${logdir}/args.txt"
+      printf "\n__PAYLOAD__\n"
+      cat "${logdir}/payload.json"
+      printf "\n__OUTBOX__\n"
+      find "${outbox}" -type f | wc -l
+      exit "${rc}"
+    ' bash "$EVENT_SCRIPT" "$event_file"
+    The status should equal 0
+    The output should include 'Telemetry event delivered successfully on attempt 1/1.'
+    The output should include 'Authorization: Bearer event-token'
+    The output should include '"event_name":"core.command.completed"'
+    The output should include $'__OUTBOX__\n0'
+
+    rm -f "${event_file}"
+  End
+
+  It 'rejects missing event payload paths'
+    When run /usr/bin/bash "$EVENT_SCRIPT" /tmp/pk3s-missing-event-payload.json
+    The status should equal 1
+    The stderr should include 'Telemetry event path is missing or invalid.'
+  End
+
+  It 'rejects missing bootstrap telemetry manifest paths'
+    When run /usr/bin/bash "$SEND_SCRIPT" /tmp/pk3s-missing-bootstrap-manifest.json
+    The status should equal 1
+    The stderr should include 'Telemetry manifest path is missing or invalid.'
+  End
+
+  It 'rejects an empty bootstrap telemetry endpoint'
+    manifest="$(mktemp)"
+    cat >"${manifest}" <<'EOF'
+{"status":"success","run_id":"run-123"}
+EOF
+
+    When run /usr/bin/env TELEMETRY_ENDPOINT= /usr/bin/bash "$SEND_SCRIPT" "$manifest"
+    The status should equal 1
+    The stderr should include 'Telemetry endpoint is not configured.'
+
+    rm -f "${manifest}"
+  End
+
+  It 'reports when curl is unavailable for bootstrap telemetry delivery'
+    manifest="$(mktemp)"
+    cat >"${manifest}" <<'EOF'
+{"status":"success","run_id":"run-123"}
+EOF
+
+    When run /usr/bin/env PATH=/tmp /usr/bin/bash "$SEND_SCRIPT" "$manifest"
+    The status should equal 1
+    The stderr should include 'Missing required command for telemetry delivery: curl'
+
+    rm -f "${manifest}"
+  End
+
+  It 'rejects an empty event telemetry endpoint'
+    event_file="$(mktemp)"
+    cat >"${event_file}" <<'EOF'
+{"event_name":"core.command.started"}
+EOF
+
+    When run /usr/bin/env TELEMETRY_ENDPOINT= /usr/bin/bash "$EVENT_SCRIPT" "$event_file"
+    The status should equal 1
+    The stderr should include 'Telemetry endpoint is not configured.'
+
+    rm -f "${event_file}"
+  End
+
+  It 'reports when curl is unavailable for event delivery'
+    event_file="$(mktemp)"
+    cat >"${event_file}" <<'EOF'
+{"event_name":"core.command.started"}
+EOF
+
+    When run /usr/bin/env PATH=/tmp /usr/bin/bash "$EVENT_SCRIPT" "$event_file"
+    The status should equal 1
+    The stderr should include 'Missing required command for telemetry delivery: curl'
+
+    rm -f "${event_file}"
+  End
 End

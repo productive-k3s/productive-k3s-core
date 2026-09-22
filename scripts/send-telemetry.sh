@@ -29,9 +29,10 @@ warn() {
 
 json_escape() {
   printf '%s' "$1" | sed \
+    -e ':a;N;$!ba' \
     -e 's/\\/\\\\/g' \
     -e 's/"/\\"/g' \
-    -e ':a;N;$!ba;s/\n/\\n/g' \
+    -e 's/\n/\\n/g' \
     -e 's/\r/\\r/g' \
     -e 's/\t/\\t/g'
 }

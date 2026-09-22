@@ -15,6 +15,69 @@ Describe 'bootstrap runtime helpers'
     The output should equal 'false'
   End
 
+  It 'reads non-interactive prompt defaults and invalid yes/no defaults'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      printf "\nmaybe\n" | {
+        prompt chosen "default-value" "Value?"
+        prompt_yesno answer "n" "Continue?"
+        printf "chosen=%s answer=%s\n" "${chosen}" "${answer}"
+      }'
+    The status should equal 0
+    The output should include 'Value? [default-value]: Continue? [n] (y/n):'
+    The output should include 'chosen=default-value answer=n'
+    The output should include 'Invalid input, using default: n'
+  End
+
+  It 'tracks and cleans up sudo keepalive processes'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      tmpdir="$(mktemp -d)"
+      mockbin="${tmpdir}/bin"
+      mkdir -p "${mockbin}"
+      cat >"${mockbin}/sudo" <<EOF
+#!/usr/bin/env bash
+exit 0
+EOF
+      chmod +x "${mockbin}/sudo"
+      PATH="${mockbin}:$PATH"
+      sudo_keepalive
+      [[ -n "${SUDO_KA_PID}" ]]
+      cleanup_exit
+      printf "pid=%s\n" "${SUDO_KA_PID}"'
+    The status should equal 0
+    The output should include 'pid='
+  End
+
+  It 'skips package installation when dependencies are already present'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      pkg_installed() { return 0; }
+      ensure_packages "demo" curl tar'
+    The status should equal 0
+    The output should include 'Required packages for demo are already installed.'
+  End
+
+  It 'fails package installation when missing dependencies are declined'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      pkg_installed() { return 1; }
+      prompt_yesno() { printf -v "$1" n; }
+      ensure_packages "demo" curl tar'
+    The status should equal 1
+    The output should include 'Missing OS packages for demo: curl tar'
+    The output should include 'Cannot continue with demo without those packages.'
+  End
+
+  It 'prints dry-run package installation commands when dependencies are accepted'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      DRY_RUN=1
+      pkg_installed() { return 1; }
+      prompt_yesno() { printf -v "$1" y; }
+      ensure_packages "demo" curl'
+    The status should equal 0
+    The output should include '[dry-run] Updating apt indexes for demo'
+    The output should include 'sudo apt-get update -y'
+    The output should include '[dry-run] Installing packages for demo'
+    The output should include 'sudo apt-get install -y curl'
+  End
+
   It 'reports dry-run results through result_for_mode'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'DRY_RUN=1; result_for_mode success'
     The status should equal 0
@@ -33,7 +96,8 @@ Describe 'bootstrap runtime helpers'
         printf "%s" "${count}" >"${counter_file}"
         [[ "${count}" -ge 3 ]]
       }
-      run_cmd_with_retries "flake test" 2 0 flake
+      run_shell() { flake; }
+      run_shell_with_retries "flake test" 2 0 ignored
       rc=$?
       printf " attempts=%s" "$(cat "${counter_file}")"
       exit "${rc}"'
@@ -42,22 +106,29 @@ Describe 'bootstrap runtime helpers'
   End
 
   It 'fails fast when retry timeout is exhausted'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'false_cmd() { return 1; }; run_cmd_with_retries "always fails" 0 0 false_cmd'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'run_shell() { return 1; }; run_shell_with_retries "always fails" 0 0 ignored'
     The status should equal 1
   End
 
   It 'rejects unsupported installation engines'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'PRODUCTIVE_K3S_ENGINE=bad-engine; validate_k3s_engine'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'PRODUCTIVE_K3S_ENGINE=bad-engine; validate_runtime_engine'
     The status should equal 1
-    The output should include 'Unsupported k3s installation engine: bad-engine'
+    The output should include 'Unsupported cluster installation engine: bad-engine'
   End
 
-  It 'tracks dry-run reuse install skip and warning buckets'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'DRY_RUN=1; track_reuse "existing k3s"; track_install "helm"; track_skip "rancher"; track_warning "manual DNS needed"; print_dry_run_summary'
+  It 'rejects unsupported distro and engine combinations'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'PRODUCTIVE_K3S_DISTRO=rke2; PRODUCTIVE_K3S_ENGINE=k3sup; validate_runtime_engine'
+    The status should equal 1
+    The output should include 'Unsupported cluster distro/engine selection: rke2/k3sup'
+    The stderr should include 'Unsupported distro/engine combination: rke2/k3sup'
+  End
+
+  It 'records and completes manifest components'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      manifest_record_component runtime missing install
+      manifest_complete_component runtime installed ok
+      printf "%s|%s|%s" "${MANIFEST_DETECTED[runtime]}" "${MANIFEST_RESULT[runtime]}" "${MANIFEST_NOTES[runtime]}"'
     The status should equal 0
-    The output should include 'existing k3s'
-    The output should include 'helm'
-    The output should include 'rancher'
-    The output should include 'manual DNS needed'
+    The output should equal 'missing|installed|ok'
   End
 End

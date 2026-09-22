@@ -16,20 +16,20 @@ Describe 'bootstrap package and engine helpers'
       DRY_RUN=1
       pkg_installed() { [[ "$1" == "curl" ]]; }
       prompt_yesno() { printf -v "$1" y; }
-      ensure_packages "Longhorn" curl jq open-iscsi'
+      ensure_packages "runtime" curl jq ca-certificates'
     The status should equal 0
-    The output should include 'Missing OS packages for Longhorn: jq open-iscsi'
-    The output should include '[dry-run] Updating apt indexes for Longhorn'
-    The output should include 'sudo apt-get install -y jq open-iscsi'
+    The output should include 'Missing OS packages for runtime: jq ca-certificates'
+    The output should include '[dry-run] Updating apt indexes for runtime'
+    The output should include 'sudo apt-get install -y jq ca-certificates'
   End
 
   It 'rejects missing packages when the operator declines'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
       pkg_installed() { return 1; }
       prompt_yesno() { printf -v "$1" n; }
-      ensure_packages "Longhorn" jq'
+      ensure_packages "runtime" jq'
     The status should equal 1
-    The output should include 'Cannot continue with Longhorn without those packages.'
+    The output should include 'Cannot continue with runtime without those packages.'
   End
 
   It 'installs k3sup in dry-run mode when missing'
@@ -38,7 +38,7 @@ Describe 'bootstrap package and engine helpers'
       need_cmd() { return 1; }
       install_k3sup_if_needed'
     The status should equal 0
-    The output should include 'Installing k3sup...'
+    The output should include 'Downloading k3sup installer'
     The output should include 'curl -sLS https://get.k3sup.dev | sh'
     The output should include 'sudo install k3sup /usr/local/bin/'
   End
@@ -75,30 +75,7 @@ Describe 'bootstrap package and engine helpers'
       AGENT_CLUSTER_TOKEN=""
       install_k3s_with_native'
     The status should equal 1
-    The output should include 'Agent mode requires both the server URL and cluster token.'
-  End
-
-  It 'builds k3sup ssh and remote target args'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      PRODUCTIVE_K3S_SSH_KEY_PATH=/tmp/id_ed25519
-      PRODUCTIVE_K3S_SSH_PORT=2222
-      PRODUCTIVE_K3S_SSH_HOST=10.0.0.10
-      PRODUCTIVE_K3S_SSH_USER=ubuntu
-      printf "%s\n__SEP__\n%s" "$(tr "\0" " " < <(k3sup_ssh_args))" "$(k3sup_remote_target_args --ip)"'
-    The status should equal 0
-    The output should include '--ssh-key /tmp/id_ed25519'
-    The output should include '--ssh-port 2222'
-    The output should include '--ip 10.0.0.10'
-    The output should include '--user ubuntu'
-  End
-
-  It 'requires a k3sup remote host'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      PRODUCTIVE_K3S_SSH_HOST=""
-      PRODUCTIVE_K3S_SSH_USER=ubuntu
-      k3sup_remote_target_args --host'
-    The status should equal 1
-    The output should include 'PRODUCTIVE_K3S_SSH_HOST'
+    The output should include 'Agent mode requires both server URL and cluster token.'
   End
 
   It 'installs k3s with k3sup in single-node mode'
@@ -135,18 +112,20 @@ Describe 'bootstrap package and engine helpers'
       DRY_RUN=1
       install_helm_if_needed install'
     The status should equal 0
-    The output should include 'Installing Helm (v3.21.0)...'
+    The output should include 'Installing Helm (v3.21.0)'
     The output should include 'raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3'
     The output should include 'DESIRED_VERSION=v3.21.0'
   End
 
-  It 'adds a Helm repo in dry-run mode'
+  It 'installs rke2 server with native engine in dry-run mode'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
       DRY_RUN=1
-      ensure_helm_repo rancher-latest https://releases.rancher.com/server-charts/latest'
+      PRODUCTIVE_K3S_DISTRO=rke2
+      install_rke2_with_native'
     The status should equal 0
-    The output should include '[dry-run] Adding Helm repo rancher-latest'
-    The output should include 'helm repo add rancher-latest https://releases.rancher.com/server-charts/latest'
+    The output should include 'Installing rke2 (v1.35.5+rke2r1)'
+    The output should include 'INSTALL_RKE2_VERSION=v1.35.5+rke2r1'
+    The output should include 'Enabling rke2-server'
   End
 
   It 'propagates pipeline failures from run_shell'

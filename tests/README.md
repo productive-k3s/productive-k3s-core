@@ -158,18 +158,21 @@ Cleanup intent:
 - bootstrap argument parsing, manifests, installers, waits, retries, host helpers, cleanup, and dry-run paths
 - telemetry helper behavior, payload delivery, retry handling, and failure recording
 - host preflight platform detection, resource guidance, strict mode, and required command checks
-- stack validation summary, default resource checks, and registry-related failure paths
+- stack/package dispatch contracts and delegated add-on validation paths
 
 ## Current Coverage Baseline
 
 Latest local `make test-coverage` run:
 
-- total ShellSpec coverage: `75.06%`
-- `scripts/apply.sh`: `78.17%`
+- total merged coverage: `45.49%`
+- `scripts/apply.sh`: `80.55%`
 - `scripts/preflight-host.sh`: `89.02%`
-- `scripts/validate.sh`: `59.52%`
+- `scripts/validate.sh`: `78.38%`
 - `scripts/send-telemetry.sh`: `83.48%`
 - `scripts/send-telemetry-event.sh`: `60.94%`
+- `scripts/productive-k3s-core.sh`: `19.75%`
+- `scripts/export-runtime.sh`: `27.16%`
+- `scripts/cleanup.sh`: `31.15%`
 
 Treat this as a maintainer baseline for new changes, not as a hard CI gate.
 

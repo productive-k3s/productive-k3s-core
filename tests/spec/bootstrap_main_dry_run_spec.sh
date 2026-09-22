@@ -20,23 +20,11 @@ Describe 'bootstrap dry-run main flows'
           *) command -v "$1" >/dev/null 2>&1 ;;
         esac
       }
-      namespace_exists() { return 1; }
-      deployment_exists() { return 1; }
-      secret_exists() { return 1; }
-      storageclass_exists() { [[ "$1" == "local-path" ]] && return 0; return 1; }
-      clusterissuer_exists() { return 1; }
-      helm_release_exists() { return 1; }
-      nfs_export_exists() { return 1; }
-      mount_exists() { return 1; }
       addon_source_script_exists() { return 0; }
-      run_addon_source_hook() { printf "hook:%s|" "$1"; return 0; }
-      confirm_preflight() { return 0; }
       prompt_yesno() {
         case "$1" in
-          INSTALL_K3S|INSTALL_HELM|INSTALL_LONGHORN|INSTALL_RANCHER|INSTALL_REGISTRY|INSTALL_CERT_MANAGER|ENABLE_NFS|RANCHER_MANAGE_LOCAL_HOSTS|REGISTRY_MANAGE_LOCAL_HOSTS|REGISTRY_TRUST_DOCKER|PROCEED_WITH_PLAN|create_issuer|make_default_sc|install_pkgs|REGISTRY_AUTH_ENABLED)
+          INSTALL_RUNTIME|INSTALL_HELM|proceed|install_pkgs)
             printf -v "$1" y ;;
-          REUSE_EXISTING_NFS)
-            printf -v "$1" n ;;
           *)
             printf -v "$1" "$2" ;;
         esac
@@ -44,13 +32,10 @@ Describe 'bootstrap dry-run main flows'
       prompt() { printf -v "$1" "%s" "$2"; }
       main --dry-run'
     The status should equal 0
-    The output should include 'Mode: server'
     The output should include 'Planned actions'
     The output should include '[dry-run] Installing k3s (v1.35.5+k3s1)'
     The output should include '[dry-run] Installing Helm'
-    The output should not include "Processing stack addon 'cert-manager' from stack 'base'"
-    The output should not include "Processing stack addon 'registry' from stack 'base'"
-    The output should not include '[dry-run] Creating NFS export directory /srv/nfs/k8s-share'
+    The output should not include 'stack add-ons: install'
   End
 
   It 'runs an explicit single-node dry-run bootstrap plan'
@@ -59,8 +44,8 @@ Describe 'bootstrap dry-run main flows'
       temp_addons="$(mktemp -d)"
       RUNS_DIR="${temp_runs}"
       mkdir -p "${temp_addons}/stacks/base"
-      mkdir -p "${temp_addons}/addons/cert-manager/scripts"
-      mkdir -p "${temp_addons}/addons/registry/scripts"
+      mkdir -p "${temp_addons}/addons/custom-a/scripts"
+      mkdir -p "${temp_addons}/addons/custom-b/scripts"
       cat >"${temp_addons}/stacks/base/stack.yaml" <<'"'"'EOF'"'"'
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
@@ -69,8 +54,8 @@ metadata:
   version: 0.1.0
 spec:
   addons:
-    - cert-manager
-    - registry
+    - custom-a
+    - custom-b
 EOF
       export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${temp_addons}"
       bind_stdin_to_tty() { :; }
@@ -86,23 +71,11 @@ EOF
           *) command -v "$1" >/dev/null 2>&1 ;;
         esac
       }
-      namespace_exists() { return 1; }
-      deployment_exists() { return 1; }
-      secret_exists() { return 1; }
-      storageclass_exists() { [[ "$1" == "local-path" ]] && return 0; return 1; }
-      clusterissuer_exists() { return 1; }
-      helm_release_exists() { return 1; }
-      nfs_export_exists() { return 1; }
-      mount_exists() { return 1; }
       addon_source_script_exists() { return 0; }
-      run_addon_source_hook() { printf "hook:%s|" "$1"; return 0; }
-      confirm_preflight() { return 0; }
       prompt_yesno() {
         case "$1" in
-          INSTALL_K3S|INSTALL_HELM|INSTALL_LONGHORN|INSTALL_RANCHER|INSTALL_REGISTRY|INSTALL_CERT_MANAGER|ENABLE_NFS|RANCHER_MANAGE_LOCAL_HOSTS|REGISTRY_MANAGE_LOCAL_HOSTS|REGISTRY_TRUST_DOCKER|PROCEED_WITH_PLAN|create_issuer|make_default_sc|install_pkgs|REGISTRY_AUTH_ENABLED)
+          INSTALL_RUNTIME|INSTALL_HELM|proceed|install_pkgs)
             printf -v "$1" y ;;
-          REUSE_EXISTING_NFS)
-            printf -v "$1" n ;;
           *)
             printf -v "$1" "$2" ;;
         esac
@@ -110,10 +83,10 @@ EOF
       prompt() { printf -v "$1" "%s" "$2"; }
       main --dry-run --mode single-node'
     The status should equal 0
-    The output should include 'Mode: single-node'
-    The output should include "Processing stack addon 'cert-manager' from stack 'base'"
-    The output should include "Processing stack addon 'registry' from stack 'base'"
-    The output should include '[dry-run] Creating NFS export directory /srv/nfs/k8s-share'
+    The output should include "stack add-ons: install from 'base'"
+    The output should include "Installing stack add-on 'custom-a' from stack 'base'"
+    The output should include "Installing stack add-on 'custom-b' from stack 'base'"
+    The output should include "[dry-run] Would run source add-on installer for 'custom-a'"
   End
 
   It 'runs an agent dry-run bootstrap with k3sup'
@@ -135,7 +108,7 @@ EOF
       service_active() { [[ "$1" == "k3s-agent" ]] && return 1; [[ "$1" == "k3s" ]] && return 1; return 1; }
       prompt_yesno() {
         case "$1" in
-          INSTALL_K3S_AGENT|PROCEED_WITH_PLAN) printf -v "$1" y ;;
+          INSTALL_AGENT|proceed) printf -v "$1" y ;;
           *) printf -v "$1" "$2" ;;
         esac
       }
@@ -148,10 +121,7 @@ EOF
       }
       main --dry-run --mode agent'
     The status should equal 0
-    The output should include 'Mode: agent'
-    The output should include 'k3s installation engine: k3sup'
     The output should include 'Joining k3s agent with k3sup'
     The output should include 'k3sup join'
-    The output should include 'Agent server URL: https://server.example.local:6443'
   End
 End

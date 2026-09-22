@@ -35,13 +35,6 @@ pk3s_runtime_distro_label() {
   esac
 }
 
-pk3s_runtime_distro_display_name() {
-  case "${PRODUCTIVE_K3S_DISTRO}" in
-    k3s) printf 'K3S' ;;
-    rke2) printf 'RKE2' ;;
-  esac
-}
-
 pk3s_runtime_cluster_label() {
   printf '%s' "$(pk3s_runtime_distro_label)"
 }
@@ -75,13 +68,6 @@ pk3s_runtime_default_ingress_class() {
   case "${PRODUCTIVE_K3S_DISTRO}" in
     k3s) printf 'traefik' ;;
     rke2) printf 'nginx' ;;
-  esac
-}
-
-pk3s_runtime_join_token_path() {
-  case "${PRODUCTIVE_K3S_DISTRO}" in
-    k3s) printf '/var/lib/rancher/k3s/server/node-token' ;;
-    rke2) printf '/var/lib/rancher/rke2/server/node-token' ;;
   esac
 }
 

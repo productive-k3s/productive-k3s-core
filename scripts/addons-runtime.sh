@@ -41,76 +41,100 @@ resolve_stack_source_manifest() {
   printf '%s\n' "${manifest}"
 }
 
+parse_stack_addon_records_from_manifest() {
+  local manifest="$1"
+  local line item key value in_spec=0 in_addons=0 in_record=0
+  local current_name="" current_version="" current_source=""
+
+  __pk3s_flush_stack_addon_record() {
+    [[ "${in_record}" == "1" ]] || return 0
+    if [[ -n "${current_name}" || -n "${current_version}" || -n "${current_source}" ]]; then
+      printf 'name=%s\tversion=%s\tsource=%s\n' "${current_name}" "${current_version}" "${current_source}"
+    fi
+  }
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ "${line}" == "spec:" ]]; then
+      in_spec=1
+      continue
+    fi
+    if [[ "${in_spec}" == "1" && "${line}" == "  addons:" ]]; then
+      in_addons=1
+      continue
+    fi
+    if [[ "${in_addons}" == "1" && "${line}" == "  "* && "${line}" != "    "* ]]; then
+      break
+    fi
+    [[ "${in_addons}" == "1" ]] || continue
+
+    if [[ "${line}" == "    - "* ]]; then
+      __pk3s_flush_stack_addon_record
+      item="${line#    - }"
+      current_name=""
+      current_version=""
+      current_source=""
+      in_record=1
+      if [[ "${item}" == name:* ]]; then
+        current_name="${item#name:}"
+        current_name="${current_name# }"
+      elif [[ "${item}" != *:* ]]; then
+        current_name="${item}"
+      fi
+      continue
+    fi
+
+    if [[ "${in_record}" == "1" && "${line}" == "      "* ]]; then
+      item="${line#      }"
+      key="${item%%:*}"
+      value="${item#*:}"
+      value="${value# }"
+      case "${key}" in
+        name) current_name="${value}" ;;
+        version) current_version="${value}" ;;
+        source) current_source="${value}" ;;
+      esac
+      continue
+    fi
+
+    if [[ "${in_record}" == "1" ]]; then
+      __pk3s_flush_stack_addon_record
+      in_record=0
+    fi
+  done < "${manifest}"
+
+  __pk3s_flush_stack_addon_record
+  unset -f __pk3s_flush_stack_addon_record
+}
+
 stack_source_addon_records() {
   local stack_name="$1"
   local manifest
   manifest="$(resolve_stack_source_manifest "${stack_name}")" || return 1
-  awk '
-    /^spec:/ { in_spec=1; next }
-    in_spec && /^  addons:/ { in_addons=1; next }
-    in_addons && /^  / && !/^    / { exit }
-    !in_addons { next }
-    /^    - / {
-      flush_record()
-      line=$0
-      sub(/^    - /, "", line)
-      current_name=""
-      current_version=""
-      current_source=""
-      if (line ~ /^name:[[:space:]]*/) {
-        sub(/^name:[[:space:]]*/, "", line)
-        current_name=line
-      } else if (line !~ /:/) {
-        current_name=line
-      }
-      in_record=1
-      next
-    }
-    in_record && /^      / {
-      line=$0
-      sub(/^      /, "", line)
-      if (line ~ /^name:[[:space:]]*/) {
-        sub(/^name:[[:space:]]*/, "", line)
-        current_name=line
-      } else if (line ~ /^version:[[:space:]]*/) {
-        sub(/^version:[[:space:]]*/, "", line)
-        current_version=line
-      } else if (line ~ /^source:[[:space:]]*/) {
-        sub(/^source:[[:space:]]*/, "", line)
-        current_source=line
-      }
-      next
-    }
-    in_record { flush_record(); in_record=0 }
-    END { flush_record() }
-    function flush_record() {
-      if (!in_record) {
-        return
-      }
-      if (current_name != "" || current_version != "" || current_source != "") {
-        printf "name=%s\tversion=%s\tsource=%s\n", current_name, current_version, current_source
-      }
-    }
-  ' "${manifest}"
+  parse_stack_addon_records_from_manifest "${manifest}"
+}
+
+stack_addon_record_value() {
+  local record="$1"
+  local key="$2"
+  local field
+  while IFS= read -r field; do
+    if [[ "${field}" == "${key}="* ]]; then
+      printf '%s\n' "${field#${key}=}"
+      return 0
+    fi
+  done < <(printf '%s\n' "${record}" | tr '\t' '\n')
+  return 1
 }
 
 stack_source_addon_names() {
   local stack_name="$1"
-  stack_source_addon_records "${stack_name}" | awk -F '\t' '
-    {
-      for (i = 1; i <= NF; i++) {
-        if ($i ~ /^name=/) {
-          sub(/^name=/, "", $i)
-          print $i
-          break
-        }
-      }
-    }
-  '
-}
-
-addon_component_key() {
-  printf '%s\n' "${1//-/_}"
+  local addon_record addon_name addon_records
+  addon_records="$(stack_source_addon_records "${stack_name}")" || return 1
+  while IFS= read -r addon_record; do
+    addon_name="$(stack_addon_record_value "${addon_record}" "name" || true)"
+    [[ -n "${addon_name}" ]] || continue
+    printf '%s\n' "${addon_name}"
+  done <<< "${addon_records}"
 }
 
 addon_source_script_exists() {
@@ -133,64 +157,4 @@ run_addon_source_script() {
     cd "${addon_dir}"
     bash "${script_path}" "$@"
   )
-}
-
-source_addon_source_script() {
-  local addon_name="$1"
-  local script_name="$2"
-  local addon_dir script_path
-  addon_dir="$(resolve_addon_source_dir "${addon_name}")" || return 1
-  script_path="${addon_dir}/scripts/${script_name}"
-  [[ -f "${script_path}" ]] || return 1
-  # shellcheck disable=SC1090
-  source "${script_path}"
-}
-
-run_addon_source_hook() {
-  local addon_name="$1"
-  local script_name="$2"
-  local function_name="$3"
-  shift 3
-
-  source_addon_source_script "${addon_name}" "${script_name}" || return 1
-  if ! declare -F "${function_name}" >/dev/null 2>&1; then
-    return 2
-  fi
-  "${function_name}" "$@"
-}
-
-resolve_addon_source_manifest() {
-  local addon_name="$1"
-  local addon_dir manifest
-  addon_dir="$(resolve_addon_source_dir "${addon_name}")" || return 1
-  manifest="$(find "${addon_dir}" -type f -name 'addon.yaml' | head -n1)"
-  [[ -n "${manifest}" ]] || return 1
-  printf '%s\n' "${manifest}"
-}
-
-addon_source_impact_value() {
-  local addon_name="$1"
-  local field_name="$2"
-  local manifest
-  manifest="$(resolve_addon_source_manifest "${addon_name}")" || return 1
-  awk -v field="${field_name}" '
-    /^spec:/ { in_spec=1; next }
-    in_spec && /^  impact:/ { in_impact=1; next }
-    in_impact && $0 ~ ("^    " field ":") { sub("^    " field ":[[:space:]]*", "", $0); print; exit }
-    in_impact && /^[^ ]/ { exit }
-  ' "${manifest}"
-}
-
-addon_source_host_capabilities() {
-  local addon_name="$1"
-  local manifest
-  manifest="$(resolve_addon_source_manifest "${addon_name}")" || return 1
-  awk '
-    /^spec:/ { in_spec=1; next }
-    in_spec && /^  impact:/ { in_impact=1; next }
-    in_impact && /^    hostCapabilities:/ { in_caps=1; next }
-    in_caps && /^      - / { sub(/^      - /, "", $0); print; next }
-    in_caps && !/^      - / { exit }
-    in_impact && /^[^ ]/ { exit }
-  ' "${manifest}"
 }
