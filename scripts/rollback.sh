@@ -65,9 +65,11 @@ parse_args() {
 require_prereqs() {
   need_cmd jq || { err "jq is required."; exit 1; }
   [[ -f "$MANIFEST" ]] || { err "Manifest not found: $MANIFEST"; exit 1; }
-  local manifest_distro
+  local manifest_distro manifest_stack_name
   manifest_distro="$(jq -r '.settings.cluster_distro // empty' "$MANIFEST")"
   [[ -z "$manifest_distro" ]] || PRODUCTIVE_K3S_DISTRO="$manifest_distro"
+  manifest_stack_name="$(jq -r '.settings.stack_name // empty' "$MANIFEST")"
+  [[ -n "${PRODUCTIVE_K3S_STACK_NAME:-}" || -z "$manifest_stack_name" ]] || PRODUCTIVE_K3S_STACK_NAME="$manifest_stack_name"
   pk3s_runtime_validate_selection || { err "Manifest requested unsupported cluster distro/engine selection."; exit 1; }
 }
 
