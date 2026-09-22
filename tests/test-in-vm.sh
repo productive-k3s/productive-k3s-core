@@ -610,7 +610,13 @@ capture_remote_command_log() {
   [[ -n "${REMOTE_COMMAND_LOG_REMOTE:-}" ]] || return 0
   local_target="${ARTIFACTS_DIR}/${ARTIFACT_BASENAME}-remote-command.log"
   ensure_artifacts_dir
-  multipass transfer "$VM_NAME:$REMOTE_COMMAND_LOG_REMOTE" "$local_target" >/dev/null 2>&1 || return 0
+  if ! multipass transfer "$VM_NAME:$REMOTE_COMMAND_LOG_REMOTE" "$local_target" >/dev/null 2>&1; then
+    if ! multipass exec "$VM_NAME" -- bash -lc "test -f '$REMOTE_COMMAND_LOG_REMOTE' && cat '$REMOTE_COMMAND_LOG_REMOTE'" >"$local_target" 2>/dev/null; then
+      rm -f "$local_target"
+      warn "Could not copy remote command log from $VM_NAME:$REMOTE_COMMAND_LOG_REMOTE"
+      return 0
+    fi
+  fi
   if [[ -f "$local_target" ]]; then
     REMOTE_COMMAND_LOG_LOCAL="$local_target"
     log "Remote command log copied to: $REMOTE_COMMAND_LOG_LOCAL"

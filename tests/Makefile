@@ -54,6 +54,7 @@ DEV_WRAPPER := ../scripts/productive-k3s-core-dev.sh
 	test-exported-stack-installer-rke2-ubuntu24 \
 	test-exported-stack-installer-k3sup-ubuntu24 \
 	test-in-vm-engine-propagation \
+	test-in-vm-remote-log-capture \
 	test-agent-smoke \
 	test-smoke \
 	test-core \
@@ -225,6 +226,9 @@ test-exported-stack-installer-k3sup-ubuntu24:
 
 test-in-vm-engine-propagation:
 	bash $(DEV_WRAPPER) test-in-vm-engine-propagation
+
+test-in-vm-remote-log-capture:
+	bash $(DEV_WRAPPER) test-in-vm-remote-log-capture
 
 test-agent-smoke:
 	bash $(DEV_WRAPPER) test-agent-smoke
