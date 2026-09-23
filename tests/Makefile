@@ -18,6 +18,7 @@ DEV_WRAPPER := ../scripts/productive-k3s-core-dev.sh
 	test-format \
 	test-spell \
 	test-coverage \
+	test-logs-clean \
 	test-clean \
 	test-clean-artifacts \
 	test-clean-vms \
@@ -113,6 +114,10 @@ test-spell:
 
 test-coverage:
 	bash ./bin/run-kcov.sh
+
+test-logs-clean: test-clean-artifacts
+	rm -rf ../runs ../coverage ../htmlcov ../.pytest_cache ../.coverage coverage htmlcov .pytest_cache .coverage
+	rm -f ../coverage.out ../coverage.txt ../coverage.xml coverage.out coverage.txt coverage.xml
 
 test-clean:
 	bash ./clean-test-artifacts.sh

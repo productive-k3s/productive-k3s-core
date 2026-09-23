@@ -1,4 +1,4 @@
-.PHONY: preflight preflight-strict apply dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test-local-all test-external-all test-matrix-all tag-release
+.PHONY: preflight preflight-strict apply dry-run backup validate validate-strict docs-build docs-serve docs-up docs-down docs-clean test-local-all test-external-all test-matrix-all test-logs-clean tag-release
 
 preflight:
 	./productive-k3s-core.sh preflight
@@ -44,6 +44,9 @@ test-external-all:
 
 test-matrix-all:
 	$(MAKE) -C ./tests test-matrix-all
+
+test-logs-clean:
+	$(MAKE) -C ./tests test-logs-clean
 
 tag-release:
 	./scripts/create-release-tag.sh $(VERSION)
