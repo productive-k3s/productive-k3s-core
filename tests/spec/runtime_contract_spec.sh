@@ -74,11 +74,30 @@ Describe 'runtime contract helpers'
       sudo() { printf "sudo:%s\n" "$*"; }
       PRODUCTIVE_K3S_DISTRO=k3s
       pk3s_runtime_kubectl get nodes
+      kubectl_k3s get services
       PRODUCTIVE_K3S_DISTRO=rke2
       pk3s_runtime_kubectl get pods'
     The status should equal 0
     The output should include 'sudo:k3s kubectl get nodes'
+    The output should include 'sudo:k3s kubectl get services'
     The output should include 'sudo:/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods'
+  End
+
+  It 'deletes named resources that match a pattern'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      kubectl_k3s() {
+        if [[ "$1" == "get" ]]; then
+          printf "%s\n" \
+            validatingwebhookconfiguration.admissionregistration.k8s.io/longhorn-webhook \
+            validatingwebhookconfiguration.admissionregistration.k8s.io/other-webhook
+          return 0
+        fi
+        printf "kubectl:%s\n" "$*"
+      }
+      delete_named_resources_matching validatingwebhookconfigurations "longhorn"'
+    The status should equal 0
+    The output should include 'kubectl:delete validatingwebhookconfiguration.admissionregistration.k8s.io/longhorn-webhook --ignore-not-found --wait=false'
+    The output should not include 'other-webhook --ignore-not-found'
   End
 
   It 'rejects invalid runtime selections'

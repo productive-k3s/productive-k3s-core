@@ -179,7 +179,9 @@ main() {
   require_prereqs
   build_plan
   print_plan
-  [[ "$MODE" == "apply" ]] && apply_plan
+  if [[ "$MODE" == "apply" ]]; then
+    apply_plan
+  fi
 }
 
 if [[ "${PRODUCTIVE_K3S_LIB_ONLY:-0}" != "1" ]]; then

@@ -164,3 +164,15 @@ pk3s_runtime_kubectl() {
       ;;
   esac
 }
+
+kubectl_k3s() {
+  pk3s_runtime_kubectl "$@"
+}
+
+delete_named_resources_matching() {
+  local resource_type="$1" name_pattern="$2" resource_name
+  while IFS= read -r resource_name; do
+    [[ -n "${resource_name}" ]] || continue
+    kubectl_k3s delete "${resource_name}" --ignore-not-found --wait=false || true
+  done < <(kubectl_k3s get "${resource_type}" -o name --ignore-not-found 2>/dev/null | grep -E "${name_pattern}" || true)
+}

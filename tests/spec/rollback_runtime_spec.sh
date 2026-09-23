@@ -33,4 +33,31 @@ EOF
     The output should include "Run clean hooks for stack 'base' add-ons"
   End
 
+  It 'returns success for plan-only rollback'
+    When run /usr/bin/bash -c '
+      manifest="$(mktemp)"
+      cat >"${manifest}" <<EOF
+{
+  "run_id": "test-run",
+  "status": "success",
+  "settings": {
+    "cluster_distro": "k3s",
+    "stack_name": "base"
+  },
+  "components": {
+    "stack_addons": {
+      "detected_before": "unknown",
+      "planned_action": "install",
+      "result": "installed"
+    }
+  }
+}
+EOF
+      "$1" --to "${manifest}" --plan
+    ' -- "$SCRIPT"
+    The status should equal 0
+    The output should include "Rollback plan for test-run"
+    The output should include "Run clean hooks for stack 'base' add-ons"
+  End
+
 End
