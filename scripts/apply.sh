@@ -314,6 +314,58 @@ maybe_send_telemetry() {
   bash "$sender_script" "$RUN_MANIFEST"
 }
 
+emit_bootstrap_lifecycle_event() {
+  local lifecycle="$1"
+  local result="$2"
+  local sender_script="${SCRIPT_DIR}/send-telemetry-event.sh"
+  local event_file
+  local telemetry_run_id="${RUN_ID:-${TELEMETRY_RUN_ID:-unknown-run}}"
+
+  if ! is_truthy "${TELEMETRY_ENABLED:-false}"; then
+    return 0
+  fi
+  if [[ -z "${TELEMETRY_ENDPOINT:-}" || ! -f "${sender_script}" ]]; then
+    return 0
+  fi
+
+  event_file="$(mktemp)"
+  {
+    printf '{\n'
+    printf '  "schema_version": "1",\n'
+    printf '  "event_family": "usage",\n'
+    printf '  "event_name": "core.bootstrap.%s.%s",\n' "$(json_escape "${MODE}")" "$(json_escape "${lifecycle}")"
+    printf '  "sent_at": "%s",\n' "$(json_escape "$(date -Iseconds)")"
+    printf '  "session_id": "%s",\n' "$(json_escape "${TELEMETRY_SESSION_ID:-}")"
+    printf '  "run_id": "%s",\n' "$(json_escape "${telemetry_run_id}")"
+    printf '  "parent_run_id": "%s",\n' "$(json_escape "${TELEMETRY_PARENT_RUN_ID:-}")"
+    printf '  "component": "core",\n'
+    printf '  "bootstrap": {\n'
+    printf '    "mode": "%s",\n' "$(json_escape "${MODE}")"
+    printf '    "result": "%s"\n' "$(json_escape "${result}")"
+    printf '  },\n'
+    printf '  "client": {\n'
+    printf '    "repository": "productive-k3s-core",\n'
+    printf '    "script": "scripts/apply.sh",\n'
+    printf '    "telemetry_enabled": "%s"\n' "$(json_escape "${TELEMETRY_ENABLED:-false}")"
+    printf '  },\n'
+    printf '  "telemetry_meta": {\n'
+    printf '    "delivery_mode": "best-effort",\n'
+    printf '    "anonymous_by_contract": true\n'
+    printf '  }\n'
+    printf '}\n'
+  } > "${event_file}"
+
+  TELEMETRY_ENDPOINT="${TELEMETRY_ENDPOINT}" \
+  TELEMETRY_MARKER="${TELEMETRY_MARKER}" \
+  TELEMETRY_MAX_RETRIES="${TELEMETRY_MAX_RETRIES}" \
+  TELEMETRY_CONNECT_TIMEOUT_SECONDS="${TELEMETRY_CONNECT_TIMEOUT_SECONDS}" \
+  TELEMETRY_REQUEST_TIMEOUT_SECONDS="${TELEMETRY_REQUEST_TIMEOUT_SECONDS}" \
+  TELEMETRY_OUTBOX_DIR="${TELEMETRY_OUTBOX_DIR}" \
+  TELEMETRY_RUN_ID="${telemetry_run_id}" \
+  bash "${sender_script}" "${event_file}" >/dev/null 2>&1 || true
+  rm -f "${event_file}"
+}
+
 cleanup_exit() {
   local exit_code=$?
   if [[ -n "${SUDO_KA_PID:-}" ]]; then
@@ -335,7 +387,7 @@ resolve_telemetry_enabled() {
   fi
   if can_use_tty; then
     local telemetry_consent="y"
-    prompt_yesno telemetry_consent "y" "Productive K3S can send anonymous telemetry about this run to help improve the installation flow. It does not include sensitive environment identifiers. Enable anonymous telemetry for this run?"
+    prompt_yesno telemetry_consent "y" "Productive K3S can send anonymous telemetry about this run to help improve the installation flow. It does not include any sensitive information like hostnames or other environment-specific identifiers. Enable anonymous telemetry for this run?"
     [[ "${telemetry_consent}" == "y" ]] && TELEMETRY_ENABLED="true" || TELEMETRY_ENABLED="false"
     return 0
   fi
