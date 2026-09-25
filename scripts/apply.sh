@@ -600,6 +600,27 @@ wait_cluster_ready() {
   done
 }
 
+inspect_cluster_nodes_with_retries() {
+  local timeout="${1:-60}" sleep_secs="${2:-5}" start now
+  [[ "$MODE" != "agent" && "$DRY_RUN" != "1" ]] || return 0
+  log "Inspecting $(pk3s_runtime_cluster_label) node..."
+  start="$(date +%s)"
+  while true; do
+    if kubectl_k3s get nodes -o wide; then
+      return 0
+    fi
+    now="$(date +%s)"
+    if (( now - start >= timeout )); then
+      err "Timed out inspecting $(pk3s_runtime_cluster_label) nodes."
+      sudo systemctl status "$(pk3s_runtime_server_service)" --no-pager || true
+      kubectl_k3s get nodes -o wide || true
+      return 1
+    fi
+    warn "$(pk3s_runtime_distro_label) API was ready but node inspection failed; retrying in ${sleep_secs}s."
+    sleep "${sleep_secs}"
+  done
+}
+
 ensure_user_kubeconfig() {
   local source_kubeconfig target_dir target_kubeconfig
   [[ "$MODE" != "agent" ]] || return 0
@@ -783,10 +804,7 @@ main() {
   install_helm_if_needed "$helm_action"
   wait_cluster_ready 180
   ensure_user_kubeconfig
-  if [[ "$MODE" != "agent" && "$DRY_RUN" != "1" ]]; then
-    log "Inspecting $(pk3s_runtime_cluster_label) node..."
-    kubectl_k3s get nodes -o wide
-  fi
+  inspect_cluster_nodes_with_retries 60 5
   install_stack_addons
   CURRENT_STEP="completed"
   log "DONE. Quick checks:"

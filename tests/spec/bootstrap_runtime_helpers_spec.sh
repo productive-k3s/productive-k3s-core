@@ -110,6 +110,32 @@ EOF
     The status should equal 1
   End
 
+  It 'retries cluster node inspection after transient API refusal'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      counter_file="$(mktemp)"
+      kubectl_k3s() {
+        local count=0
+        if [[ -f "${counter_file}" ]]; then
+          count="$(cat "${counter_file}")"
+        fi
+        count=$((count + 1))
+        printf "%s" "${count}" >"${counter_file}"
+        if [[ "${count}" -lt 3 ]]; then
+          printf "The connection to the server 127.0.0.1:6443 was refused\n" >&2
+          return 1
+        fi
+        printf "node1 Ready control-plane 1d v1\n"
+      }
+      sleep() { :; }
+      inspect_cluster_nodes_with_retries 5 0
+      printf " attempts=%s" "$(cat "${counter_file}")"'
+    The status should equal 0
+    The output should include 'node1 Ready control-plane 1d v1'
+    The output should include 'attempts=3'
+    The output should include 'API was ready but node inspection failed; retrying'
+    The stderr should include 'The connection to the server 127.0.0.1:6443 was refused'
+  End
+
   It 'rejects unsupported installation engines'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'PRODUCTIVE_K3S_ENGINE=bad-engine; validate_runtime_engine'
     The status should equal 1
