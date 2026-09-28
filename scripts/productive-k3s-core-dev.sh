@@ -306,6 +306,7 @@ main() {
       run_suite_with_artifact local test-productive-k3s-core-cli bash "${REPO_DIR}/tests/test-productive-k3s-core-cli.sh"
       run_suite_with_artifact local test-in-vm-engine-propagation bash "${REPO_DIR}/tests/test-in-vm-engine-propagation.sh"
       run_suite_with_artifact local test-in-vm-remote-log-capture bash "${REPO_DIR}/tests/test-in-vm-remote-log-capture.sh"
+      run_suite_with_artifact local test-in-vm-longhorn-cleanup-contract bash "${REPO_DIR}/tests/test-in-vm-longhorn-cleanup-contract.sh"
       exec "${REPO_DIR}/tests/run-suite-with-artifact.sh" local test-agent-smoke bash "${REPO_DIR}/tests/test-agent-in-docker.sh" "$@"
       ;;
     test-external-all)

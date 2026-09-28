@@ -49,3 +49,13 @@ grep -q "remote command failed" "$REMOTE_COMMAND_LOG_LOCAL" || fail "remote comm
 grep -q "stderr detail" "$REMOTE_COMMAND_LOG_LOCAL" || fail "remote command stderr detail was not copied"
 
 pass "remote command log falls back to exec cat when transfer fails"
+
+REMOTE_COMMAND_LOG_TAG="002-rollback-apply"
+REMOTE_COMMAND_LOG_LOCAL=""
+capture_remote_command_log
+
+[[ "$REMOTE_COMMAND_LOG_LOCAL" == "${ARTIFACTS_DIR}/${ARTIFACT_BASENAME}-002-rollback-apply.log" ]] || \
+  fail "tagged remote command log did not use an operation-specific path"
+[[ -f "$REMOTE_COMMAND_LOG_LOCAL" ]] || fail "tagged remote command log was not written"
+
+pass "remote command logs preserve operation-specific paths"

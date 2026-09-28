@@ -39,6 +39,8 @@ TEMP_ADDONS_CLONE_DIR=""
 REMOTE_COMMAND_STATUS=""
 REMOTE_COMMAND_LOG_REMOTE=""
 REMOTE_COMMAND_LOG_LOCAL=""
+REMOTE_COMMAND_LOG_TAG=""
+REMOTE_COMMAND_SEQUENCE=0
 VM_LAUNCH_TIMEOUT_SECONDS="${VM_LAUNCH_TIMEOUT_SECONDS:-}"
 VM_LAUNCH_RETRY_SLEEP_SECONDS="${VM_LAUNCH_RETRY_SLEEP_SECONDS:-15}"
 DEFAULT_GITHUB_OWNER="${PRODUCTIVE_K3S_GITHUB_OWNER:-productive-k3s}"
@@ -588,11 +590,16 @@ wait_for_remote_file() {
 run_remote_command_with_status() {
   local command="$1"
   local timeout_secs="${2:-1800}"
-  local remote_log remote_status remote_pid quoted_command command_status
+  local command_label="${3:-command}"
+  local remote_log remote_status remote_pid quoted_command command_status safe_label
 
-  remote_log="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$.log"
-  remote_status="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$.status"
-  remote_pid="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$.pid"
+  REMOTE_COMMAND_SEQUENCE=$((REMOTE_COMMAND_SEQUENCE + 1))
+  safe_label="$(printf '%s' "${command_label}" | tr -cs '[:alnum:]._' '-' | sed 's/^-*//; s/-*$//')"
+  [[ -n "${safe_label}" ]] || safe_label="command"
+  printf -v REMOTE_COMMAND_LOG_TAG '%03d-%s' "${REMOTE_COMMAND_SEQUENCE}" "${safe_label}"
+  remote_log="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$-${REMOTE_COMMAND_LOG_TAG}.log"
+  remote_status="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$-${REMOTE_COMMAND_LOG_TAG}.status"
+  remote_pid="/tmp/pk3s-remote-cmd-${RUN_TIMESTAMP}-$$-${REMOTE_COMMAND_LOG_TAG}.pid"
   REMOTE_COMMAND_LOG_REMOTE="${remote_log}"
   command="${command}; remote_rc=\$?; printf '%s\\n' \"\${remote_rc}\" > '${remote_status}'; exit \"\${remote_rc}\""
   quoted_command="$(printf '%q' "$command")"
@@ -606,9 +613,11 @@ run_remote_command_with_status() {
 }
 
 capture_remote_command_log() {
+  local log_tag="${1:-${REMOTE_COMMAND_LOG_TAG:-remote-command}}"
   local local_target
   [[ -n "${REMOTE_COMMAND_LOG_REMOTE:-}" ]] || return 0
-  local_target="${ARTIFACTS_DIR}/${ARTIFACT_BASENAME}-remote-command.log"
+  [[ -n "${log_tag}" ]] || log_tag="remote-command"
+  local_target="${ARTIFACTS_DIR}/${ARTIFACT_BASENAME}-${log_tag}.log"
   ensure_artifacts_dir
   if ! multipass transfer "$VM_NAME:$REMOTE_COMMAND_LOG_REMOTE" "$local_target" >/dev/null 2>&1; then
     if ! multipass exec "$VM_NAME" -- bash -lc "test -f '$REMOTE_COMMAND_LOG_REMOTE' && cat '$REMOTE_COMMAND_LOG_REMOTE'" >"$local_target" 2>/dev/null; then
@@ -676,7 +685,7 @@ run_core_cli_with_answers() {
   local wrapped_cmd
   escaped_answers=$(printf '%q' "$answers")
   wrapped_cmd="$(core_cli_command_in_vm "$subcommand" "$extra_args" "$escaped_answers")"
-  if ! run_remote_command_with_status "$wrapped_cmd" 3600; then
+  if ! run_remote_command_with_status "$wrapped_cmd" 3600 "core-${subcommand}"; then
     if [[ "${REMOTE_COMMAND_STATUS:-}" == "124" || -z "${REMOTE_COMMAND_STATUS:-}" ]]; then
       err "Timed out waiting for remote core CLI completion marker."
     else
@@ -694,8 +703,9 @@ run_vm_command_with_status() {
   local timeout_secs="$2"
   local timeout_description="$3"
   local failure_description="$4"
+  local command_label="${5:-command}"
 
-  if ! run_remote_command_with_status "$command" "$timeout_secs"; then
+  if ! run_remote_command_with_status "$command" "$timeout_secs" "${command_label}"; then
     if [[ "${REMOTE_COMMAND_STATUS:-}" == "124" || -z "${REMOTE_COMMAND_STATUS:-}" ]]; then
       err "${timeout_description}"
     else
@@ -721,9 +731,10 @@ run_validate_with_retries() {
   fi
 
   while true; do
-    if run_remote_command_with_status "${validate_command}" 1200; then
+    if run_remote_command_with_status "${validate_command}" 1200 "validate-${validate_mode}"; then
       return 0
     fi
+    capture_remote_command_log
 
     now_ts=$(date +%s)
     if (( now_ts - start_ts >= timeout_secs )); then
@@ -746,9 +757,10 @@ run_stack_validate_with_retries() {
   validate_command="cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack validate '${stack_name}' --strict"
 
   while true; do
-    if run_remote_command_with_status "${validate_command}" 1200; then
+    if run_remote_command_with_status "${validate_command}" 1200 "stack-validate-${stack_name}"; then
       return 0
     fi
+    capture_remote_command_log
 
     now_ts=$(date +%s)
     if (( now_ts - start_ts >= timeout_secs )); then
@@ -792,7 +804,8 @@ assert_in_vm() {
     "$cmd" \
     120 \
     "Timed out waiting for verification completion marker: ${description}" \
-    "Verification command exited with status for: ${description}"
+    "Verification command exited with status for: ${description}" \
+    "verification-${description}"
   then
     log "Verified: $description"
   else
@@ -813,7 +826,8 @@ assert_in_vm_with_retries() {
       "$cmd" \
       120 \
       "Timed out waiting for verification completion marker: ${description}" \
-      "Verification command exited with status for: ${description}"
+      "Verification command exited with status for: ${description}" \
+      "verification-${description}"
     then
       log "Verified: $description"
       return 0
@@ -874,6 +888,50 @@ check_runtime_paths_absent() {
 check_service_inactive "\$(pk3s_runtime_server_service)" &&
 check_service_inactive "\$(pk3s_runtime_agent_service)" &&
 check_runtime_paths_absent
+EOF
+}
+
+longhorn_cluster_resources_absent_command() {
+  cat <<EOF
+kubectl_runtime() {
+  if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then
+    sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml "\$@"
+  else
+    sudo k3s kubectl "\$@"
+  fi
+}
+
+collect_matching() {
+  local resource_type="\$1"
+  local pattern="\$2"
+  local resources
+  resources="\$(kubectl_runtime get "\${resource_type}" -o name)" || return 1
+  grep -E "\${pattern}" <<< "\${resources}" || true
+}
+
+checks=(
+  'storageclasses|/longhorn(-static|-single)?\$'
+  'csidrivers|/driver\.longhorn\.io\$'
+  'priorityclasses|/longhorn-critical\$'
+  'validatingwebhookconfigurations|longhorn'
+  'mutatingwebhookconfigurations|longhorn'
+  'apiservices|longhorn'
+  'clusterroles|longhorn'
+  'clusterrolebindings|longhorn'
+  'customresourcedefinitions|longhorn\.io'
+)
+residue=''
+for check in "\${checks[@]}"; do
+  IFS='|' read -r resource_type pattern <<< "\${check}"
+  matches="\$(collect_matching "\${resource_type}" "\${pattern}")" || exit 1
+  residue+="\${matches}"\$'\n'
+done
+residue="\$(printf '%s' "\${residue}" | sed '/^[[:space:]]*\$/d')"
+
+if [[ -n "\${residue}" ]]; then
+  printf '[ERROR] Longhorn cluster-scoped resources remain after rollback:\n%s\n' "\${residue}" >&2
+  exit 1
+fi
 EOF
 }
 
@@ -963,17 +1021,22 @@ run_full_rollback() {
     "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --plan" \
     1800 \
     "Timed out waiting for rollback plan completion marker." \
-    "Rollback plan command exited with status"
+    "Rollback plan command exited with status" \
+    "rollback-plan"
+  capture_remote_command_log
 
   log "Applying rollback inside the VM"
   run_vm_command_with_status \
     "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --apply --yes" \
     3600 \
     "Timed out waiting for rollback apply completion marker." \
-    "Rollback apply command exited with status"
+    "Rollback apply command exited with status" \
+    "rollback-apply"
+  capture_remote_command_log
 
   assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace cert-manager >/dev/null 2>&1; else ! sudo k3s kubectl get namespace cert-manager >/dev/null 2>&1; fi" "cert-manager namespace was removed by rollback" 600 15
   assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace longhorn-system >/dev/null 2>&1; else ! sudo k3s kubectl get namespace longhorn-system >/dev/null 2>&1; fi" "longhorn-system namespace was removed by rollback" 600 15
+  assert_in_vm_with_retries "$(longhorn_cluster_resources_absent_command)" "Longhorn cluster-scoped resources were removed by rollback" 120 10
   assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace cattle-system >/dev/null 2>&1; else ! sudo k3s kubectl get namespace cattle-system >/dev/null 2>&1; fi" "cattle-system namespace was removed by rollback" 600 15
   assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get namespace registry >/dev/null 2>&1; else ! sudo k3s kubectl get namespace registry >/dev/null 2>&1; fi" "registry namespace was removed by rollback" 600 15
   assert_in_vm_with_retries "if [[ '${PRODUCTIVE_K3S_DISTRO:-k3s}' == 'rke2' ]]; then ! sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get clusterissuer selfsigned >/dev/null 2>&1; else ! sudo k3s kubectl get clusterissuer selfsigned >/dev/null 2>&1; fi" "selfsigned ClusterIssuer was removed by rollback" 300 10
