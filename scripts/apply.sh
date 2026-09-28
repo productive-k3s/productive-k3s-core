@@ -521,11 +521,18 @@ install_k3s_with_native() {
   local install_cmd=""
   if [[ "$MODE" == "agent" ]]; then
     [[ -n "${AGENT_SERVER_URL:-}" && -n "${AGENT_CLUSTER_TOKEN:-}" ]] || { err "Agent mode requires both server URL and cluster token."; exit 1; }
-    printf -v install_cmd 'curl -sfL https://get.k3s.io | K3S_URL=%q K3S_TOKEN=%q INSTALL_K3S_EXEC=agent INSTALL_K3S_VERSION=%q sh -' "$AGENT_SERVER_URL" "$AGENT_CLUSTER_TOKEN" "${PRODUCTIVE_K3S_K3S_VERSION}"
-    run_shell "Installing k3s agent" "$install_cmd"
+    printf -v install_cmd 'curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors https://get.k3s.io | K3S_URL=%q K3S_TOKEN=%q INSTALL_K3S_EXEC=agent INSTALL_K3S_VERSION=%q sh -' "$AGENT_SERVER_URL" "$AGENT_CLUSTER_TOKEN" "${PRODUCTIVE_K3S_K3S_VERSION}"
+    if ! run_shell_with_retries "Installing k3s agent" 600 15 "$install_cmd"; then
+      err "k3s agent installation failed."
+      return 1
+    fi
     return
   fi
-  run_shell "Installing k3s (${PRODUCTIVE_K3S_K3S_VERSION})" "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${PRODUCTIVE_K3S_K3S_VERSION} sh -"
+  printf -v install_cmd 'curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors https://get.k3s.io | INSTALL_K3S_VERSION=%q sh -' "${PRODUCTIVE_K3S_K3S_VERSION}"
+  if ! run_shell_with_retries "Installing k3s (${PRODUCTIVE_K3S_K3S_VERSION})" 600 15 "$install_cmd"; then
+    err "k3s installation failed."
+    return 1
+  fi
 }
 
 install_rke2_with_native() {

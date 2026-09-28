@@ -51,6 +51,7 @@ Describe 'bootstrap package and engine helpers'
     The status should equal 0
     The output should include 'Installing k3s (v1.35.5+k3s1)'
     The output should include 'INSTALL_K3S_VERSION=v1.35.5+k3s1'
+    The output should include '--retry 5 --retry-delay 3 --retry-all-errors'
   End
 
   It 'installs an agent with native k3s in dry-run mode'
@@ -66,6 +67,31 @@ Describe 'bootstrap package and engine helpers'
     The output should include 'K3S_TOKEN=token-1'
     The output should include 'INSTALL_K3S_EXEC=agent'
     The output should include 'INSTALL_K3S_VERSION=v1.35.5+k3s1'
+    The output should include '--retry 5 --retry-delay 3 --retry-all-errors'
+  End
+
+  It 'wraps native k3s server installation in bounded retries'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      MODE=single-node
+      run_shell_with_retries() {
+        printf "desc=%s timeout=%s sleep=%s cmd=%s\n" "$1" "$2" "$3" "$4"
+      }
+      install_k3s_with_native'
+    The status should equal 0
+    The output should include 'desc=Installing k3s (v1.35.5+k3s1) timeout=600 sleep=15'
+  End
+
+  It 'wraps native k3s agent installation in bounded retries'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      MODE=agent
+      AGENT_SERVER_URL=https://server.example.local:6443
+      AGENT_CLUSTER_TOKEN=token-1
+      run_shell_with_retries() {
+        printf "desc=%s timeout=%s sleep=%s cmd=%s\n" "$1" "$2" "$3" "$4"
+      }
+      install_k3s_with_native'
+    The status should equal 0
+    The output should include 'desc=Installing k3s agent timeout=600 sleep=15'
   End
 
   It 'requires agent connection details for native agent installs'
