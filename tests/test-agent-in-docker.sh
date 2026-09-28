@@ -28,7 +28,7 @@ main() {
     fail "agent dry-run command failed"
   }
 
-  printf '%s\n' "$output" | grep -q "Mode: agent" || fail "agent mode banner missing"
+  printf '%s\n' "$output" | grep -q "Planned actions" || fail "agent dry-run plan summary missing"
   printf '%s\n' "$output" | grep -q "Agent server URL" || fail "agent server URL prompt missing"
   printf '%s\n' "$output" | grep -q "Agent cluster token" || fail "agent token prompt missing"
   printf '%s\n' "$output" | grep -q "k3s agent" || fail "agent install summary missing"

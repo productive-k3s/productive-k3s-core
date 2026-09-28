@@ -28,7 +28,7 @@ pass "unsupported mode is rejected"
 if (cd "$REPO_DIR" && PRODUCTIVE_K3S_ENGINE=unsupported ./scripts/apply.sh --dry-run >/tmp/productive-k3s-invalid-engine.out 2>&1); then
   fail "unsupported engine unexpectedly succeeded"
 fi
-grep -q "Unsupported k3s installation engine" /tmp/productive-k3s-invalid-engine.out || fail "unsupported engine error message missing"
+grep -q "Unsupported cluster installation engine" /tmp/productive-k3s-invalid-engine.out || fail "unsupported engine error message missing"
 pass "unsupported engine is rejected"
 
 agent_answers=$'y\nhttps://server.example.local:6443\nchange-me-token\ny\n'
@@ -45,9 +45,9 @@ set -euo pipefail
 exit 1
 EOF
 chmod +x "${TMP_DIR}/bin/systemctl"
-agent_output="$(cd "$REPO_DIR" && printf '%s' "$agent_answers" | PATH="${TMP_DIR}/bin:${PATH}" PRODUCTIVE_K3S_ENGINE=k3sup ./scripts/apply.sh --dry-run --mode agent 2>&1)" || {
+agent_output="$(cd "$REPO_DIR" && printf '%s' "$agent_answers" | PATH="${TMP_DIR}/bin:${PATH}" PRODUCTIVE_K3S_ENGINE=k3sup PRODUCTIVE_K3S_SSH_HOST=10.0.0.20 PRODUCTIVE_K3S_SSH_USER=ubuntu ./scripts/apply.sh --dry-run --mode agent 2>&1)" || {
   printf '%s\n' "$agent_output" >&2
   fail "k3sup dry-run agent bootstrap failed"
 }
-printf '%s\n' "$agent_output" | grep -q "k3s installation engine: k3sup" || fail "engine banner missing from dry-run output"
-pass "k3sup engine banner is reported"
+printf '%s\n' "$agent_output" | grep -q "\\[dry-run\\] Joining k3s agent with k3sup" || fail "k3sup dry-run join output missing"
+pass "k3sup dry-run join is reported"

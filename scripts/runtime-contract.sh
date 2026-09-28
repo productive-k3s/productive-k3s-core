@@ -35,13 +35,6 @@ pk3s_runtime_distro_label() {
   esac
 }
 
-pk3s_runtime_distro_display_name() {
-  case "${PRODUCTIVE_K3S_DISTRO}" in
-    k3s) printf 'K3S' ;;
-    rke2) printf 'RKE2' ;;
-  esac
-}
-
 pk3s_runtime_cluster_label() {
   printf '%s' "$(pk3s_runtime_distro_label)"
 }
@@ -75,13 +68,6 @@ pk3s_runtime_default_ingress_class() {
   case "${PRODUCTIVE_K3S_DISTRO}" in
     k3s) printf 'traefik' ;;
     rke2) printf 'nginx' ;;
-  esac
-}
-
-pk3s_runtime_join_token_path() {
-  case "${PRODUCTIVE_K3S_DISTRO}" in
-    k3s) printf '/var/lib/rancher/k3s/server/node-token' ;;
-    rke2) printf '/var/lib/rancher/rke2/server/node-token' ;;
   esac
 }
 
@@ -177,4 +163,16 @@ pk3s_runtime_kubectl() {
       sudo "$(pk3s_runtime_embedded_kubectl_bin)" --kubeconfig "$(pk3s_runtime_system_kubeconfig_path)" "$@"
       ;;
   esac
+}
+
+kubectl_k3s() {
+  pk3s_runtime_kubectl "$@"
+}
+
+delete_named_resources_matching() {
+  local resource_type="$1" name_pattern="$2" resource_name
+  while IFS= read -r resource_name; do
+    [[ -n "${resource_name}" ]] || continue
+    kubectl_k3s delete "${resource_name}" --ignore-not-found --wait=false || true
+  done < <(kubectl_k3s get "${resource_type}" -o name --ignore-not-found 2>/dev/null | grep -E "${name_pattern}" || true)
 }

@@ -9,17 +9,6 @@ Describe 'bootstrap host helpers and cleanup'
     The output should equal 'done'
   End
 
-  It 'warns when telemetry manifest is missing'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      TELEMETRY_ENABLED=true
-      TELEMETRY_ENDPOINT="https://telemetry.example.test/telemetry"
-      SCRIPT_DIR="$(mktemp -d)"
-      chmod 755 "$SCRIPT_DIR"
-      maybe_send_telemetry 7'
-    The status should equal 1
-    The output should include 'public run manifest is unavailable'
-  End
-
   It 'invokes the telemetry sender with propagated context'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
       tmpdir="$(mktemp -d)"
@@ -47,49 +36,12 @@ EOF
     The output should include 'manifest='
   End
 
-  It 'reuses an existing NFS server and export'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      DRY_RUN=1
-      install_nfs_if_needed y y reuse /srv/nfs/k8s-share 192.168.1.0/24
-      printf "%s|%s|%s|%s" "${DRY_RUN_REUSE[0]}" "${DRY_RUN_REUSE[1]}" "${MANIFEST_RESULT[nfs]}" "${MANIFEST_NOTES[nfs]}"'
-    The status should equal 0
-    The output should equal 'NFS server|NFS export /srv/nfs/k8s-share|dry-run|/srv/nfs/k8s-share 192.168.1.0/24'
-  End
-
-  It 'installs and exports NFS in dry-run mode'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
-      DRY_RUN=1
-      preflight_nfs_install() { :; }
-      ensure_packages() { :; }
-      nfs_service_name() { printf "nfs-kernel-server"; }
-      nfs_export_exists() { return 1; }
-      run_cmd() { printf "cmd:%s|" "$1"; }
-      install_nfs_if_needed n n install /srv/nfs/k8s-share 192.168.1.0/24
-      printf "track0=%s|track1=%s|result=%s|note=%s" "${DRY_RUN_INSTALL[0]}" "${DRY_RUN_INSTALL[1]}" "${MANIFEST_RESULT[nfs]}" "${MANIFEST_NOTES[nfs]}"'
-    The status should equal 0
-    The output should include 'cmd:Enabling and starting nfs-kernel-server|'
-    The output should include 'cmd:Creating NFS export directory /srv/nfs/k8s-share|'
-    The output should include '[dry-run] Adding NFS export to /etc/exports'
-    The output should include '/srv/nfs/k8s-share 192.168.1.0/24(rw,sync,no_subtree_check)'
-    The output should include 'cmd:Reloading NFS exports|'
-    The output should include 'track0=NFS server'
-    The output should include 'track1=NFS export /srv/nfs/k8s-share (192.168.1.0/24)'
-    The output should include 'result=dry-run'
-  End
-
-  It 'rejects invalid NFS export paths'
-    When run /usr/bin/bash "$RUNNER" "$SCRIPT" 'install_nfs_if_needed n n install relative/path 192.168.1.0/24'
-    The status should equal 1
-    The output should include "NFS export path 'relative/path' is invalid"
-  End
-
   It 'marks cleanup as failed and warns when telemetry delivery fails'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
       RUN_STATUS="running"
       SUDO_KA_PID=""
       write_run_manifest() { printf "manifest:%s|" "$1"; }
       write_private_run_context() { printf "private:%s|" "$1"; }
-      emit_bootstrap_lifecycle_event() { printf "event:%s:%s|" "$1" "$2"; }
       maybe_send_telemetry() { return 1; }
       set +e
       false
@@ -98,7 +50,6 @@ EOF
     The status should equal 0
     The output should include 'manifest:1|'
     The output should include 'private:1|'
-    The output should include 'event:completed:failed|'
     The output should include 'Telemetry delivery did not complete successfully'
     The output should include 'status=failed'
   End

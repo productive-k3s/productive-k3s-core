@@ -171,30 +171,30 @@ pk3s_export_tls_secret_cert() {
 pk3s_install_local_docker_trust() {
   local namespace="$1"
   local secret_name="$2"
-  local registry_host="$3"
+  local trust_host="$3"
   local component="$4"
 
-  local trust_dir="/etc/docker/certs.d/${registry_host}"
+  local trust_dir="/etc/docker/certs.d/${trust_host}"
   local ca_path="${trust_dir}/ca.crt"
 
   if [[ -f "${ca_path}" ]]; then
-    pk3s_track_reuse_optional "Docker trust ${registry_host}"
-    pk3s_manifest_complete_optional "${component}" "$(pk3s_result_for_mode_optional reused)" "${registry_host}"
+    pk3s_track_reuse_optional "Docker trust ${trust_host}"
+    pk3s_manifest_complete_optional "${component}" "$(pk3s_result_for_mode_optional reused)" "${trust_host}"
     return 0
   fi
 
-  pk3s_track_install_optional "Docker trust ${registry_host}"
+  pk3s_track_install_optional "Docker trust ${trust_host}"
   sudo mkdir -p "${trust_dir}"
   pk3s_export_tls_secret_cert "${namespace}" "${secret_name}" "${ca_path}"
   if systemctl list-unit-files docker.service >/dev/null 2>&1; then
     sudo systemctl restart docker || true
   fi
-  pk3s_manifest_complete_optional "${component}" "$(pk3s_result_for_mode_optional configured)" "${registry_host}"
+  pk3s_manifest_complete_optional "${component}" "$(pk3s_result_for_mode_optional configured)" "${trust_host}"
 }
 
 pk3s_remove_local_docker_trust() {
-  local registry_host="$1"
-  sudo rm -rf "/etc/docker/certs.d/${registry_host}" || true
+  local trust_host="$1"
+  sudo rm -rf "/etc/docker/certs.d/${trust_host}" || true
   if systemctl list-unit-files docker.service >/dev/null 2>&1; then
     sudo systemctl restart docker || true
   fi

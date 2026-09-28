@@ -66,17 +66,7 @@ main() {
 
   local attempt curl_rc
   for (( attempt=1; attempt<=max_attempts; attempt++ )); do
-    local curl_args=(
-      --silent
-      --show-error
-      --fail
-      --connect-timeout "${TELEMETRY_CONNECT_TIMEOUT_SECONDS}"
-      --max-time "${TELEMETRY_REQUEST_TIMEOUT_SECONDS}"
-      --retry 0
-      --header 'Content-Type: application/json'
-      --header "X-Productive-K3S-Telemetry: ${TELEMETRY_MARKER}"
-      --data-binary "@${EVENT_PATH}"
-    )
+    local curl_args=(--silent --show-error --fail --connect-timeout "${TELEMETRY_CONNECT_TIMEOUT_SECONDS}" --max-time "${TELEMETRY_REQUEST_TIMEOUT_SECONDS}" --retry 0 --header 'Content-Type: application/json' --header "X-Productive-K3S-Telemetry: ${TELEMETRY_MARKER}" --data-binary "@${EVENT_PATH}")
     if [[ -n "${TELEMETRY_BEARER_TOKEN}" ]]; then
       curl_args+=(--header "Authorization: Bearer ${TELEMETRY_BEARER_TOKEN}")
     fi

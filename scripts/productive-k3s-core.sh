@@ -50,7 +50,7 @@ Examples:
   ./productive-k3s-core.sh stack export --tgz ./base-stack.tgz --output ./base-installer
   ./productive-k3s-core.sh stack validate base --strict
   ./productive-k3s-core.sh validate --strict
-  ./productive-k3s-core.sh addon validate --tgz ./longhorn-addon.tgz
+  ./productive-k3s-core.sh addon validate --tgz ./example-addon.tgz
   ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal
   ./productive-k3s-core.sh addon install --events ndjson --tgz ./nginx-addon.tgz
 
@@ -110,9 +110,10 @@ generate_telemetry_id() {
 
 json_escape() {
   printf '%s' "$1" | sed \
+    -e ':a;N;$!ba' \
     -e 's/\\/\\\\/g' \
     -e 's/"/\\"/g' \
-    -e ':a;N;$!ba;s/\n/\\n/g' \
+    -e 's/\n/\\n/g' \
     -e 's/\r/\\r/g' \
     -e 's/\t/\\t/g'
 }
@@ -297,16 +298,6 @@ run_backup() {
   emit_operation_event "core.backup" "core.backup.run" "success" "Productive K3S backup completed"
 }
 
-run_cleanup() {
-  emit_operation_event "core.cleanup" "core.cleanup.run" "running" "Running Productive K3S cleanup"
-  "${SCRIPT_DIR}/cleanup.sh" "$@" || {
-    local rc=$?
-    emit_operation_event "core.cleanup" "core.cleanup.run" "failed" "Productive K3S cleanup failed"
-    return "${rc}"
-  }
-  emit_operation_event "core.cleanup" "core.cleanup.run" "success" "Productive K3S cleanup completed"
-}
-
 resolve_bundle_version_fallback() {
   local repo_root version
   repo_root="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -406,7 +397,7 @@ print_bom_json() {
       {"name": "mktemp", "min_version": "8.32", "reason": "safe temporary workspace creation"}
     ],
     "optional_commands": [
-      {"name": "docker", "min_version": "20.10", "reason": "local registry trust checks and image-push workflows"},
+      {"name": "docker", "min_version": "20.10", "reason": "optional add-on host trust and image workflows"},
       {"name": "multipass", "min_version": "1.14", "reason": "repository live validation on supported Linux VMs"},
       {"name": "jq", "min_version": "1.6", "reason": "operator inspection and selected bootstrap checks"},
       {"name": "kubectl", "min_version": "1.35.5", "reason": "standalone client convenience outside sudo k3s kubectl"},
@@ -414,24 +405,15 @@ print_bom_json() {
     ]
   },
   "components": {
-    "managed": ["k3s", "helm", "cert-manager", "longhorn", "rancher", "registry", "nfs", "local-hosts", "docker-registry-trust"],
+    "managed": ["cluster-runtime", "helm", "packaged-addons", "packaged-stacks"],
     "bootstrap_modes": ["single-node", "server", "agent", "stack"],
     "versions": {
       "k3s": "$(json_escape "${PRODUCTIVE_K3S_K3S_VERSION}")",
-      "helm": "$(json_escape "${PRODUCTIVE_K3S_HELM_VERSION}")",
-      "cert-manager": "$(json_escape "${PRODUCTIVE_K3S_CERT_MANAGER_VERSION}")",
-      "longhorn": "$(json_escape "${PRODUCTIVE_K3S_LONGHORN_VERSION}")",
-      "rancher": "$(json_escape "${PRODUCTIVE_K3S_RANCHER_VERSION}")",
-      "registry_image": "$(json_escape "${PRODUCTIVE_K3S_REGISTRY_IMAGE}")"
+      "helm": "$(json_escape "${PRODUCTIVE_K3S_HELM_VERSION}")"
     },
     "version_policy": {
       "k3s": "pinned",
-      "helm": "pinned",
-      "cert-manager": "pinned",
-      "longhorn": "pinned",
-      "rancher": "pinned",
-      "registry": "pinned-image",
-      "nfs": "host-package-managed"
+      "helm": "pinned"
     }
   }
 }
@@ -450,113 +432,96 @@ trim_yaml_value() {
 addon_yaml_get() {
   local file="$1"
   local key="$2"
-  awk -v key="${key}" '
-    /^metadata:/ { section="metadata"; subsection=""; next }
-    /^spec:/ { section="spec"; subsection=""; next }
-    section == "spec" && /^  install:/ { subsection="install"; next }
-    section == "spec" && /^  productiveK3s:/ { subsection="productiveK3s"; exposure=""; service=""; next }
-    section == "spec" && subsection == "productiveK3s" && /^    exposure:/ { exposure="exposure"; service=""; next }
-    section == "spec" && subsection == "productiveK3s" && exposure == "exposure" && /^      public:/ { exposure="public"; service=""; next }
-    section == "spec" && subsection == "productiveK3s" && exposure == "public" && key == "spec.productiveK3s.exposure.public.mode" && /^        mode:/ { print; exit }
-    section == "spec" && subsection == "productiveK3s" && exposure == "public" && key == "spec.productiveK3s.exposure.public.namespace" && /^        namespace:/ { print; exit }
-    section == "spec" && subsection == "productiveK3s" && exposure == "public" && /^        service:/ { service="service"; next }
-    section == "spec" && subsection == "productiveK3s" && exposure == "public" && service == "service" && key == "spec.productiveK3s.exposure.public.service.name" && /^          name:/ { print; exit }
-    section == "spec" && subsection == "productiveK3s" && exposure == "public" && service == "service" && key == "spec.productiveK3s.exposure.public.service.port" && /^          port:/ { print; exit }
-    section == "metadata" && key == "metadata.name" && /^  name:/ { print; exit }
-    section == "metadata" && key == "metadata.version" && /^  version:/ { print; exit }
-    section == "spec" && key == "spec.type" && /^  type:/ { print; exit }
-    section == "spec" && subsection == "install" && key == "spec.install.script" && /^    script:/ { print; exit }
-  ' "${file}"
+  local line section="" subsection="" exposure="" service=""
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    case "${line}" in
+      metadata:) section="metadata"; subsection=""; exposure=""; service=""; continue ;;
+      spec:) section="spec"; subsection=""; exposure=""; service=""; continue ;;
+    esac
+    if [[ "${section}" == "metadata" && "${key}" == "metadata.name" && "${line}" == "  name:"* ]]; then printf '%s\n' "${line}"; return 0; fi
+    if [[ "${section}" == "metadata" && "${key}" == "metadata.version" && "${line}" == "  version:"* ]]; then printf '%s\n' "${line}"; return 0; fi
+    if [[ "${section}" != "spec" ]]; then continue; fi
+    case "${line}" in
+      "  install:") subsection="install"; exposure=""; service=""; continue ;;
+      "  productiveK3s:") subsection="productiveK3s"; exposure=""; service=""; continue ;;
+      "  type:"*) [[ "${key}" == "spec.type" ]] && { printf '%s\n' "${line}"; return 0; } ;;
+    esac
+    if [[ "${subsection}" == "install" && "${key}" == "spec.install.script" && "${line}" == "    script:"* ]]; then
+      printf '%s\n' "${line}"
+      return 0
+    fi
+    if [[ "${subsection}" == "productiveK3s" && "${line}" == "    exposure:" ]]; then exposure="exposure"; service=""; continue; fi
+    if [[ "${subsection}" == "productiveK3s" && "${exposure}" == "exposure" && "${line}" == "      public:" ]]; then exposure="public"; service=""; continue; fi
+    if [[ "${subsection}" == "productiveK3s" && "${exposure}" == "public" ]]; then
+      case "${line}" in
+        "        mode:"*) [[ "${key}" == "spec.productiveK3s.exposure.public.mode" ]] && { printf '%s\n' "${line}"; return 0; } ;;
+        "        namespace:"*) [[ "${key}" == "spec.productiveK3s.exposure.public.namespace" ]] && { printf '%s\n' "${line}"; return 0; } ;;
+        "        service:") service="service"; continue ;;
+        "          name:"*) [[ "${service}" == "service" && "${key}" == "spec.productiveK3s.exposure.public.service.name" ]] && { printf '%s\n' "${line}"; return 0; } ;;
+        "          port:"*) [[ "${service}" == "service" && "${key}" == "spec.productiveK3s.exposure.public.service.port" ]] && { printf '%s\n' "${line}"; return 0; } ;;
+      esac
+    fi
+  done < "${file}"
 }
 
 stack_yaml_get() {
   local file="$1"
   local key="$2"
-  awk -v key="${key}" '
-    /^metadata:/ { section="metadata"; subsection=""; next }
-    /^spec:/ { section="spec"; subsection=""; next }
-    section == "spec" && /^  addons:/ { subsection="addons"; next }
-    section == "spec" && /^  resolution:/ { subsection="resolution"; next }
-    section == "spec" && /^  runtime:/ { subsection="runtime"; runtime_subsection=""; compatibility_subsection=""; next }
-    section == "spec" && subsection == "runtime" && /^    compatibility:/ { runtime_subsection="compatibility"; compatibility_subsection=""; next }
-    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && /^      core:/ { compatibility_subsection="core"; next }
-    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && /^      kubernetes:/ { compatibility_subsection="kubernetes"; next }
-    section == "metadata" && key == "metadata.name" && /^  name:/ { print; exit }
-    section == "metadata" && key == "metadata.version" && /^  version:/ { print; exit }
-    section == "spec" && subsection == "resolution" && key == "spec.resolution.mode" && /^    mode:/ { print; exit }
-    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "core" && key == "spec.runtime.compatibility.core.minVersion" && /^        minVersion:/ { print; exit }
-    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && key == "spec.runtime.compatibility.kubernetes.minVersion" && /^        minVersion:/ { print; exit }
-  ' "${file}"
+  local line section="" subsection="" runtime_subsection="" compatibility_subsection=""
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    case "${line}" in
+      metadata:) section="metadata"; subsection=""; continue ;;
+      spec:) section="spec"; subsection=""; continue ;;
+    esac
+    if [[ "${section}" == "metadata" && "${key}" == "metadata.name" && "${line}" == "  name:"* ]]; then printf '%s\n' "${line}"; return 0; fi
+    if [[ "${section}" == "metadata" && "${key}" == "metadata.version" && "${line}" == "  version:"* ]]; then printf '%s\n' "${line}"; return 0; fi
+    [[ "${section}" == "spec" ]] || continue
+    case "${line}" in
+      "  addons:") subsection="addons"; continue ;;
+      "  resolution:") subsection="resolution"; continue ;;
+      "  runtime:") subsection="runtime"; runtime_subsection=""; compatibility_subsection=""; continue ;;
+      "    mode:"*) [[ "${subsection}" == "resolution" && "${key}" == "spec.resolution.mode" ]] && { printf '%s\n' "${line}"; return 0; } ;;
+    esac
+    if [[ "${subsection}" == "runtime" && "${line}" == "    compatibility:" ]]; then runtime_subsection="compatibility"; compatibility_subsection=""; continue; fi
+    if [[ "${subsection}" == "runtime" && "${runtime_subsection}" == "compatibility" ]]; then
+      case "${line}" in
+        "      core:") compatibility_subsection="core"; continue ;;
+        "      kubernetes:") compatibility_subsection="kubernetes"; continue ;;
+        "        minVersion:"*)
+          if [[ "${compatibility_subsection}" == "core" && "${key}" == "spec.runtime.compatibility.core.minVersion" ]]; then printf '%s\n' "${line}"; return 0; fi
+          if [[ "${compatibility_subsection}" == "kubernetes" && "${key}" == "spec.runtime.compatibility.kubernetes.minVersion" ]]; then printf '%s\n' "${line}"; return 0; fi
+          ;;
+      esac
+    fi
+  done < "${file}"
 }
 
 stack_yaml_list() {
   local file="$1"
   local key="$2"
-  awk -v key="${key}" '
-    /^spec:/ { section="spec"; subsection=""; runtime_subsection=""; compatibility_subsection=""; kubernetes_subsection=""; next }
-    section == "spec" && /^  runtime:/ { subsection="runtime"; runtime_subsection=""; compatibility_subsection=""; kubernetes_subsection=""; next }
-    section == "spec" && subsection == "runtime" && /^    compatibility:/ { runtime_subsection="compatibility"; compatibility_subsection=""; kubernetes_subsection=""; next }
-    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && /^      kubernetes:/ { compatibility_subsection="kubernetes"; kubernetes_subsection=""; next }
-    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && /^        distros:/ { kubernetes_subsection="distros"; next }
-    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && kubernetes_subsection == "distros" && key == "spec.runtime.compatibility.kubernetes.distros" && /^          - / {
-      line=$0
-      sub(/^          - /, "", line)
-      print line
-      next
-    }
-    section == "spec" && subsection == "runtime" && runtime_subsection == "compatibility" && compatibility_subsection == "kubernetes" && kubernetes_subsection == "distros" && !/^          - / { exit }
-  ' "${file}"
+  local line section="" subsection="" runtime_subsection="" compatibility_subsection="" kubernetes_subsection=""
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ "${line}" == "spec:" ]] && { section="spec"; subsection=""; runtime_subsection=""; compatibility_subsection=""; kubernetes_subsection=""; continue; }
+    [[ "${section}" == "spec" ]] || continue
+    [[ "${line}" == "  runtime:" ]] && { subsection="runtime"; runtime_subsection=""; compatibility_subsection=""; kubernetes_subsection=""; continue; }
+    [[ "${subsection}" == "runtime" ]] || continue
+    [[ "${line}" == "    compatibility:" ]] && { runtime_subsection="compatibility"; compatibility_subsection=""; kubernetes_subsection=""; continue; }
+    [[ "${runtime_subsection}" == "compatibility" ]] || continue
+    [[ "${line}" == "      kubernetes:" ]] && { compatibility_subsection="kubernetes"; kubernetes_subsection=""; continue; }
+    [[ "${compatibility_subsection}" == "kubernetes" ]] || continue
+    [[ "${line}" == "        distros:" ]] && { kubernetes_subsection="distros"; continue; }
+    [[ "${kubernetes_subsection}" == "distros" ]] || continue
+    if [[ "${key}" == "spec.runtime.compatibility.kubernetes.distros" && "${line}" == "          - "* ]]; then
+      printf '%s\n' "${line#          - }"
+      continue
+    fi
+    [[ "${line}" != "          - "* ]] && break
+  done < "${file}"
 }
 
 stack_manifest_addon_records() {
   local manifest="$1"
-  awk '
-    /^spec:/ { in_spec=1; next }
-    in_spec && /^  addons:/ { in_addons=1; next }
-    in_addons && /^  / && !/^    / { exit }
-    !in_addons { next }
-    /^    - / {
-      flush_record()
-      line=$0
-      sub(/^    - /, "", line)
-      current_name=""
-      current_version=""
-      current_source=""
-      if (line ~ /^name:[[:space:]]*/) {
-        sub(/^name:[[:space:]]*/, "", line)
-        current_name=line
-      } else if (line !~ /:/) {
-        current_name=line
-      }
-      in_record=1
-      next
-    }
-    in_record && /^      / {
-      line=$0
-      sub(/^      /, "", line)
-      if (line ~ /^name:[[:space:]]*/) {
-        sub(/^name:[[:space:]]*/, "", line)
-        current_name=line
-      } else if (line ~ /^version:[[:space:]]*/) {
-        sub(/^version:[[:space:]]*/, "", line)
-        current_version=line
-      } else if (line ~ /^source:[[:space:]]*/) {
-        sub(/^source:[[:space:]]*/, "", line)
-        current_source=line
-      }
-      next
-    }
-    in_record { flush_record(); in_record=0 }
-    END { flush_record() }
-    function flush_record() {
-      if (!in_record) {
-        return
-      }
-      if (current_name != "" || current_version != "" || current_source != "") {
-        printf "name=%s\tversion=%s\tsource=%s\n", current_name, current_version, current_source
-      }
-    }
-  ' "${manifest}"
+  parse_stack_addon_records_from_manifest "${manifest}"
 }
 
 extract_tgz_to_temp() {
@@ -646,17 +611,7 @@ validate_stack_manifest() {
   while IFS= read -r addon_record; do
     [[ -n "${addon_record}" ]] || continue
     local addon_name addon_source
-    addon_name="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
-      {
-        for (i = 1; i <= NF; i++) {
-          if ($i ~ /^name=/) {
-            sub(/^name=/, "", $i)
-            print $i
-            exit
-          }
-        }
-      }
-    ')"
+    addon_name="$(stack_addon_record_value "${addon_record}" "name" || true)"
     [[ -n "${addon_name}" ]] || {
       printf 'stack source addon entries require a name\n' >&2
       return 4
@@ -666,17 +621,7 @@ validate_stack_manifest() {
       return 4
     fi
     seen_addon_names+="${addon_name}"$'\n'
-    addon_source="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
-      {
-        for (i = 1; i <= NF; i++) {
-          if ($i ~ /^source=/) {
-            sub(/^source=/, "", $i)
-            print $i
-            exit
-          }
-        }
-      }
-    ')"
+    addon_source="$(stack_addon_record_value "${addon_record}" "source" || true)"
     if [[ -n "${addon_source}" ]]; then
       has_structured_source="y"
       [[ "${addon_source}" == addons/*.tgz ]] || {
@@ -731,17 +676,7 @@ validate_stack_bundled_sources() {
   while IFS= read -r addon_record; do
     [[ -n "${addon_record}" ]] || continue
     local addon_source
-    addon_source="$(printf '%s\n' "${addon_record}" | awk -F '\t' '
-      {
-        for (i = 1; i <= NF; i++) {
-          if ($i ~ /^source=/) {
-            sub(/^source=/, "", $i)
-            print $i
-            exit
-          }
-        }
-      }
-    ')"
+    addon_source="$(stack_addon_record_value "${addon_record}" "source" || true)"
     [[ -n "${addon_source}" ]] || continue
     [[ "${addon_source}" == addons/* ]] || {
       printf 'stack addon source must stay within addons/: %s\n' "${addon_source}" >&2
@@ -1065,24 +1000,6 @@ with_stack_source_env() {
     export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
     "$@"
   )
-}
-
-create_overlay_repo_for_stack_manifest() {
-  local manifest_path="$1"
-  local overlay_root real_repo metadata stack_name
-  real_repo="$(resolve_addons_repo_dir)" || {
-    printf 'could not resolve productive-k3s-addons source repository. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR.\n' >&2
-    return 4
-  }
-  metadata="$(validate_stack_manifest "${manifest_path}")" || return $?
-  stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
-
-  overlay_root="$(mktemp -d)"
-  mkdir -p "${overlay_root}/stacks/${stack_name}"
-  ln -s "${real_repo}/addons" "${overlay_root}/addons"
-  cp "${manifest_path}" "${overlay_root}/stacks/${stack_name}/stack.yaml"
-
-  printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
 }
 
 create_overlay_repo_for_stack_tgz() {

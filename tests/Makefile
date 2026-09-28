@@ -18,6 +18,7 @@ DEV_WRAPPER := ../scripts/productive-k3s-core-dev.sh
 	test-format \
 	test-spell \
 	test-coverage \
+	test-logs-clean \
 	test-clean \
 	test-clean-artifacts \
 	test-clean-vms \
@@ -54,6 +55,7 @@ DEV_WRAPPER := ../scripts/productive-k3s-core-dev.sh
 	test-exported-stack-installer-rke2-ubuntu24 \
 	test-exported-stack-installer-k3sup-ubuntu24 \
 	test-in-vm-engine-propagation \
+	test-in-vm-remote-log-capture \
 	test-agent-smoke \
 	test-smoke \
 	test-core \
@@ -112,6 +114,10 @@ test-spell:
 
 test-coverage:
 	bash ./bin/run-kcov.sh
+
+test-logs-clean: test-clean-artifacts
+	rm -rf ../runs ../coverage ../htmlcov ../.pytest_cache ../.coverage coverage htmlcov .pytest_cache .coverage
+	rm -f ../coverage.out ../coverage.txt ../coverage.xml coverage.out coverage.txt coverage.xml
 
 test-clean:
 	bash ./clean-test-artifacts.sh
@@ -225,6 +231,9 @@ test-exported-stack-installer-k3sup-ubuntu24:
 
 test-in-vm-engine-propagation:
 	bash $(DEV_WRAPPER) test-in-vm-engine-propagation
+
+test-in-vm-remote-log-capture:
+	bash $(DEV_WRAPPER) test-in-vm-remote-log-capture
 
 test-agent-smoke:
 	bash $(DEV_WRAPPER) test-agent-smoke

@@ -71,17 +71,13 @@ printf '%s\n' "$local_bom" | jq -e '
   (.requirements.optional_commands | any(.name == "helm" and .min_version == "3.21.0")) and
   .components.versions.k3s == "v1.35.5+k3s1" and
   .components.versions.helm == "v3.21.0" and
-  .components.versions["cert-manager"] == "v1.19.4" and
-  .components.versions.longhorn == "v1.11.1" and
-  .components.versions.rancher == "v2.14.2" and
-  .components.versions.registry_image == "registry:2.8.3" and
-  (.components.managed | index("k3s")) != null and
+  (.components.versions | has("cert-manager") | not) and
+  (.components.versions | has("longhorn") | not) and
+  (.components.versions | has("rancher") | not) and
+  (.components.managed | index("cluster-runtime")) != null and
   (.components.managed | index("helm")) != null and
-  (.components.managed | index("cert-manager")) != null and
-  (.components.managed | index("longhorn")) != null and
-  (.components.managed | index("rancher")) != null and
-  (.components.managed | index("registry")) != null and
-  (.components.managed | index("nfs")) != null
+  (.components.managed | index("packaged-addons")) != null and
+  (.components.managed | index("packaged-stacks")) != null
 ' >/dev/null || fail "local bom JSON contract did not match expected values"
 pass "local bom JSON contract is exposed"
 
