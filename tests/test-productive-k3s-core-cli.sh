@@ -150,6 +150,7 @@ ADDON_TMP_DIR="$(mktemp -d)"
 ADDON_PKG_DIR="${ADDON_TMP_DIR}/pkg"
 ADDON_ARCHIVE="${ADDON_TMP_DIR}/demo-addon.tgz"
 ADDON_MARKER="${ADDON_TMP_DIR}/installed.txt"
+ADDON_CLEAN_MARKER="${ADDON_TMP_DIR}/cleaned.txt"
 ADDON_INGRESS_CAPTURE="${ADDON_TMP_DIR}/ingress.yaml"
 ADDON_BIN_DIR="${ADDON_TMP_DIR}/bin"
 ADDON_HOME="${ADDON_TMP_DIR}/home"
@@ -167,6 +168,8 @@ spec:
   type: shell
   install:
     script: scripts/install.sh
+  clean:
+    script: scripts/clean.sh
   productiveK3s:
     exposure:
       public:
@@ -180,7 +183,16 @@ cat >"${ADDON_PKG_DIR}/scripts/install.sh" <<EOF
 #!/usr/bin/env bash
 printf 'installed\n' >"${ADDON_MARKER}"
 EOF
-chmod +x "${ADDON_PKG_DIR}/scripts/install.sh"
+cat >"${ADDON_PKG_DIR}/scripts/clean.sh" <<'EOF'
+#!/usr/bin/env bash
+ADDON_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${ADDON_SCRIPT_DIR}/../../../scripts/addon-host-runtime.sh"
+
+pk3s_addon_clean() {
+  printf '%s\n' "$(pk3s_runtime_cluster_label)" >"${ADDON_CLEAN_MARKER:?}"
+}
+EOF
+chmod +x "${ADDON_PKG_DIR}/scripts/install.sh" "${ADDON_PKG_DIR}/scripts/clean.sh"
 cat >"${ADDON_BIN_DIR}/kubectl" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -576,6 +588,35 @@ pass "stack validate scopes the validator to an explicit stack"
 grep -q "stack=observability" "${STACK_CLEANUP_CAPTURE}" || fail "stack cleanup did not scope cleanup to the packaged stack"
 grep -q -- "--apply --yes --confirm-clean" "${STACK_CLEANUP_CAPTURE}" || fail "stack cleanup did not forward cleanup flags"
 pass "stack cleanup scopes cleanup to an explicit stack"
+
+STACK_ROLLBACK_MANIFEST="${ADDON_TMP_DIR}/stack-rollback-manifest.json"
+cat >"${STACK_ROLLBACK_MANIFEST}" <<'EOF'
+{
+  "run_id": "artifact-runtime-test",
+  "status": "success",
+  "settings": {
+    "cluster_distro": "k3s",
+    "stack_name": "observability"
+  },
+  "components": {
+    "stack_addons": {
+      "detected_before": "unknown",
+      "planned_action": "install",
+      "result": "installed"
+    }
+  }
+}
+EOF
+(
+  cd "${STACK_DISPATCH_DIR}" &&
+  ADDON_CLEAN_MARKER="${ADDON_CLEAN_MARKER}" ./productive-k3s-core.sh stack rollback \
+    --tgz "${STACK_TGZ_ARCHIVE}" \
+    --to "${STACK_ROLLBACK_MANIFEST}" \
+    --apply \
+    --yes
+)
+[[ "$(cat "${ADDON_CLEAN_MARKER}")" == "k3s" ]] || fail "stack rollback did not execute a packaged clean hook with the Core runtime"
+pass "stack rollback executes packaged clean hooks with the Core runtime"
 
 for legacy_action in install validate backup cleanup rollback; do
   if (cd "${STACK_DISPATCH_DIR}" && PRODUCTIVE_K3S_ADDONS_REPO_DIR="${ADDON_TMP_DIR}/stack-addons" ./productive-k3s-core.sh stack "${legacy_action}" base >/tmp/productive-k3s-core-stack-source.out 2>&1); then

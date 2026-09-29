@@ -950,9 +950,9 @@ run_packaged_addon_install() {
   core_repo_dir="$(cd "${SCRIPT_DIR}/.." && pwd)"
   tmp_root="$(mktemp -d)"
   package_root="${tmp_root}/addons/${addon_name}"
-  mkdir -p "${package_root}" "${tmp_root}/scripts"
+  mkdir -p "${package_root}"
   cp -R "${tmp_dir}/." "${package_root}/"
-  cp "${SCRIPT_DIR}/addon-host-runtime.sh" "${tmp_root}/scripts/addon-host-runtime.sh"
+  stage_addon_host_runtime "${tmp_root}"
   manifest_dir="${package_root}"
   install_path="${manifest_dir}/${install_script}"
   [[ -f "${install_path}" ]] || {
@@ -993,6 +993,12 @@ run_packaged_addon_install() {
   return "${rc}"
 }
 
+stage_addon_host_runtime() {
+  local target_root="$1"
+  mkdir -p "${target_root}/scripts"
+  cp "${SCRIPT_DIR}/addon-host-runtime.sh" "${target_root}/scripts/addon-host-runtime.sh"
+}
+
 create_overlay_repo_for_stack_tgz() {
   local tgz_path="$1"
   local tmp_dir manifest metadata stack_name overlay_root
@@ -1016,6 +1022,7 @@ create_overlay_repo_for_stack_tgz() {
   stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
   overlay_root="$(mktemp -d)"
   mkdir -p "${overlay_root}/stacks/${stack_name}" "${overlay_root}/bundled-addons" "${overlay_root}/addons"
+  stage_addon_host_runtime "${overlay_root}"
   cp "${manifest}" "${overlay_root}/stacks/${stack_name}/stack.yaml"
   if [[ -d "${tmp_dir}/addons" ]]; then
     cp -R "${tmp_dir}/addons/." "${overlay_root}/bundled-addons/"
@@ -1081,7 +1088,8 @@ run_stack_lifecycle_from_tgz() {
   local tgz_path="$2"
   local script_name="$3"
   shift 3
-  local overlay_repo stack_name rc=0
+  local core_repo_dir overlay_repo stack_name rc=0
+  core_repo_dir="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
   emit_operation_event "stack.${action}" "stack.overlay.prepare" "running" "Preparing stack overlay from package" "${tgz_path}"
   mapfile -t _stack_overlay < <(create_overlay_repo_for_stack_tgz "${tgz_path}") || return $?
@@ -1099,6 +1107,7 @@ run_stack_lifecycle_from_tgz() {
   else
     emit_operation_event "stack.${action}" "stack.${action}.run" "running" "Running stack ${action}" "${stack_name}"
     (
+      export PRODUCTIVE_K3S_CORE_REPO_DIR="${core_repo_dir}"
       export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${overlay_repo}"
       export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
       export PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR="${overlay_repo}/bundled-addons"
