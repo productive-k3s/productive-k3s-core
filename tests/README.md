@@ -164,17 +164,20 @@ Cleanup intent:
 
 Latest local `make test-coverage` run:
 
-- total merged coverage: `45.49%`
-- `scripts/apply.sh`: `80.55%`
+- runtime shell coverage: `85.18%` (`2179/2558` executable lines)
+- `scripts/apply.sh`: `76.99%`
 - `scripts/preflight-host.sh`: `89.02%`
-- `scripts/validate.sh`: `78.38%`
-- `scripts/send-telemetry.sh`: `83.48%`
-- `scripts/send-telemetry-event.sh`: `60.94%`
-- `scripts/productive-k3s-core.sh`: `19.75%`
-- `scripts/export-runtime.sh`: `27.16%`
-- `scripts/cleanup.sh`: `31.15%`
+- `scripts/validate.sh`: `86.49%`
+- `scripts/send-telemetry.sh`: `88.70%`
+- `scripts/send-telemetry-event.sh`: `98.15%`
+- `scripts/productive-k3s-core.sh`: `84.83%`
+- `scripts/export-runtime.sh`: `91.36%`
+- `scripts/cleanup.sh`: `90.24%`
+- `scripts/addon-host-runtime.sh`: `95.24%`
 
-Treat this as a maintainer baseline for new changes, not as a hard CI gate.
+The runtime aggregate excludes development and release-maintenance helpers,
+which have separate contract tests. `make test-coverage` enforces an 85% floor
+for the distributed runtime scripts and fails when the aggregate regresses.
 
 ## Tooling Notes
 

@@ -5,14 +5,6 @@ resolve_addons_repo_dir() {
     printf '%s\n' "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}"
     return 0
   fi
-
-  local sibling_dir
-  sibling_dir="$(cd "${SCRIPT_DIR}/../.." && pwd)/productive-k3s-addons"
-  if [[ -d "${sibling_dir}/addons" ]]; then
-    printf '%s\n' "${sibling_dir}"
-    return 0
-  fi
-
   return 1
 }
 

@@ -367,11 +367,10 @@ grep -q "could not find a readable local kubeconfig" /tmp/productive-k3s-core-ad
 pass "addon tgz install requires a local kubeconfig on the host"
 
 STACK_DISPATCH_DIR="${ADDON_TMP_DIR}/stack-dispatch"
-STACK_ADDONS_DIR="${ADDON_TMP_DIR}/stack-addons"
 STACK_APPLY_CAPTURE="${ADDON_TMP_DIR}/stack-apply.txt"
 STACK_VALIDATE_CAPTURE="${ADDON_TMP_DIR}/stack-validate.txt"
 STACK_CLEANUP_CAPTURE="${ADDON_TMP_DIR}/stack-cleanup.txt"
-mkdir -p "${STACK_DISPATCH_DIR}/scripts" "${STACK_ADDONS_DIR}/addons/nginx" "${STACK_ADDONS_DIR}/stacks/base"
+mkdir -p "${STACK_DISPATCH_DIR}/scripts"
 cp "${REPO_DIR}/productive-k3s-core.sh" "${STACK_DISPATCH_DIR}/"
 cp "${REPO_DIR}/LICENSE" "${STACK_DISPATCH_DIR}/"
 cp "${REPO_DIR}/README.md" "${STACK_DISPATCH_DIR}/"
@@ -413,24 +412,6 @@ cat > "${STACK_DISPATCH_DIR}/bundle-info.json" <<'EOF'
   }
 }
 EOF
-cat > "${STACK_ADDONS_DIR}/stacks/base/stack.yaml" <<'EOF'
-apiVersion: addons.productive-k3s.io/v1
-kind: Stack
-metadata:
-  name: base
-  version: 0.1.0
-spec:
-  addons:
-    - nginx
-EOF
-(
-  cd "${STACK_DISPATCH_DIR}" &&
-  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack install base --dry-run
-)
-grep -q "stack=base" "${STACK_APPLY_CAPTURE}" || fail "stack install did not forward the selected stack name"
-grep -q -- "--mode stack --dry-run" "${STACK_APPLY_CAPTURE}" || fail "stack install did not invoke apply in stack mode"
-pass "stack install dispatches to apply in explicit stack mode"
-
 STACK_TGZ_PKG_DIR="${ADDON_TMP_DIR}/stack-tgz"
 STACK_TGZ_ARCHIVE="${ADDON_TMP_DIR}/observability-stack.tgz"
 mkdir -p "${STACK_TGZ_PKG_DIR}/addons"
@@ -444,14 +425,14 @@ spec:
   resolution:
     mode: bundled
   addons:
-    - name: prometheus
-      source: addons/prometheus.tgz
+    - name: demo-addon
+      source: addons/demo-addon.tgz
 EOF
-printf 'placeholder' > "${STACK_TGZ_PKG_DIR}/addons/prometheus.tgz"
+cp "${ADDON_ARCHIVE}" "${STACK_TGZ_PKG_DIR}/addons/demo-addon.tgz"
 tar -czf "${STACK_TGZ_ARCHIVE}" -C "${STACK_TGZ_PKG_DIR}" .
 (
   cd "${STACK_DISPATCH_DIR}" &&
-  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_ARCHIVE}" --dry-run
+  ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_ARCHIVE}" --dry-run
 )
 grep -q "stack=observability" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install did not forward the packaged stack name"
 grep -q "bundled=.*bundled-addons" "${STACK_APPLY_CAPTURE}" || fail "stack tgz install did not expose the bundled addons directory"
@@ -494,7 +475,8 @@ pass "stack export emits a replayable bundle structure from tgz input"
 
 STACK_TGZ_K3S_ONLY_DIR="${ADDON_TMP_DIR}/stack-tgz-k3s-only"
 STACK_TGZ_K3S_ONLY_ARCHIVE="${ADDON_TMP_DIR}/k3s-only-stack.tgz"
-mkdir -p "${STACK_TGZ_K3S_ONLY_DIR}"
+mkdir -p "${STACK_TGZ_K3S_ONLY_DIR}/addons"
+cp "${ADDON_ARCHIVE}" "${STACK_TGZ_K3S_ONLY_DIR}/addons/demo-addon.tgz"
 cat > "${STACK_TGZ_K3S_ONLY_DIR}/stack.yaml" <<'EOF'
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
@@ -508,12 +490,13 @@ spec:
         distros:
           - k3s
   addons:
-    - registry
+    - name: demo-addon
+      source: addons/demo-addon.tgz
 EOF
 tar -czf "${STACK_TGZ_K3S_ONLY_ARCHIVE}" -C "${STACK_TGZ_K3S_ONLY_DIR}" .
 if (
   cd "${STACK_DISPATCH_DIR}" &&
-  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" PRODUCTIVE_K3S_DISTRO=rke2 ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_K3S_ONLY_ARCHIVE}" --dry-run >/tmp/productive-k3s-core-stack-distro.out 2>&1
+  PRODUCTIVE_K3S_DISTRO=rke2 ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_K3S_ONLY_ARCHIVE}" --dry-run >/tmp/productive-k3s-core-stack-distro.out 2>&1
 ); then
   fail "stack tgz install unexpectedly succeeded for an incompatible distro"
 fi
@@ -522,7 +505,8 @@ pass "stack tgz install rejects incompatible distros before apply"
 
 STACK_TGZ_CORE_MIN_DIR="${ADDON_TMP_DIR}/stack-tgz-core-min"
 STACK_TGZ_CORE_MIN_ARCHIVE="${ADDON_TMP_DIR}/core-min-stack.tgz"
-mkdir -p "${STACK_TGZ_CORE_MIN_DIR}"
+mkdir -p "${STACK_TGZ_CORE_MIN_DIR}/addons"
+cp "${ADDON_ARCHIVE}" "${STACK_TGZ_CORE_MIN_DIR}/addons/demo-addon.tgz"
 cat > "${STACK_TGZ_CORE_MIN_DIR}/stack.yaml" <<'EOF'
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
@@ -535,12 +519,13 @@ spec:
       core:
         minVersion: v9.9.9
   addons:
-    - registry
+    - name: demo-addon
+      source: addons/demo-addon.tgz
 EOF
 tar -czf "${STACK_TGZ_CORE_MIN_ARCHIVE}" -C "${STACK_TGZ_CORE_MIN_DIR}" .
 if (
   cd "${STACK_DISPATCH_DIR}" &&
-  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_CORE_MIN_ARCHIVE}" --dry-run >/tmp/productive-k3s-core-stack-core-min.out 2>&1
+  ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_CORE_MIN_ARCHIVE}" --dry-run >/tmp/productive-k3s-core-stack-core-min.out 2>&1
 ); then
   fail "stack tgz install unexpectedly succeeded for an incompatible core version"
 fi
@@ -566,7 +551,7 @@ EOF
 tar -czf "${STACK_TGZ_BAD_ARCHIVE}" -C "${STACK_TGZ_BAD_PKG_DIR}" .
 if (
   cd "${STACK_DISPATCH_DIR}" &&
-  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_BAD_ARCHIVE}" >/tmp/productive-k3s-core-stack-bundled.out 2>&1
+  ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_BAD_ARCHIVE}" >/tmp/productive-k3s-core-stack-bundled.out 2>&1
 ); then
   fail "bundled stack unexpectedly succeeded without packaged addon tgz"
 fi
@@ -575,28 +560,30 @@ pass "stack tgz install rejects missing bundled addon packages"
 
 if (
   cd "${STACK_DISPATCH_DIR}" &&
-  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh addon install nginx --dry-run >/tmp/productive-k3s-core-addon-source-name.out 2>&1
+  ./productive-k3s-core.sh addon install nginx --dry-run >/tmp/productive-k3s-core-addon-source-name.out 2>&1
 ); then
   fail "addon install by source name unexpectedly succeeded"
 fi
 grep -q "source-name addon install is no longer part of the public core contract" /tmp/productive-k3s-core-addon-source-name.out || fail "addon install by source name rejection message missing"
 pass "addon install by source name is rejected from the public core contract"
 
-(
-  cd "${STACK_DISPATCH_DIR}" &&
-  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack validate base --strict
-)
-grep -q "stack=base" "${STACK_VALIDATE_CAPTURE}" || fail "stack validate did not scope validation to the selected stack"
+(cd "${STACK_DISPATCH_DIR}" && ./productive-k3s-core.sh stack validate --tgz "${STACK_TGZ_ARCHIVE}" --strict)
+grep -q "stack=observability" "${STACK_VALIDATE_CAPTURE}" || fail "stack validate did not scope validation to the packaged stack"
 grep -q -- "--strict" "${STACK_VALIDATE_CAPTURE}" || fail "stack validate did not forward validator flags"
 pass "stack validate scopes the validator to an explicit stack"
 
-(
-  cd "${STACK_DISPATCH_DIR}" &&
-  PRODUCTIVE_K3S_ADDONS_REPO_DIR="${STACK_ADDONS_DIR}" ./productive-k3s-core.sh stack cleanup base --apply --yes --confirm-clean
-)
-grep -q "stack=base" "${STACK_CLEANUP_CAPTURE}" || fail "stack cleanup did not scope cleanup to the selected stack"
+(cd "${STACK_DISPATCH_DIR}" && ./productive-k3s-core.sh stack cleanup --tgz "${STACK_TGZ_ARCHIVE}" --apply --yes --confirm-clean)
+grep -q "stack=observability" "${STACK_CLEANUP_CAPTURE}" || fail "stack cleanup did not scope cleanup to the packaged stack"
 grep -q -- "--apply --yes --confirm-clean" "${STACK_CLEANUP_CAPTURE}" || fail "stack cleanup did not forward cleanup flags"
 pass "stack cleanup scopes cleanup to an explicit stack"
+
+for legacy_action in install validate backup cleanup rollback; do
+  if (cd "${STACK_DISPATCH_DIR}" && PRODUCTIVE_K3S_ADDONS_REPO_DIR="${ADDON_TMP_DIR}/stack-addons" ./productive-k3s-core.sh stack "${legacy_action}" base >/tmp/productive-k3s-core-stack-source.out 2>&1); then
+    fail "stack ${legacy_action} by source name unexpectedly succeeded"
+  fi
+  grep -q -- "--tgz <file>" /tmp/productive-k3s-core-stack-source.out || fail "stack ${legacy_action} did not report the artifact-only contract"
+done
+pass "source-name stack lifecycle is rejected from the public core contract"
 
 if (cd "$REPO_DIR" && ./productive-k3s-core.sh unsupported >/tmp/productive-k3s-core-cli-unsupported.out 2>&1); then
   fail "unsupported public CLI command unexpectedly succeeded"

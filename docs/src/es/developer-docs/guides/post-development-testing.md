@@ -32,6 +32,16 @@ make test-local-all
 make test-checkstatus-local
 ```
 
+## Cobertura local
+
+`make test-coverage` genera los reportes de `kcov` bajo `tests/coverage/` y
+aplica un piso obligatorio de 85% sobre los scripts de runtime distribuidos.
+Las herramientas de desarrollo y mantenimiento de releases quedan fuera de ese
+agregado porque tienen tests de contrato separados.
+
+El baseline local actual es `85.18%` (`2179/2558` líneas ejecutables). Si la
+cobertura de runtime baja del piso, el target termina con exit code no cero.
+
 ## Qué hace cada target
 
 ### `make test-clean-artifacts`

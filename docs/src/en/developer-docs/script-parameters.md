@@ -69,8 +69,8 @@ The important public split now is:
 
 - `./productive-k3s-core.sh apply`
   installs the local core only
-- `./productive-k3s-core.sh stack install <name>`
-  installs an explicit stack such as `base`
+- `./productive-k3s-core.sh stack install --tgz <artifact>`
+  installs an exact self-contained stack package
 - `./productive-k3s-core.sh addon install --tgz <artifact>`
   operates on the local host and local cluster, not on an external kubeconfig target
 
@@ -170,7 +170,7 @@ The bootstrap manifest records settings such as:
 ### Related environment variables
 
 - `PRODUCTIVE_K3S_STACK_NAME`
-  When set, validation also runs the selected stack add-on validations. When unset, `validate.sh` behaves as a core-only validator.
+  Internal package-dispatch context. The public Core CLI derives it from `stack ... --tgz`; callers must not use it to select a source checkout by name.
 
 The validator still accepts `--docker-registry-test`, but the actual registry push/pull check now lives in the `registry` add-on validation hook. For that optional Docker login path, the validator can consume:
 

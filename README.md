@@ -151,23 +151,23 @@ Practical CLI examples:
 
 ```bash
 ./productive-k3s-core.sh apply
-./productive-k3s-core.sh stack install base
+./productive-k3s-core.sh stack install --tgz ./base-stack.tgz
 ./productive-k3s-core.sh stack export --tgz ./base-stack.tgz --output ./base-installer.tgz
-./productive-k3s-core.sh stack validate base --strict
+./productive-k3s-core.sh stack validate --tgz ./base-stack.tgz --strict
 ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal
 ```
 
 Contract summary:
 
 - `apply` installs the local core only
-- `stack install <name>` installs an explicit stack such as `base`
+- `stack install --tgz <artifact>` installs a self-contained packaged stack
 - `stack export --tgz <artifact>` produces a self-contained installer bundle from a packaged stack artifact
 - `addon install --tgz <artifact>` runs on the local host against the local cluster
 - packaged add-ons can still request a basic public ingress via `--public-host`
 
 Important boundary:
 
-- named stack installation remains part of the public `core` contract
+- Core never resolves stack names or sibling source checkouts; catalog/name resolution belongs to the Productive K3S CLI
 - named public add-on installation does not
 - add-ons must be packaged first and then passed to `core` as `.tgz` artifacts
 

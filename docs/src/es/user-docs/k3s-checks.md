@@ -31,9 +31,9 @@ sudo k3s kubectl get ingress -A
 ./scripts/validate.sh
 ./scripts/validate.sh --strict
 ./scripts/validate.sh --json | jq
-./productive-k3s-core.sh stack validate base --strict
+./productive-k3s-core.sh stack validate --tgz ./base-0.1.0.tgz --strict
 ```
 
 Usá `validate.sh` cuando quieras chequear sólo la instalación local del core.
 
-Usá `stack validate <name>` cuando quieras validar un stack explícito como `base`.
+Usá `stack validate --tgz <artefacto>` cuando quieras ejecutar los hooks de validación de un stack empaquetado exacto.

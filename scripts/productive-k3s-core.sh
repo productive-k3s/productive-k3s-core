@@ -21,8 +21,7 @@ Usage:
   ./productive-k3s-core.sh <command> [args...]
   ./productive-k3s-core.sh addon validate --tgz <file>
   ./productive-k3s-core.sh addon install --tgz <file> [--public-host <fqdn>]
-  ./productive-k3s-core.sh stack <install|export|validate|backup|cleanup> <name> [args...]
-  ./productive-k3s-core.sh stack install --tgz <file> [args...]
+  ./productive-k3s-core.sh stack <install|validate|backup|cleanup|rollback> --tgz <file> [args...]
   ./productive-k3s-core.sh stack export --tgz <file> --output <dir|archive>
   ./productive-k3s-core.sh dev addon validate --source <dir>
   ./productive-k3s-core.sh dev stack validate --source <dir>
@@ -36,7 +35,7 @@ Operational commands:
   backup      Capture a host and cluster backup snapshot
   validate    Run the post-apply validator
   addon       Validate or install add-ons on the local host/cluster
-  stack       Install or manage named stacks on the local host/cluster
+  stack       Install or manage packaged stacks on the local host/cluster
   dev         Development-oriented source-based addon workflows
   help        Show this help
 
@@ -46,9 +45,9 @@ Examples:
   ./productive-k3s-core.sh preflight
   ./productive-k3s-core.sh preflight --strict
   ./productive-k3s-core.sh apply --dry-run
-  ./productive-k3s-core.sh stack install base
+  ./productive-k3s-core.sh stack install --tgz ./base-stack.tgz
   ./productive-k3s-core.sh stack export --tgz ./base-stack.tgz --output ./base-installer
-  ./productive-k3s-core.sh stack validate base --strict
+  ./productive-k3s-core.sh stack validate --tgz ./base-stack.tgz --strict
   ./productive-k3s-core.sh validate --strict
   ./productive-k3s-core.sh addon validate --tgz ./example-addon.tgz
   ./productive-k3s-core.sh addon install --tgz ./nginx-addon.tgz --public-host nginx-01.k3s.lab.internal
@@ -677,7 +676,10 @@ validate_stack_bundled_sources() {
     [[ -n "${addon_record}" ]] || continue
     local addon_source
     addon_source="$(stack_addon_record_value "${addon_record}" "source" || true)"
-    [[ -n "${addon_source}" ]] || continue
+    [[ -n "${addon_source}" ]] || {
+      printf 'packaged stack addon must declare a bundled source: %s\n' "$(stack_addon_record_value "${addon_record}" "name" || true)" >&2
+      return 4
+    }
     [[ "${addon_source}" == addons/* ]] || {
       printf 'stack addon source must stay within addons/: %s\n' "${addon_source}" >&2
       return 4
@@ -991,20 +993,10 @@ run_packaged_addon_install() {
   return "${rc}"
 }
 
-with_stack_source_env() {
-  local repo_dir="$1"
-  local stack_name="$2"
-  shift 2
-  (
-    export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${repo_dir}"
-    export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
-    "$@"
-  )
-}
-
 create_overlay_repo_for_stack_tgz() {
   local tgz_path="$1"
-  local tmp_dir manifest metadata stack_name overlay_root real_repo
+  local tmp_dir manifest metadata stack_name overlay_root
+  local addon_record addon_name addon_source addon_tmp addon_manifest addon_metadata packaged_addon_name
   tmp_dir="$(extract_tgz_to_temp "${tgz_path}")" || return $?
   manifest="$(resolve_stack_manifest "${tmp_dir}")" || {
     local rc=$?
@@ -1022,18 +1014,41 @@ create_overlay_repo_for_stack_tgz() {
     return "${rc}"
   }
   stack_name="$(printf '%s\n' "${metadata}" | sed -n '1p')"
-  real_repo="$(resolve_addons_repo_dir || true)"
   overlay_root="$(mktemp -d)"
-  mkdir -p "${overlay_root}/stacks/${stack_name}" "${overlay_root}/bundled-addons"
-  if [[ -n "${real_repo}" ]]; then
-    ln -s "${real_repo}/addons" "${overlay_root}/addons"
-  else
-    mkdir -p "${overlay_root}/addons"
-  fi
+  mkdir -p "${overlay_root}/stacks/${stack_name}" "${overlay_root}/bundled-addons" "${overlay_root}/addons"
   cp "${manifest}" "${overlay_root}/stacks/${stack_name}/stack.yaml"
   if [[ -d "${tmp_dir}/addons" ]]; then
     cp -R "${tmp_dir}/addons/." "${overlay_root}/bundled-addons/"
   fi
+  while IFS= read -r addon_record; do
+    [[ -n "${addon_record}" ]] || continue
+    addon_name="$(stack_addon_record_value "${addon_record}" "name" || true)"
+    addon_source="$(stack_addon_record_value "${addon_record}" "source" || true)"
+    addon_tmp="$(extract_tgz_to_temp "${tmp_dir}/${addon_source}")" || {
+      local rc=$?
+      rm -rf "${tmp_dir}" "${overlay_root}"
+      return "${rc}"
+    }
+    addon_manifest="$(resolve_addon_manifest "${addon_tmp}")" || {
+      local rc=$?
+      rm -rf "${addon_tmp}" "${tmp_dir}" "${overlay_root}"
+      return "${rc}"
+    }
+    addon_metadata="$(validate_addon_manifest "${addon_manifest}")" || {
+      local rc=$?
+      rm -rf "${addon_tmp}" "${tmp_dir}" "${overlay_root}"
+      return "${rc}"
+    }
+    packaged_addon_name="$(printf '%s\n' "${addon_metadata}" | sed -n '1p')"
+    [[ "${packaged_addon_name}" == "${addon_name}" ]] || {
+      printf 'stack addon name does not match bundled package: %s != %s\n' "${addon_name}" "${packaged_addon_name}" >&2
+      rm -rf "${addon_tmp}" "${tmp_dir}" "${overlay_root}"
+      return 4
+    }
+    mkdir -p "${overlay_root}/addons/${addon_name}"
+    cp -R "${addon_tmp}/." "${overlay_root}/addons/${addon_name}/"
+    rm -rf "${addon_tmp}"
+  done < <(stack_manifest_addon_records "${manifest}")
   rm -rf "${tmp_dir}"
   printf '%s\n%s\n' "${overlay_root}" "${stack_name}"
 }
@@ -1059,6 +1074,45 @@ run_stack_install_from_overlay() {
     return "${rc}"
   }
   emit_operation_event "stack.install" "stack.install.run" "success" "Stack install completed" "${stack_name}"
+}
+
+run_stack_lifecycle_from_tgz() {
+  local action="$1"
+  local tgz_path="$2"
+  local script_name="$3"
+  shift 3
+  local overlay_repo stack_name rc=0
+
+  emit_operation_event "stack.${action}" "stack.overlay.prepare" "running" "Preparing stack overlay from package" "${tgz_path}"
+  mapfile -t _stack_overlay < <(create_overlay_repo_for_stack_tgz "${tgz_path}") || return $?
+  overlay_repo="${_stack_overlay[0]:-}"
+  stack_name="${_stack_overlay[1]:-}"
+  [[ -n "${overlay_repo}" && -n "${stack_name}" ]] || {
+    emit_operation_event "stack.${action}" "stack.overlay.prepare" "failed" "Stack overlay preparation failed" "${tgz_path}"
+    printf 'failed to build a temporary stack overlay for stack %s\n' "${action}" >&2
+    return 4
+  }
+  emit_operation_event "stack.${action}" "stack.overlay.prepare" "success" "Stack overlay prepared" "${stack_name}"
+
+  if [[ "${action}" == "install" ]]; then
+    run_stack_install_from_overlay "${overlay_repo}" "${stack_name}" "$@" || rc=$?
+  else
+    emit_operation_event "stack.${action}" "stack.${action}.run" "running" "Running stack ${action}" "${stack_name}"
+    (
+      export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${overlay_repo}"
+      export PRODUCTIVE_K3S_STACK_NAME="${stack_name}"
+      export PRODUCTIVE_K3S_STACK_BUNDLED_ADDONS_DIR="${overlay_repo}/bundled-addons"
+      "${SCRIPT_DIR}/${script_name}" "$@"
+    ) || rc=$?
+    if (( rc == 0 )); then
+      emit_operation_event "stack.${action}" "stack.${action}.run" "success" "Stack ${action} completed" "${stack_name}"
+    else
+      emit_operation_event "stack.${action}" "stack.${action}.run" "failed" "Stack ${action} failed" "${stack_name}"
+    fi
+  fi
+
+  rm -rf "${overlay_repo}"
+  return "${rc}"
 }
 
 materialize_export_output() {
@@ -1283,59 +1337,17 @@ run_addon() {
 run_stack() {
   local action="${1:-}"
   shift || true
-  local stack_name="" tgz_path=""
+  local tgz_path=""
   case "${action}" in
     install)
-      while (($# > 0)); do
-        case "$1" in
-          --tgz)
-            tgz_path="${2:-}"
-            shift 2
-            ;;
-          -*)
-            break
-            ;;
-          *)
-            if [[ -z "${stack_name}" ]]; then
-              stack_name="$1"
-              shift
-            else
-              break
-            fi
-            ;;
-        esac
-      done
-
-      if [[ -n "${tgz_path}" ]]; then
-        local overlay_repo_tgz stack_name_tgz
-        emit_operation_event "stack.install" "stack.overlay.prepare" "running" "Preparing stack overlay from package" "${tgz_path}"
-        mapfile -t _stack_overlay < <(create_overlay_repo_for_stack_tgz "${tgz_path}") || return $?
-        overlay_repo_tgz="${_stack_overlay[0]:-}"
-        stack_name_tgz="${_stack_overlay[1]:-}"
-        [[ -n "${overlay_repo_tgz}" && -n "${stack_name_tgz}" ]] || {
-          emit_operation_event "stack.install" "stack.overlay.prepare" "failed" "Stack overlay preparation failed" "${tgz_path}"
-          printf 'failed to build a temporary stack overlay for stack install\n' >&2
-          return 4
-        }
-        emit_operation_event "stack.install" "stack.overlay.prepare" "success" "Stack overlay prepared" "${stack_name_tgz}"
-        local rc=0
-        run_stack_install_from_overlay "${overlay_repo_tgz}" "${stack_name_tgz}" "$@" || rc=$?
-        rm -rf "${overlay_repo_tgz}"
-        return "${rc}"
-      fi
-
-      [[ -n "${stack_name}" ]] || {
-        printf 'Usage: ./productive-k3s-core.sh stack install <name> [apply args...]\n' >&2
-        printf '   or: ./productive-k3s-core.sh stack install --tgz <file> [apply args...]\n' >&2
+      [[ "${1:-}" == "--tgz" && -n "${2:-}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack install --tgz <file> [apply args...]\n' >&2
+        printf 'source-name stack install is not part of the public core contract; resolve and package the stack before invoking Core.\n' >&2
         return 2
       }
-      emit_operation_event "stack.install" "stack.install.run" "running" "Running source stack install" "${stack_name}"
-      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/apply.sh" --mode stack "$@" || {
-        local rc=$?
-        emit_operation_event "stack.install" "stack.install.run" "failed" "Source stack install failed" "${stack_name}"
-        return "${rc}"
-      }
-      emit_operation_event "stack.install" "stack.install.run" "success" "Source stack install completed" "${stack_name}"
+      tgz_path="$2"
+      shift 2
+      run_stack_lifecycle_from_tgz install "${tgz_path}" apply.sh "$@"
       ;;
     export)
       local output_path=""
@@ -1352,14 +1364,7 @@ run_stack() {
           -*)
             break
             ;;
-          *)
-            if [[ -z "${stack_name}" ]]; then
-              stack_name="$1"
-              shift
-            else
-              break
-            fi
-            ;;
+          *) break ;;
         esac
       done
       [[ -n "${output_path}" ]] || {
@@ -1373,52 +1378,43 @@ run_stack() {
       run_stack_export_from_tgz "${tgz_path}" "${output_path}" "$@"
       ;;
     validate)
-      stack_name="${1:-}"
-      [[ -n "${stack_name}" ]] || {
-        printf 'Usage: ./productive-k3s-core.sh stack validate <name> [validate args...]\n' >&2
+      [[ "${1:-}" == "--tgz" && -n "${2:-}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack validate --tgz <file> [validate args...]\n' >&2
         return 2
       }
-      shift
-      emit_operation_event "stack.validate" "stack.validate.run" "running" "Running stack validation" "${stack_name}"
-      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/validate.sh" "$@" || {
-        local rc=$?
-        emit_operation_event "stack.validate" "stack.validate.run" "failed" "Stack validation failed" "${stack_name}"
-        return "${rc}"
-      }
-      emit_operation_event "stack.validate" "stack.validate.run" "success" "Stack validation completed" "${stack_name}"
+      tgz_path="$2"
+      shift 2
+      run_stack_lifecycle_from_tgz validate "${tgz_path}" validate.sh "$@"
       ;;
     backup)
-      stack_name="${1:-}"
-      [[ -n "${stack_name}" ]] || {
-        printf 'Usage: ./productive-k3s-core.sh stack backup <name> [backup args...]\n' >&2
+      [[ "${1:-}" == "--tgz" && -n "${2:-}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack backup --tgz <file> [backup args...]\n' >&2
         return 2
       }
-      shift
-      emit_operation_event "stack.backup" "stack.backup.run" "running" "Running stack backup" "${stack_name}"
-      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/backup.sh" "$@" || {
-        local rc=$?
-        emit_operation_event "stack.backup" "stack.backup.run" "failed" "Stack backup failed" "${stack_name}"
-        return "${rc}"
-      }
-      emit_operation_event "stack.backup" "stack.backup.run" "success" "Stack backup completed" "${stack_name}"
+      tgz_path="$2"
+      shift 2
+      run_stack_lifecycle_from_tgz backup "${tgz_path}" backup.sh "$@"
       ;;
     cleanup)
-      stack_name="${1:-}"
-      [[ -n "${stack_name}" ]] || {
-        printf 'Usage: ./productive-k3s-core.sh stack cleanup <name> [cleanup args...]\n' >&2
+      [[ "${1:-}" == "--tgz" && -n "${2:-}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack cleanup --tgz <file> [cleanup args...]\n' >&2
         return 2
       }
-      shift
-      emit_operation_event "stack.cleanup" "stack.cleanup.run" "running" "Running stack cleanup" "${stack_name}"
-      with_stack_source_env "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-$(resolve_addons_repo_dir)}" "${stack_name}" "${SCRIPT_DIR}/cleanup.sh" "$@" || {
-        local rc=$?
-        emit_operation_event "stack.cleanup" "stack.cleanup.run" "failed" "Stack cleanup failed" "${stack_name}"
-        return "${rc}"
+      tgz_path="$2"
+      shift 2
+      run_stack_lifecycle_from_tgz cleanup "${tgz_path}" cleanup.sh "$@"
+      ;;
+    rollback)
+      [[ "${1:-}" == "--tgz" && -n "${2:-}" ]] || {
+        printf 'Usage: ./productive-k3s-core.sh stack rollback --tgz <file> --to <manifest.json> [rollback args...]\n' >&2
+        return 2
       }
-      emit_operation_event "stack.cleanup" "stack.cleanup.run" "success" "Stack cleanup completed" "${stack_name}"
+      tgz_path="$2"
+      shift 2
+      run_stack_lifecycle_from_tgz rollback "${tgz_path}" rollback.sh "$@"
       ;;
     *)
-      printf 'Usage: ./productive-k3s-core.sh stack <install|export|validate|backup|cleanup> ...\n' >&2
+      printf 'Usage: ./productive-k3s-core.sh stack <install|export|validate|backup|cleanup|rollback> ...\n' >&2
       return 2
       ;;
   esac

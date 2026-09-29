@@ -47,8 +47,8 @@ The script internally treats the modes as capability switches:
 - requires an already running `k3s` server and an installed `helm`
 - does not install base `k3s`
 - focuses on stack-level components and cluster issuers
-- is the expected public path for `./productive-k3s-core.sh stack install <name>`
-- keeps named stack selection as part of the public contract, unlike public add-on installation which is package-first
+- is reached through the public artifact-only path `./productive-k3s-core.sh stack install --tgz <artifact>`
+- receives stack identity from package metadata; it never resolves a name or sibling source checkout
 
 ## Why the mode split matters
 
@@ -61,7 +61,7 @@ The mode model is what makes `productive-k3s-infra` orchestration possible. It g
 ## Notes
 
 !!! note
-    `single-node` is retained as a legacy all-in-one path. The public contract now prefers `apply` for core-only installation and `stack install <name>` for explicit stack installation.
+    `single-node` is retained for runtime compatibility but no longer implies a default application stack. Use `apply` for core-only installation and `stack install --tgz <artifact>` for an exact packaged stack.
 
 !!! note
     Public add-on installation follows a different boundary: `./productive-k3s-core.sh addon install --tgz <artifact>`. Direct source-name add-on installation is no longer part of the public `core` contract.
