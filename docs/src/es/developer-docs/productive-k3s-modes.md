@@ -47,8 +47,8 @@ Internamente el script trata a los modos como switches de capacidades:
 - requiere un `k3s` server ya en funcionamiento y `helm` instalado
 - no instala la base de `k3s`
 - se enfoca en componentes del stack y cluster issuers
-- es el camino público esperado para `./productive-k3s-core.sh stack install <name>`
-- mantiene la selección nominal de stacks como parte del contrato público, a diferencia de la instalación pública de add-ons que es package-first
+- se alcanza mediante el camino público artifact-only `./productive-k3s-core.sh stack install --tgz <artefacto>`
+- recibe la identidad del stack desde los metadatos del paquete; nunca resuelve un nombre ni un checkout fuente hermano
 
 ## Por qué importa la separación por modos
 
@@ -61,7 +61,7 @@ El modelo de modos es lo que hace posible la orquestación desde `productive-k3s
 ## Notas
 
 !!! note
-    `single-node` se conserva como camino all-in-one legado. El contrato público ahora prefiere `apply` para la instalación core-only y `stack install <name>` para instalar un stack de forma explícita.
+    `single-node` se conserva por compatibilidad del runtime pero ya no implica un stack de aplicaciones default. Usá `apply` para la instalación core-only y `stack install --tgz <artefacto>` para un stack empaquetado exacto.
 
 !!! note
     La instalación pública de add-ons sigue otra frontera: `./productive-k3s-core.sh addon install --tgz <artifact>`. La instalación directa de add-ons por nombre de fuente ya no forma parte del contrato público de `core`.

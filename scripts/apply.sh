@@ -643,13 +643,6 @@ ensure_user_kubeconfig() {
   export KUBECONFIG="$target_kubeconfig"
 }
 
-resolve_default_stack_name() {
-  [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]] && return 0
-  if [[ "$MODE" == "stack" || "$MODE" == "single-node" ]]; then
-    PRODUCTIVE_K3S_STACK_NAME="base"
-  fi
-}
-
 stack_addon_record_source_value() {
   printf '%s\n' "$1" | awk -F '\t' '{for (i=1;i<=NF;i++) if ($i ~ /^source=/) {sub(/^source=/,"",$i); print $i; exit}}'
 }
@@ -672,24 +665,19 @@ install_stack_addon_record() {
     "${SCRIPT_DIR}/../productive-k3s-core.sh" addon install --tgz "${bundled_path}"
     return
   fi
-  if addon_source_script_exists "${addon_name}" install.sh; then
-    [[ "$DRY_RUN" == "1" ]] && { log "[dry-run] Would run source add-on installer for '${addon_name}'"; return 0; }
-    run_addon_source_script "${addon_name}" install.sh
-    return
-  fi
-  err "Add-on '${addon_name}' is not bundled and does not provide scripts/install.sh in the configured add-ons source."
+  err "Add-on '${addon_name}' is not bundled in the stack artifact."
   exit 1
 }
 
 install_stack_addons() {
-  [[ "$MODE" == "stack" || "$MODE" == "single-node" ]] || {
+  [[ "$MODE" == "stack" ]] || {
     manifest_record_component "stack_addons" "not-requested" "skip"
     manifest_complete_component "stack_addons" "skipped"
     return 0
   }
-  resolve_default_stack_name
+  [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]] || { err "Packaged stack metadata is missing."; exit 1; }
   if ! stack_source_addon_records "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
-    err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or install from a stack package."
+    err "Packaged stack '${PRODUCTIVE_K3S_STACK_NAME}' could not be read from its temporary overlay."
     exit 1
   fi
   local addon_record count=0
@@ -728,7 +716,7 @@ print_plan_summary() {
   log "Planned actions"
   line "  - $(pk3s_runtime_cluster_label): ${runtime_action}"
   line "  - helm: ${helm_action}"
-  if [[ "$MODE" == "stack" || "$MODE" == "single-node" ]]; then
+  if [[ "$MODE" == "stack" ]]; then
     line "  - stack add-ons: install from '${PRODUCTIVE_K3S_STACK_NAME}'"
   fi
 }
@@ -741,7 +729,6 @@ main() {
   trap cleanup_exit EXIT
   bind_stdin_to_tty
   detect_host_platform
-  resolve_default_stack_name
 
   manifest_set_setting "bootstrap_mode" "$MODE"
   manifest_set_setting "cluster_distro" "$PRODUCTIVE_K3S_DISTRO"

@@ -81,7 +81,7 @@ Ejemplos:
     Los targets de raíz son entrypoints de conveniencia. La granularidad más fina de la matriz vive en `tests/Makefile`.
 
 !!! note
-    `make apply` ya no instala el stack `base` de forma implícita. Usá el CLI público `./productive-k3s-core.sh stack install base` cuando quieras instalar el stack default sobre la instalación local del core.
+    `make apply` instala solamente Core. Core acepta stacks exclusivamente como artefactos autocontenidos mediante `./productive-k3s-core.sh stack install --tgz <archivo>`; la resolución por nombre pertenece a `pk3s`.
 
 !!! note
     Para trabajo de documentación, `make docs-build` es el chequeo final más seguro porque ejecuta MkDocs en modo estricto.

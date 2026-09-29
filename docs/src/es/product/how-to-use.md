@@ -104,11 +104,13 @@ curl -fsSL https://github.com/productive-k3s/productive-k3s-core/releases/downlo
 
 Ese instalador descarga el bundle correspondiente a ese release y ejecuta sobre el host el CLI público de `productive-k3s-core`.
 
-Si además querés el stack default una vez que el core está listo:
+Si además querés un stack una vez que el core está listo, descargá su artefacto empaquetado exacto y pasalo a Core:
 
 ```bash
-curl -fsSL https://github.com/productive-k3s/productive-k3s-core/releases/download/X.Y.Z/productive-k3s-core-cli.sh | bash -s -- stack install base
+./productive-k3s-core.sh stack install --tgz ./base-0.1.0.tgz
 ```
+
+Usá `pk3s stack install <name>` cuando quieras resolución por nombre desde catálogo.
 
 ## Después de instalar
 

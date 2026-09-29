@@ -62,7 +62,7 @@ run_stack_addon_backup_hooks() {
   local addon_name addon_dir backup_fn
   [[ -n "${PRODUCTIVE_K3S_STACK_NAME}" ]] || return 0
   if ! stack_source_addon_names "${PRODUCTIVE_K3S_STACK_NAME}" >/dev/null 2>&1; then
-    err "Stack source '${PRODUCTIVE_K3S_STACK_NAME}' was not found. Set PRODUCTIVE_K3S_ADDONS_REPO_DIR or place productive-k3s-addons beside productive-k3s-core."
+    err "Packaged stack overlay '${PRODUCTIVE_K3S_STACK_NAME}' is unavailable. Invoke stack backup with its self-contained TGZ."
     exit 1
   fi
 

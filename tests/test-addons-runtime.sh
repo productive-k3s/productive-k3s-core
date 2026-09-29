@@ -47,11 +47,11 @@ mkdir -p "${WORK_DIR}/env/productive-k3s-core/scripts"
 cp "${LIB_PATH}" "${WORK_DIR}/env/productive-k3s-core/scripts/addons-runtime.sh"
 mkdir -p "${WORK_DIR}/env/productive-k3s-addons/addons/registry/scripts"
 cp "${WORK_DIR}/productive-k3s-addons/addons/registry/scripts/validate.sh" "${WORK_DIR}/env/productive-k3s-addons/addons/registry/scripts/validate.sh"
-output="$(
-  bash -c 'SCRIPT_DIR="'"${WORK_DIR}"'/env/productive-k3s-core/scripts"; source "'"${WORK_DIR}"'/env/productive-k3s-core/scripts/addons-runtime.sh"; resolve_addons_repo_dir'
-)"
-[[ "${output}" == "${WORK_DIR}/env/productive-k3s-addons" ]] || fail "did not resolve addons repo from sibling checkout"
-pass "addons runtime resolves sibling addons repo"
+if env -u PRODUCTIVE_K3S_ADDONS_REPO_DIR bash -c \
+  'SCRIPT_DIR="'"${WORK_DIR}"'/env/productive-k3s-core/scripts"; source "'"${WORK_DIR}"'/env/productive-k3s-core/scripts/addons-runtime.sh"; resolve_addons_repo_dir'; then
+  fail "addons runtime unexpectedly resolved a sibling source checkout"
+fi
+pass "addons runtime rejects implicit sibling source checkouts"
 
 if ! PRODUCTIVE_K3S_ADDONS_REPO_DIR="${WORK_DIR}/productive-k3s-addons" \
   bash -c 'source "'"${LIB_PATH}"'"; addon_source_script_exists registry validate.sh'; then
@@ -122,8 +122,9 @@ git -C "${WORK_DIR}/productive-k3s-addons-worktree" commit -m "seed main" >/dev/
 git -C "${WORK_DIR}/productive-k3s-addons-worktree" remote add origin "${WORK_DIR}/productive-k3s-addons-remote.git"
 git -C "${WORK_DIR}/productive-k3s-addons-worktree" push origin main >/dev/null
 
-mkdir -p "${WORK_DIR}/feature-core/scripts"
+mkdir -p "${WORK_DIR}/feature-core/scripts" "${WORK_DIR}/feature-core/tests"
 cp "${REPO_DIR}/scripts/productive-k3s-core-dev.sh" "${WORK_DIR}/feature-core/scripts/productive-k3s-core-dev.sh"
+cp "${REPO_DIR}/tests/vm-images.env" "${WORK_DIR}/feature-core/tests/vm-images.env"
 git init "${WORK_DIR}/feature-core" >/dev/null
 git -C "${WORK_DIR}/feature-core" checkout -b feature-only >/dev/null
 

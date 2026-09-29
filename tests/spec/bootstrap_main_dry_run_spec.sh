@@ -38,26 +38,10 @@ Describe 'bootstrap dry-run main flows'
     The output should not include 'stack add-ons: install'
   End
 
-  It 'runs an explicit single-node dry-run bootstrap plan'
+  It 'keeps explicit single-node mode core-only'
     When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
       temp_runs="$(mktemp -d)"
-      temp_addons="$(mktemp -d)"
       RUNS_DIR="${temp_runs}"
-      mkdir -p "${temp_addons}/stacks/base"
-      mkdir -p "${temp_addons}/addons/custom-a/scripts"
-      mkdir -p "${temp_addons}/addons/custom-b/scripts"
-      cat >"${temp_addons}/stacks/base/stack.yaml" <<'"'"'EOF'"'"'
-apiVersion: addons.productive-k3s.io/v1
-kind: Stack
-metadata:
-  name: base
-  version: 0.1.0
-spec:
-  addons:
-    - custom-a
-    - custom-b
-EOF
-      export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${temp_addons}"
       bind_stdin_to_tty() { :; }
       sudo_keepalive() { :; }
       resolve_telemetry_enabled() { TELEMETRY_ENABLED=false; }
@@ -71,7 +55,6 @@ EOF
           *) command -v "$1" >/dev/null 2>&1 ;;
         esac
       }
-      addon_source_script_exists() { return 0; }
       prompt_yesno() {
         case "$1" in
           INSTALL_RUNTIME|INSTALL_HELM|proceed|install_pkgs)
@@ -83,10 +66,8 @@ EOF
       prompt() { printf -v "$1" "%s" "$2"; }
       main --dry-run --mode single-node'
     The status should equal 0
-    The output should include "stack add-ons: install from 'base'"
-    The output should include "Installing stack add-on 'custom-a' from stack 'base'"
-    The output should include "Installing stack add-on 'custom-b' from stack 'base'"
-    The output should include "[dry-run] Would run source add-on installer for 'custom-a'"
+    The output should include 'Planned actions'
+    The output should not include 'stack add-ons: install'
   End
 
   It 'runs an agent dry-run bootstrap with k3sup'

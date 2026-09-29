@@ -35,6 +35,7 @@ TRANSFER_STAGED_REPO=""
 TRANSFER_STAGED_ADDONS_REPO=""
 ADDONS_REPO_DIR=""
 REMOTE_ADDONS_DIR=""
+REMOTE_STACK_TGZ="/tmp/productive-k3s-base-stack.tgz"
 TEMP_ADDONS_CLONE_DIR=""
 REMOTE_COMMAND_STATUS=""
 REMOTE_COMMAND_LOG_REMOTE=""
@@ -748,33 +749,33 @@ run_validate_with_retries() {
 }
 
 run_stack_validate_with_retries() {
-  local stack_name="$1"
+  local stack_tgz="$1"
   local timeout_secs="${2:-900}"
   local sleep_secs="${3:-15}"
   local start_ts now_ts
   local validate_command
   start_ts=$(date +%s)
-  validate_command="cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack validate '${stack_name}' --strict"
+  validate_command="cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack validate --tgz '${stack_tgz}' --strict"
 
   while true; do
-    if run_remote_command_with_status "${validate_command}" 1200 "stack-validate-${stack_name}"; then
+    if run_remote_command_with_status "${validate_command}" 1200 "stack-validate-artifact"; then
       return 0
     fi
     capture_remote_command_log
 
     now_ts=$(date +%s)
     if (( now_ts - start_ts >= timeout_secs )); then
-      err "Stack validation for '${stack_name}' did not converge within ${timeout_secs}s"
+      err "Stack validation for '${stack_tgz}' did not converge within ${timeout_secs}s"
       return 1
     fi
 
-    log "Stack validation for '${stack_name}' is not clean yet; waiting ${sleep_secs}s before retrying"
+    log "Stack validation for '${stack_tgz}' is not clean yet; waiting ${sleep_secs}s before retrying"
     sleep "$sleep_secs"
   done
 }
 
 run_stack_install_with_retries() {
-  local stack_name="$1"
+  local stack_tgz="$1"
   local answers="$2"
   local timeout_secs="${3:-1800}"
   local sleep_secs="${4:-30}"
@@ -783,17 +784,17 @@ run_stack_install_with_retries() {
   start_ts=$(date +%s)
 
   while true; do
-    if run_core_cli_with_answers "stack install" "${stack_name}${extra_args:+ ${extra_args}}" "${answers}"; then
+    if run_core_cli_with_answers "stack install" "--tgz ${stack_tgz}${extra_args:+ ${extra_args}}" "${answers}"; then
       return 0
     fi
 
     now_ts=$(date +%s)
     if (( now_ts - start_ts >= timeout_secs )); then
-      err "Stack install for '${stack_name}' did not converge within ${timeout_secs}s"
+      err "Stack install for '${stack_tgz}' did not converge within ${timeout_secs}s"
       return 1
     fi
 
-    log "Stack install for '${stack_name}' is not clean yet; waiting ${sleep_secs}s before retrying"
+    log "Stack install for '${stack_tgz}' is not clean yet; waiting ${sleep_secs}s before retrying"
     sleep "$sleep_secs"
   done
 }
@@ -986,20 +987,26 @@ run_full() {
     export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true
   fi
   run_core_cli_with_answers "apply" "" "$(core_answers)"
-  run_stack_install_with_retries "base" "$(full_answers)" 1800 30
+  run_vm_command_with_status \
+    "cd '$REMOTE_ADDONS_DIR' && bash ./scripts/package-stack.sh --stack base --output '$REMOTE_STACK_TGZ'" \
+    300 \
+    "Timed out building the packaged base stack." \
+    "Packaged base stack build exited with status" \
+    "package-base-stack"
+  run_stack_install_with_retries "${REMOTE_STACK_TGZ}" "$(full_answers)" 1800 30
   if [[ -n "${previous_auto_approve}" ]]; then
     export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS="${previous_auto_approve}"
   else
     unset PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS || true
   fi
-  run_stack_validate_with_retries "base" 1200 15
+  run_stack_validate_with_retries "${REMOTE_STACK_TGZ}" 1200 15
 }
 
 run_full_clean() {
   run_full
   log "Running destructive clean profile inside the VM"
   run_vm_command_with_status \
-    "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack cleanup base --apply --yes --confirm-clean" \
+    "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack cleanup --tgz '$REMOTE_STACK_TGZ' --apply --yes --confirm-clean" \
     3600 \
     "Timed out waiting for stack cleanup completion marker." \
     "Stack cleanup command exited with status"
@@ -1018,7 +1025,7 @@ run_full_rollback() {
 
   log "Running rollback plan inside the VM"
   run_vm_command_with_status \
-    "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --plan" \
+    "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack rollback --tgz '$REMOTE_STACK_TGZ' --to '$manifest' --plan" \
     1800 \
     "Timed out waiting for rollback plan completion marker." \
     "Rollback plan command exited with status" \
@@ -1027,7 +1034,7 @@ run_full_rollback() {
 
   log "Applying rollback inside the VM"
   run_vm_command_with_status \
-    "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./scripts/rollback.sh --to '$manifest' --apply --yes" \
+    "cd '$REMOTE_DIR' && $(bootstrap_engine_env_prefix)./productive-k3s-core.sh stack rollback --tgz '$REMOTE_STACK_TGZ' --to '$manifest' --apply --yes" \
     3600 \
     "Timed out waiting for rollback apply completion marker." \
     "Rollback apply command exited with status" \

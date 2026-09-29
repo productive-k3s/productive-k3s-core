@@ -97,14 +97,18 @@ make test-checkstatus-local
 
 The current maintainer baseline from the latest local `make test-coverage` run is:
 
-- total ShellSpec coverage: `75.06%`
-- `scripts/apply.sh`: `78.17%`
+- runtime shell coverage: `85.18%` (`2179/2558` executable lines)
+- `scripts/apply.sh`: `76.99%`
 - `scripts/preflight-host.sh`: `89.02%`
-- `scripts/validate.sh`: `59.52%`
-- `scripts/send-telemetry.sh`: `83.48%`
-- `scripts/send-telemetry-event.sh`: `60.94%`
+- `scripts/validate.sh`: `86.49%`
+- `scripts/send-telemetry.sh`: `88.70%`
+- `scripts/send-telemetry-event.sh`: `98.15%`
+- `scripts/productive-k3s-core.sh`: `84.83%`
+- `scripts/addon-host-runtime.sh`: `95.24%`
 
-This baseline is intended to guide future additions and refactors. It is not yet enforced as a CI threshold.
+The runtime aggregate excludes development and release-maintenance helpers,
+which have separate contract tests. The target enforces an 85% runtime floor
+and fails when the aggregate regresses.
 
 ## What these targets do
 
