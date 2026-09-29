@@ -1,0 +1,50 @@
+{#-
+  Language-aware top tabs.
+-#}
+{% set is_es = page and page.url and page.url.startswith('es/') %}
+{% set home_root = base_url %}
+{% if is_es %}
+  {% set tabs = [
+    {"label": "Inicio", "url": home_root ~ "?lang=es", "key": "home"},
+    {"label": "Producto", "url": "es/product/", "key": "product"},
+    {"label": "Documentación para usuarios", "url": "es/user-docs/", "key": "user-docs"},
+    {"label": "Documentación para desarrolladores", "url": "es/developer-docs/", "key": "developer-docs"},
+  ] %}
+{% else %}
+  {% set tabs = [
+    {"label": "Home", "url": home_root, "key": "home"},
+    {"label": "Product", "url": "en/product/", "key": "product"},
+    {"label": "User Docs", "url": "en/user-docs/", "key": "user-docs"},
+    {"label": "Developer Docs", "url": "en/developer-docs/", "key": "developer-docs"},
+  ] %}
+{% endif %}
+
+{% if page and page.url %}
+  {% if page.url in ['en/', 'es/'] %}
+    {% set current_key = 'home' %}
+  {% elif '/product/' in page.url %}
+    {% set current_key = 'product' %}
+  {% elif '/developer-docs/' in page.url %}
+    {% set current_key = 'developer-docs' %}
+  {% elif '/user-docs/' in page.url %}
+    {% set current_key = 'user-docs' %}
+  {% else %}
+    {% set current_key = 'home' %}
+  {% endif %}
+{% else %}
+  {% set current_key = 'home' %}
+{% endif %}
+
+<nav class="md-tabs" aria-label="{{ lang.t('tabs') }}" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      {% for item in tabs %}
+        <li class="md-tabs__item{% if item.key == current_key %} md-tabs__item--active{% endif %}">
+          <a href="{{ home_root if item.key == 'home' and not is_es else (home_root ~ '?lang=es') if item.key == 'home' else (item.url | url) }}" class="md-tabs__link">
+            {{ item.label }}
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+</nav>

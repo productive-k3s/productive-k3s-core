@@ -1,0 +1,83 @@
+{#-
+  Language-aware breadcrumbs.
+-#}
+{% if page and page.url and page.url.startswith('es/') %}
+  {% set crumb_home_label = "Inicio" %}
+  {% set crumb_home_url = base_url ~ "?lang=es" %}
+{% else %}
+  {% set crumb_home_label = "Home" %}
+  {% set crumb_home_url = base_url %}
+{% endif %}
+
+{% set crumbs = [] %}
+{% if page and page.url %}
+  {% if page.url in ['en/', 'es/'] %}
+    {% set crumbs = [] %}
+  {% elif page.url in ['en/product/', 'es/product/'] %}
+    {% set crumbs = [{"label": "Producto" if page.url.startswith('es/') else "Product", "url": None}] %}
+  {% elif '/product/' in page.url %}
+    {% set crumbs = [{"label": "Producto" if page.url.startswith('es/') else "Product", "url": "es/product/" if page.url.startswith('es/') else "en/product/"}] %}
+  {% elif page.url in ['en/developer-docs/guides/', 'es/developer-docs/guides/'] %}
+    {% set crumbs = [
+      {"label": "Documentación para desarrolladores" if page.url.startswith('es/') else "Developer Docs", "url": "es/developer-docs/" if page.url.startswith('es/') else "en/developer-docs/"},
+      {"label": "Guías" if page.url.startswith('es/') else "Guides", "url": None}
+    ] %}
+  {% elif '/developer-docs/guides/' in page.url %}
+    {% set crumbs = [
+      {"label": "Documentación para desarrolladores" if page.url.startswith('es/') else "Developer Docs", "url": "es/developer-docs/" if page.url.startswith('es/') else "en/developer-docs/"},
+      {"label": "Guías" if page.url.startswith('es/') else "Guides", "url": "es/developer-docs/guides/" if page.url.startswith('es/') else "en/developer-docs/guides/"}
+    ] %}
+  {% elif page.url in ['en/user-docs/', 'es/user-docs/'] %}
+    {% set crumbs = [{"label": "Documentación para usuarios" if page.url.startswith('es/') else "User Docs", "url": None}] %}
+  {% elif '/user-docs/' in page.url %}
+    {% if '/user-docs/k3s-checks' in page.url or '/user-docs/ingress-checks' in page.url or '/user-docs/rancher-checks' in page.url or '/user-docs/registry-checks' in page.url or '/user-docs/longhorn-checks' in page.url or '/user-docs/certificate-checks' in page.url %}
+      {% set crumbs = [
+        {"label": "Documentación para usuarios" if page.url.startswith('es/') else "User Docs", "url": "es/user-docs/" if page.url.startswith('es/') else "en/user-docs/"},
+        {"label": "Verificaciones" if page.url.startswith('es/') else "Checks", "url": None}
+      ] %}
+    {% else %}
+      {% set crumbs = [{"label": "Documentación para usuarios" if page.url.startswith('es/') else "User Docs", "url": "es/user-docs/" if page.url.startswith('es/') else "en/user-docs/"}] %}
+    {% endif %}
+  {% elif page.url in ['en/developer-docs/', 'es/developer-docs/'] %}
+    {% set crumbs = [{"label": "Documentación para desarrolladores" if page.url.startswith('es/') else "Developer Docs", "url": None}] %}
+  {% elif '/developer-docs/' in page.url %}
+    {% if '/developer-docs/ubuntu-' in page.url or '/developer-docs/debian-' in page.url %}
+      {% set crumbs = [
+        {"label": "Documentación para desarrolladores" if page.url.startswith('es/') else "Developer Docs", "url": "es/developer-docs/" if page.url.startswith('es/') else "en/developer-docs/"},
+        {"label": "Baseline de soporte" if page.url.startswith('es/') else "Support baseline", "url": None}
+      ] %}
+    {% else %}
+      {% set crumbs = [{"label": "Documentación para desarrolladores" if page.url.startswith('es/') else "Developer Docs", "url": "es/developer-docs/" if page.url.startswith('es/') else "en/developer-docs/"}] %}
+    {% endif %}
+  {% endif %}
+{% endif %}
+
+<nav class="md-path" aria-label="{{ 'Navegación' if page and page.url and page.url.startswith('es/') else lang.t('nav') }}">
+  <ol class="md-path__list">
+    <li class="md-path__item">
+      <a href="{{ crumb_home_url }}" class="md-path__link">
+        <span class="md-ellipsis">{{ crumb_home_label }}</span>
+      </a>
+    </li>
+    {% for crumb in crumbs %}
+      <li class="md-path__item">
+        {% if crumb.url and not loop.last %}
+          <a href="{{ crumb.url | url }}" class="md-path__link">
+            <span class="md-ellipsis">{{ crumb.label }}</span>
+          </a>
+        {% else %}
+          <a href="{{ crumb.url | url if crumb.url else '#' }}" class="md-path__link">
+            <span class="md-ellipsis">{{ crumb.label }}</span>
+          </a>
+        {% endif %}
+      </li>
+    {% endfor %}
+    {% if page and page.url not in ['en/', 'es/', 'en/product/', 'es/product/', 'en/developer-docs/guides/', 'es/developer-docs/guides/', 'en/user-docs/', 'es/user-docs/', 'en/developer-docs/', 'es/developer-docs/'] %}
+      <li class="md-path__item">
+        <a href="#" class="md-path__link">
+          <span class="md-ellipsis">{{ page.title }}</span>
+        </a>
+      </li>
+    {% endif %}
+  </ol>
+</nav>
