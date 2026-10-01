@@ -39,6 +39,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y kcov
           mkdir -p "$HOME/.local/bin" "$HOME/.local/share"
 
           curl -fsSLO https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
@@ -69,6 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           make -C tests test-unit
+          make -C tests test-coverage
           make -C tests test-lint
           make -C tests test-format
           make -C tests test-spell
