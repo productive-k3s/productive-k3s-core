@@ -408,10 +408,14 @@ print_bom_json() {
     "bootstrap_modes": ["single-node", "server", "agent", "stack"],
     "versions": {
       "k3s": "$(json_escape "${PRODUCTIVE_K3S_K3S_VERSION}")",
+      "rke2": "$(json_escape "${PRODUCTIVE_K3S_RKE2_VERSION}")",
+      "k3sup": "$(json_escape "${PRODUCTIVE_K3S_K3SUP_VERSION}")",
       "helm": "$(json_escape "${PRODUCTIVE_K3S_HELM_VERSION}")"
     },
     "version_policy": {
       "k3s": "pinned",
+      "rke2": "pinned",
+      "k3sup": "pinned-checksum",
       "helm": "pinned"
     }
   }

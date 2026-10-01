@@ -38,9 +38,11 @@ Describe 'bootstrap package and engine helpers'
       need_cmd() { return 1; }
       install_k3sup_if_needed'
     The status should equal 0
-    The output should include 'Downloading k3sup installer'
-    The output should include 'curl -sLS https://get.k3sup.dev | sh'
-    The output should include 'sudo install k3sup /usr/local/bin/'
+    The output should include 'Downloading k3sup 0.13.13'
+    The output should include 'github.com/alexellis/k3sup/releases/download/0.13.13/k3sup'
+    The output should include 'sha256sum -c -'
+    The output should include 'sudo install'
+    The output should include '/usr/local/bin/k3sup'
   End
 
   It 'installs a server with native k3s in dry-run mode'

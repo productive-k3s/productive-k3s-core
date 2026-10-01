@@ -26,6 +26,7 @@ STAGE_DIR="${TMP_DIR}/productive-k3s-core-${TAG}"
 INCLUDE_PATHS=(
   "LICENSE"
   "README.md"
+  "materials.lock.yaml"
   "productive-k3s-core.sh"
   "scripts/productive-k3s-core.sh"
   "scripts/addons-runtime.sh"

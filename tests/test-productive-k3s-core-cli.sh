@@ -70,6 +70,8 @@ printf '%s\n' "$local_bom" | jq -e '
   (.requirements.required_commands | any(.name == "sha256sum" and .min_version == "8.32")) and
   (.requirements.optional_commands | any(.name == "helm" and .min_version == "3.21.0")) and
   .components.versions.k3s == "v1.35.5+k3s1" and
+  .components.versions.rke2 == "v1.35.5+rke2r1" and
+  .components.versions.k3sup == "0.13.13" and
   .components.versions.helm == "v3.21.0" and
   (.components.versions | has("cert-manager") | not) and
   (.components.versions | has("longhorn") | not) and
@@ -94,6 +96,7 @@ bundle_root="${extract_dir}/productive-k3s-core-HEAD"
 [[ -x "${bundle_root}/productive-k3s-core.sh" ]] || fail "bundle root entrypoint is missing"
 for required_path in \
   "productive-k3s-core-HEAD/bundle-info.json" \
+  "productive-k3s-core-HEAD/materials.lock.yaml" \
   "productive-k3s-core-HEAD/README.md" \
   "productive-k3s-core-HEAD/LICENSE" \
   "productive-k3s-core-HEAD/scripts/productive-k3s-core.sh" \

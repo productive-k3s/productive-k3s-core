@@ -216,6 +216,12 @@ If you also want full repository validation coverage, add:
 
 See the linked site pages above for details, platform notes, and validation expectations.
 
+## Software Materials
+
+The machine-readable `materials.lock.yaml` declares the exact K3S, RKE2,
+Helm, and checksum-verified k3sup versions used by Core. The bootstrap flow and
+`bom --json` read the same managed version definitions.
+
 ## License
 
 This project is licensed under the Apache License 2.0.

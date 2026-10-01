@@ -1,0 +1,51 @@
+apiVersion: materials.productive-k3s.io/v1alpha1
+kind: MaterialsLock
+metadata:
+  owner: productive-k3s-core
+  package: productive-k3s-core
+  version: 0.9.5
+spec:
+  materials:
+    - id: k3s
+      type: binary
+      name: k3s
+      version: v1.35.5+k3s1
+      source: https://github.com/k3s-io/k3s
+      pinPolicy: exact
+      required: true
+      updateSource:
+        type: github-release
+        repository: k3s-io/k3s
+    - id: rke2
+      type: binary
+      name: rke2
+      version: v1.35.5+rke2r1
+      source: https://github.com/rancher/rke2
+      pinPolicy: exact
+      required: true
+      updateSource:
+        type: github-release
+        repository: rancher/rke2
+    - id: helm
+      type: binary
+      name: helm
+      version: v3.21.0
+      source: https://github.com/helm/helm
+      pinPolicy: exact
+      required: true
+      updateSource:
+        type: github-release
+        repository: helm/helm
+    - id: k3sup
+      type: binary
+      name: k3sup
+      version: 0.13.13
+      source: https://github.com/alexellis/k3sup
+      pinPolicy: exact-checksum
+      required: false
+      checksums:
+        linux-amd64: sha256:7f2db0cf4c28d413bc094aa2e1a809bd772875486f385bd57dd2d7575e7c7509
+        linux-arm64: sha256:0d3d5894dda1013943cfbfc443580d973402972ebda36a42365cf8b67aa22ea5
+      updateSource:
+        type: github-release
+        repository: alexellis/k3sup
