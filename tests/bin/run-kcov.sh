@@ -64,8 +64,39 @@ cleanup() {
 }
 trap cleanup EXIT
 
+inject_compatibility_contract() {
+  local manifest="$1"
+  local distro="${2:-k3s}"
+  awk -v distro="${distro}" '
+    /^  sourceRevision:/ { has_revision=1 }
+    /^  compatibility:/ { has_compatibility=1 }
+    /^spec:/ {
+      if (!has_revision) {
+        print "  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+      print
+      if (!has_compatibility) {
+        print "  compatibility:"
+        print "    requires:"
+        print "      core:"
+        print "        contract: artifact/v1"
+        print "        minVersion: 0.9.6"
+        print "        maxVersionExclusive: 0.10.0"
+        print "      kubernetes:"
+        print "        distros:"
+        print "          - " distro
+      }
+      next
+    }
+    { print }
+  ' "${manifest}" >"${manifest}.tmp"
+  mv "${manifest}.tmp" "${manifest}"
+}
+
 addon_pkg_dir="${tmp_dir}/addon/pkg"
 addon_tgz="${tmp_dir}/demo-addon.tgz"
+missing_revision_addon_tgz="${tmp_dir}/missing-revision-addon.tgz"
+mutable_revision_addon_tgz="${tmp_dir}/mutable-revision-addon.tgz"
 addon_install_marker="${tmp_dir}/addon-installed.txt"
 private_addon_pkg_dir="${tmp_dir}/private-addon/pkg"
 private_addon_tgz="${tmp_dir}/private-addon.tgz"
@@ -115,7 +146,15 @@ cat >"${addon_pkg_dir}/scripts/backup.sh" <<'EOF'
 pk3s_addon_backup() { mkdir -p "$1/demo-addon"; }
 EOF
 chmod +x "${addon_pkg_dir}/scripts/install.sh" "${addon_pkg_dir}/scripts/validate.sh" "${addon_pkg_dir}/scripts/clean.sh" "${addon_pkg_dir}/scripts/backup.sh"
+inject_compatibility_contract "${addon_pkg_dir}/addon.yaml"
 tar -czf "${addon_tgz}" -C "${addon_pkg_dir}" .
+addon_tgz_digest="$(sha256sum "${addon_tgz}" | awk '{print $1}')"
+cp -R "${addon_pkg_dir}" "${tmp_dir}/missing-revision-addon"
+sed -i '/^  sourceRevision:/d' "${tmp_dir}/missing-revision-addon/addon.yaml"
+tar -czf "${missing_revision_addon_tgz}" -C "${tmp_dir}/missing-revision-addon" .
+cp -R "${addon_pkg_dir}" "${tmp_dir}/mutable-revision-addon"
+sed -i 's/^  sourceRevision:.*/  sourceRevision: development/' "${tmp_dir}/mutable-revision-addon/addon.yaml"
+tar -czf "${mutable_revision_addon_tgz}" -C "${tmp_dir}/mutable-revision-addon" .
 
 mkdir -p "${private_addon_pkg_dir}/scripts"
 cat >"${private_addon_pkg_dir}/addon.yaml" <<'EOF'
@@ -134,6 +173,7 @@ cat >"${private_addon_pkg_dir}/scripts/install.sh" <<'EOF'
 exit 0
 EOF
 chmod +x "${private_addon_pkg_dir}/scripts/install.sh"
+inject_compatibility_contract "${private_addon_pkg_dir}/addon.yaml"
 tar -czf "${private_addon_tgz}" -C "${private_addon_pkg_dir}" .
 
 mkdir -p "${missing_installer_addon_pkg_dir}" "${failing_installer_addon_pkg_dir}/scripts"
@@ -148,6 +188,7 @@ spec:
   install:
     script: scripts/install.sh
 EOF
+inject_compatibility_contract "${missing_installer_addon_pkg_dir}/addon.yaml"
 tar -czf "${missing_installer_addon_tgz}" -C "${missing_installer_addon_pkg_dir}" .
 cat >"${failing_installer_addon_pkg_dir}/addon.yaml" <<'EOF'
 apiVersion: addons.productive-k3s.io/v1
@@ -165,6 +206,7 @@ cat >"${failing_installer_addon_pkg_dir}/scripts/install.sh" <<'EOF'
 exit 7
 EOF
 chmod +x "${failing_installer_addon_pkg_dir}/scripts/install.sh"
+inject_compatibility_contract "${failing_installer_addon_pkg_dir}/addon.yaml"
 tar -czf "${failing_installer_addon_tgz}" -C "${failing_installer_addon_pkg_dir}" .
 
 stack_pkg_dir="${tmp_dir}/stack/pkg"
@@ -192,7 +234,7 @@ backup_output="${tmp_dir}/backup-output"
 addons_repo="${tmp_dir}/addons-repo"
 mkdir -p "${stack_pkg_dir}/addons" "${addons_repo}/addons/demo-addon" "${addons_repo}/stacks/base"
 cp "${addon_tgz}" "${stack_pkg_dir}/addons/demo-addon.tgz"
-cat >"${stack_pkg_dir}/stack.yaml" <<'EOF'
+cat >"${stack_pkg_dir}/stack.yaml" <<EOF
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
 metadata:
@@ -212,9 +254,22 @@ spec:
     - name: demo-addon
       version: 0.1.0
       source: addons/demo-addon.tgz
+      digest: sha256:${addon_tgz_digest}
 EOF
+inject_compatibility_contract "${stack_pkg_dir}/stack.yaml" k3s
 cp "${stack_pkg_dir}/stack.yaml" "${addons_repo}/stacks/base/stack.yaml"
 tar -czf "${stack_tgz}" -C "${stack_pkg_dir}" .
+for variant in mutable-revision missing-digest bad-digest mismatched-name mismatched-version; do
+  cp -R "${stack_pkg_dir}" "${tmp_dir}/stack-${variant}"
+done
+sed -i 's/^  sourceRevision:.*/  sourceRevision: development/' "${tmp_dir}/stack-mutable-revision/stack.yaml"
+sed -i '/^      digest:/d' "${tmp_dir}/stack-missing-digest/stack.yaml"
+sed -i 's/^      digest:.*/      digest: sha256:0000000000000000000000000000000000000000000000000000000000000000/' "${tmp_dir}/stack-bad-digest/stack.yaml"
+sed -i 's/^    - name: demo-addon/    - name: other-addon/' "${tmp_dir}/stack-mismatched-name/stack.yaml"
+sed -i 's/^      version: 0.1.0/      version: 0.2.0/' "${tmp_dir}/stack-mismatched-version/stack.yaml"
+for variant in mutable-revision missing-digest bad-digest mismatched-name mismatched-version; do
+  tar -czf "${tmp_dir}/stack-${variant}.tgz" -C "${tmp_dir}/stack-${variant}" .
+done
 if [[ ! -e "${repo_bundle_info}" ]]; then
   cat >"${repo_bundle_info}" <<'EOF'
 {
@@ -223,7 +278,10 @@ if [[ ! -e "${repo_bundle_info}" ]]; then
   "bundle_type": "productive-k3s-core",
   "bundle_version": "v0.1.0",
   "cli_entrypoint": "productive-k3s-core.sh",
-  "platform": "any"
+  "platform": "any",
+  "api_compatibility": {
+    "contract": "productive-k3s-cli-bundle-info/v1"
+  }
 }
 EOF
   created_repo_bundle_info=1
@@ -238,6 +296,7 @@ metadata:
 spec:
   type: shell
 EOF
+inject_compatibility_contract "${bad_addon_pkg_dir}/addon.yaml"
 tar -czf "${bad_addon_tgz}" -C "${bad_addon_pkg_dir}" .
 
 mkdir -p "${bad_stack_dir}"
@@ -259,6 +318,7 @@ spec:
     - name: demo-addon
       source: ../outside.tgz
 EOF
+inject_compatibility_contract "${bad_stack_dir}/stack.yaml"
 tar -czf "${bad_stack_tgz}" -C "${bad_stack_dir}" .
 
 mkdir -p \
@@ -391,6 +451,19 @@ spec:
   addons:
     - demo-addon
 EOF
+for manifest in \
+  "${empty_stack_dir}/stack.yaml" \
+  "${bad_mode_stack_dir}/stack.yaml" \
+  "${duplicate_stack_dir}/stack.yaml" \
+  "${missing_bundle_stack_dir}/stack.yaml" \
+  "${missing_stack_name_dir}/stack.yaml" \
+  "${missing_stack_version_dir}/stack.yaml" \
+  "${missing_addon_name_stack_dir}/stack.yaml" \
+  "${bundled_without_sources_dir}/stack.yaml"; do
+  inject_compatibility_contract "${manifest}"
+done
+inject_compatibility_contract "${unsupported_distro_stack_dir}/stack.yaml" unsupported
+inject_compatibility_contract "${duplicate_distro_stack_dir}/stack.yaml" unsupported
 tar -czf "${missing_addon_manifest_tgz}" -C "${missing_stack_manifest_dir}" .
 printf 'not a tgz\n' >"${corrupt_tgz}"
 cat >"${rollback_manifest}" <<'EOF'
@@ -502,6 +575,8 @@ if [[ ${rc} -eq 0 || (${rc} -eq 101 && -f "${COVERAGE_DIR}/shellspec/raw/shellsp
   run_kcov_core_cli_expect cli-addon-install-usage 2 ./productive-k3s-core.sh addon install || rc=$?
   run_kcov_core_cli_expect cli-addon-install-source-rejected 2 ./productive-k3s-core.sh addon install demo-addon || rc=$?
   run_kcov_core_cli_expect cli-addon-validate-bad 4 ./productive-k3s-core.sh addon validate --tgz "${bad_addon_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-missing-revision 4 ./productive-k3s-core.sh addon validate --tgz "${missing_revision_addon_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-mutable-revision 4 ./productive-k3s-core.sh addon validate --tgz "${mutable_revision_addon_tgz}" || rc=$?
   run_kcov_core_cli_expect cli-addon-validate-missing-manifest 4 ./productive-k3s-core.sh addon validate --tgz "${missing_addon_manifest_tgz}" || rc=$?
   run_kcov_core_cli_expect cli-addon-validate-corrupt 4 ./productive-k3s-core.sh addon validate --tgz "${corrupt_tgz}" || rc=$?
   run_kcov_core_cli_expect cli-dev-addon-missing 4 ./productive-k3s-core.sh dev addon validate --source "${tmp_dir}/missing-addon-source" || rc=$?
@@ -529,7 +604,14 @@ if [[ ${rc} -eq 0 || (${rc} -eq 101 && -f "${COVERAGE_DIR}/shellspec/raw/shellsp
   PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-existing-output 2 ./productive-k3s-core.sh stack export --tgz "${stack_tgz}" --output "${tmp_dir}/stack-export-dir" || rc=$?
   PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-missing-tgz 3 ./productive-k3s-core.sh stack export --tgz "${tmp_dir}/missing.tgz" --output "${tmp_dir}/missing-export" || rc=$?
   PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-corrupt-tgz 4 ./productive-k3s-core.sh stack export --tgz "${corrupt_tgz}" --output "${tmp_dir}/corrupt-export" || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-mutable-revision 4 ./productive-k3s-core.sh stack export --tgz "${tmp_dir}/stack-mutable-revision.tgz" --output "${tmp_dir}/mutable-revision-export" || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-missing-digest 4 ./productive-k3s-core.sh stack export --tgz "${tmp_dir}/stack-missing-digest.tgz" --output "${tmp_dir}/missing-digest-export" || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-install-bad-digest 4 ./productive-k3s-core.sh stack install --tgz "${tmp_dir}/stack-bad-digest.tgz" --dry-run || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-install-mismatched-name 4 ./productive-k3s-core.sh stack install --tgz "${tmp_dir}/stack-mismatched-name.tgz" --dry-run || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-install-mismatched-version 4 ./productive-k3s-core.sh stack install --tgz "${tmp_dir}/stack-mismatched-version.tgz" --dry-run || rc=$?
   PRODUCTIVE_K3S_DISTRO=rke2 PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-install-incompatible-distro 4 ./productive-k3s-core.sh stack install --tgz "${stack_tgz}" --dry-run || rc=$?
+  run_kcov_scripts runtime-compatibility ./tests/test-runtime-compatibility.sh || rc=$?
+  run_kcov_scripts core-cli-contract ./tests/test-productive-k3s-core-cli.sh || rc=$?
 fi
 set -e
 

@@ -35,13 +35,14 @@ resolve_stack_source_manifest() {
 
 parse_stack_addon_records_from_manifest() {
   local manifest="$1"
+  local records_key="${2:-addons}"
   local line item key value in_spec=0 in_addons=0 in_record=0
-  local current_name="" current_version="" current_source=""
+  local current_name="" current_version="" current_source="" current_digest=""
 
   __pk3s_flush_stack_addon_record() {
     [[ "${in_record}" == "1" ]] || return 0
-    if [[ -n "${current_name}" || -n "${current_version}" || -n "${current_source}" ]]; then
-      printf 'name=%s\tversion=%s\tsource=%s\n' "${current_name}" "${current_version}" "${current_source}"
+    if [[ -n "${current_name}" || -n "${current_version}" || -n "${current_source}" || -n "${current_digest}" ]]; then
+      printf 'name=%s\tversion=%s\tsource=%s\tdigest=%s\n' "${current_name}" "${current_version}" "${current_source}" "${current_digest}"
     fi
   }
 
@@ -50,7 +51,7 @@ parse_stack_addon_records_from_manifest() {
       in_spec=1
       continue
     fi
-    if [[ "${in_spec}" == "1" && "${line}" == "  addons:" ]]; then
+    if [[ "${in_spec}" == "1" && "${line}" == "  ${records_key}:" ]]; then
       in_addons=1
       continue
     fi
@@ -65,6 +66,7 @@ parse_stack_addon_records_from_manifest() {
       current_name=""
       current_version=""
       current_source=""
+      current_digest=""
       in_record=1
       if [[ "${item}" == name:* ]]; then
         current_name="${item#name:}"
@@ -84,6 +86,7 @@ parse_stack_addon_records_from_manifest() {
         name) current_name="${value}" ;;
         version) current_version="${value}" ;;
         source) current_source="${value}" ;;
+        digest) current_digest="${value}" ;;
       esac
       continue
     fi
@@ -96,6 +99,10 @@ parse_stack_addon_records_from_manifest() {
 
   __pk3s_flush_stack_addon_record
   unset -f __pk3s_flush_stack_addon_record
+}
+
+parse_stack_resolved_addon_records_from_manifest() {
+  parse_stack_addon_records_from_manifest "$1" resolvedAddons
 }
 
 stack_source_addon_records() {

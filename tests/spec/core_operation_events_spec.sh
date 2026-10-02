@@ -13,7 +13,18 @@ kind: Addon
 metadata:
   name: demo-addon
   version: 0.1.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   type: shell
   install:
     script: scripts/install.sh

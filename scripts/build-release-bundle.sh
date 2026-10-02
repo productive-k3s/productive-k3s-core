@@ -33,6 +33,7 @@ INCLUDE_PATHS=(
   "scripts/addon-host-runtime.sh"
   "scripts/runtime-contract.sh"
   "scripts/component-versions.sh"
+  "scripts/compatibility-runtime.sh"
   "scripts/preflight-host.sh"
   "scripts/apply.sh"
   "scripts/export-runtime.sh"

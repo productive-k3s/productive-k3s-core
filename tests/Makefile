@@ -102,6 +102,7 @@ test: test-unit test-lint test-format test-spell
 
 test-unit:
 	bash ./bin/run-shellspec.sh
+	bash ./test-runtime-compatibility.sh
 
 test-lint:
 	bash ./bin/run-shellcheck.sh
