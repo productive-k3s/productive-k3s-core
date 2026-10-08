@@ -32,9 +32,8 @@ BOOTSTRAP_MANIFEST_REMOTE=""
 BOOTSTRAP_MANIFEST_LOCAL=""
 TRANSFER_STAGING_ROOT=""
 TRANSFER_STAGED_REPO=""
-TRANSFER_STAGED_ADDONS_REPO=""
 ADDONS_REPO_DIR=""
-REMOTE_ADDONS_DIR=""
+LOCAL_STACK_TGZ=""
 REMOTE_STACK_TGZ="/tmp/productive-k3s-base-stack.tgz"
 TEMP_ADDONS_CLONE_DIR=""
 REMOTE_COMMAND_STATUS=""
@@ -224,11 +223,12 @@ prepare_addons_repo_dir() {
   local source_ref=""
 
   if ! profile_requires_addons_repo; then
+    ADDONS_REPO_DIR=""
     return 0
   fi
 
   if resolved_dir="$(resolve_addons_repo_dir)"; then
-    printf '%s\n' "${resolved_dir}"
+    ADDONS_REPO_DIR="${resolved_dir}"
     return 0
   fi
 
@@ -242,7 +242,7 @@ prepare_addons_repo_dir() {
     return 1
   fi
 
-  printf '%s\n' "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"
+  ADDONS_REPO_DIR="${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"
 }
 
 apply_platform_defaults() {
@@ -266,9 +266,6 @@ apply_platform_defaults() {
   if [[ -z "$REMOTE_DIR" ]]; then
     REMOTE_DIR="/home/${REMOTE_USER}/${REPO_NAME}"
   fi
-  if [[ -z "$REMOTE_ADDONS_DIR" ]]; then
-    REMOTE_ADDONS_DIR="/home/${REMOTE_USER}/productive-k3s-addons"
-  fi
 }
 
 cleanup() {
@@ -282,7 +279,7 @@ cleanup() {
   fi
   write_artifacts
   TRANSFER_STAGED_REPO=""
-  TRANSFER_STAGED_ADDONS_REPO=""
+  LOCAL_STACK_TGZ=""
   if [[ "$KEEP_VM" == "y" || "$VM_CREATED" != "y" ]]; then
     return
   fi
@@ -495,16 +492,14 @@ launch_vm() {
 }
 
 copy_repo() {
-  local remote_parent remote_addons_parent
+  local remote_parent
   remote_parent="$(dirname "$REMOTE_DIR")"
-  remote_addons_parent="$(dirname "$REMOTE_ADDONS_DIR")"
   log "Copying repository to VM"
-  multipass exec "$VM_NAME" -- bash -lc "sudo mkdir -p '$remote_parent' '$remote_addons_parent' && sudo chown '$REMOTE_USER':'$REMOTE_USER' '$remote_parent' '$remote_addons_parent' && rm -rf '$REMOTE_DIR' '$REMOTE_ADDONS_DIR'"
+  multipass exec "$VM_NAME" -- bash -lc "sudo mkdir -p '$remote_parent' && sudo chown '$REMOTE_USER':'$REMOTE_USER' '$remote_parent' && rm -rf '$REMOTE_DIR'"
   prepare_repo_transfer_dir
   multipass transfer -r "$TRANSFER_STAGED_REPO" "$VM_NAME:$remote_parent"
-  if [[ -n "$ADDONS_REPO_DIR" ]]; then
-    prepare_addons_transfer_dir
-    multipass transfer -r "$TRANSFER_STAGED_ADDONS_REPO" "$VM_NAME:$remote_addons_parent"
+  if [[ -n "$LOCAL_STACK_TGZ" ]]; then
+    multipass transfer "$LOCAL_STACK_TGZ" "$VM_NAME:$REMOTE_STACK_TGZ"
   fi
 }
 
@@ -535,31 +530,31 @@ prepare_repo_transfer_dir() {
     -cf - . | tar -xf - -C "$TRANSFER_STAGED_REPO"
 }
 
-prepare_addons_transfer_dir() {
-  local staged_name
+prepare_stack_artifact() {
   local staging_parent
 
-  staged_name="$(basename "$REMOTE_ADDONS_DIR")"
+  [[ -n "$ADDONS_REPO_DIR" ]] || return 0
+  [[ -x "$ADDONS_REPO_DIR/scripts/package-stack.sh" ]] || {
+    err "Addons stack packager not found: $ADDONS_REPO_DIR/scripts/package-stack.sh"
+    return 1
+  }
+
   if [[ -z "$TRANSFER_STAGING_ROOT" ]]; then
     staging_parent="${HOME}/pk3s-transfer-staging"
     mkdir -p "$staging_parent"
     TRANSFER_STAGING_ROOT="$(mktemp -d "${staging_parent}/staging.XXXXXX")"
   fi
 
-  TRANSFER_STAGED_ADDONS_REPO="${TRANSFER_STAGING_ROOT}/${staged_name}"
-  rm -rf "$TRANSFER_STAGED_ADDONS_REPO"
-  mkdir -p "$TRANSFER_STAGED_ADDONS_REPO"
-
-  tar -C "$ADDONS_REPO_DIR" \
-    --exclude=.git \
-    --exclude=.codex \
-    --exclude=dist \
-    --exclude=docs/.venv \
-    --exclude=docs/site \
-    --exclude=runs \
-    --exclude=tests/coverage \
-    --exclude=test-artifacts \
-    -cf - . | tar -xf - -C "$TRANSFER_STAGED_ADDONS_REPO"
+  LOCAL_STACK_TGZ="${TRANSFER_STAGING_ROOT}/productive-k3s-base-stack.tgz"
+  rm -f "$LOCAL_STACK_TGZ"
+  log "Packaging base stack from immutable Addons checkout"
+  bash "$ADDONS_REPO_DIR/scripts/package-stack.sh" \
+    --stack base \
+    --output "$LOCAL_STACK_TGZ"
+  [[ -s "$LOCAL_STACK_TGZ" ]] || {
+    err "Base stack packager did not create a non-empty artifact"
+    return 1
+  }
 }
 
 run_in_vm() {
@@ -643,9 +638,6 @@ bootstrap_engine_env_prefix() {
   fi
   if [[ -n "${PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS:-}" ]]; then
     prefix+="PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=$(printf '%q' "${PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS}") "
-  fi
-  if [[ -n "$ADDONS_REPO_DIR" ]]; then
-    prefix+="PRODUCTIVE_K3S_ADDONS_REPO_DIR=$(printf '%q' "${REMOTE_ADDONS_DIR}") "
   fi
   printf '%s' "${prefix}"
 }
@@ -987,12 +979,6 @@ run_full() {
     export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS=true
   fi
   run_core_cli_with_answers "apply" "" "$(core_answers)"
-  run_vm_command_with_status \
-    "cd '$REMOTE_ADDONS_DIR' && bash ./scripts/package-stack.sh --stack base --output '$REMOTE_STACK_TGZ'" \
-    300 \
-    "Timed out building the packaged base stack." \
-    "Packaged base stack build exited with status" \
-    "package-base-stack"
   run_stack_install_with_retries "${REMOTE_STACK_TGZ}" "$(full_answers)" 1800 30
   if [[ -n "${previous_auto_approve}" ]]; then
     export PRODUCTIVE_K3S_AUTO_APPROVE_PREFLIGHT_WARNINGS="${previous_auto_approve}"
@@ -1054,9 +1040,10 @@ run_full_rollback() {
 main() {
   parse_args "$@"
   need_cmd multipass || { err "multipass is required"; exit 1; }
-  ADDONS_REPO_DIR="$(prepare_addons_repo_dir || true)"
   ensure_artifacts_dir
   trap cleanup EXIT
+  prepare_addons_repo_dir
+  prepare_stack_artifact
 
   launch_vm
   copy_repo
