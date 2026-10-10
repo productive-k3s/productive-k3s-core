@@ -72,12 +72,17 @@ chmod +x "$HOME/.local/bin/shellspec"
 python3 -m pip install --user codespell
 ```
 
-`kcov` is the one exception on this machine: building it locally failed because Ubuntu `22.04` is missing `libelf` and `elfutils` development headers. On Ubuntu, install it with root privileges when you want shell coverage:
+`kcov` is a development-only coverage dependency. Install the repository's
+checksum-verified version on Ubuntu when you want shell coverage:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y kcov libelf-dev libdw-dev
+bash tests/bin/install-kcov.sh
 ```
+
+The script builds `kcov 43` from its immutable source archive after verifying
+its SHA-256 identity. CI uses Python `3.11.17`; CMake and signed Ubuntu build
+libraries are runner prerequisites. None of these tools are required by the
+Core runtime or installed on managed cluster nodes.
 
 Examples:
 

@@ -42,6 +42,18 @@ agregado porque tienen tests de contrato separados.
 El baseline local actual es `85.18%` (`2179/2558` líneas ejecutables). Si la
 cobertura de runtime baja del piso, el target termina con exit code no cero.
 
+`kcov` es una dependencia exclusiva de desarrollo. En Ubuntu se instala la
+versión fijada y verificada por checksum del repositorio con:
+
+```bash
+bash tests/bin/install-kcov.sh
+```
+
+El script compila `kcov 43` desde su archivo fuente inmutable. CI usa Python
+`3.11.17`; CMake y las bibliotecas firmadas de Ubuntu son prerrequisitos del
+runner. Ninguna de estas herramientas es un requisito del runtime de Core ni
+se instala en los nodos administrados.
+
 ## Qué hace cada target
 
 ### `make test-clean-artifacts`

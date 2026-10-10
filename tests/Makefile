@@ -105,6 +105,7 @@ test: test-unit test-lint test-format test-spell
 test-unit:
 	bash ./bin/run-shellspec.sh
 	bash ./test-runtime-compatibility.sh
+	bash ./test-kcov-installer-contract.sh
 
 test-lint:
 	bash ./bin/run-shellcheck.sh

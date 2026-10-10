@@ -226,7 +226,10 @@ See the linked site pages above for details, platform notes, and validation expe
 
 The machine-readable `materials.lock.yaml` declares the exact K3S, RKE2,
 Helm, and checksum-verified k3sup versions used by Core. The bootstrap flow and
-`bom --json` read the same managed version definitions.
+`bom --json` read the same managed version definitions. It also inventories
+the exact Python and checksum-verified `kcov` versions used by CI with
+`scope: development` and `distribution: excluded`; those tools are not Core
+runtime requirements and are not installed on managed nodes.
 
 ## License
 

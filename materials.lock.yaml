@@ -49,3 +49,43 @@ spec:
       updateSource:
         type: github-release
         repository: alexellis/k3sup
+    - id: python-ci
+      type: binary
+      name: python
+      version: 3.11.17
+      source: https://github.com/actions/python-versions
+      pinPolicy: exact-toolchain
+      required: true
+      scope: development
+      distribution: excluded
+      usedBy:
+        - .github/workflows/docs.yml
+        - .github/workflows/hosted-validation.yml
+    - id: kcov
+      type: binary
+      name: kcov
+      version: "43"
+      source: https://github.com/SimonKagstrom/kcov
+      pinPolicy: exact-checksum
+      required: true
+      scope: development
+      distribution: excluded
+      checksums:
+        source-archive: sha256:4cbba86af11f72de0c7514e09d59c7927ed25df7cebdad087f6d3623213b95bf
+      usedBy:
+        - tests/bin/install-kcov.sh
+        - tests/bin/run-kcov.sh
+      updateSource:
+        type: github-release
+        repository: SimonKagstrom/kcov
+  requirements:
+    - id: kcov-build-host
+      type: os-image
+      name: ubuntu
+      version: "24.04"
+      source: https://github.com/actions/runner-images
+      pinPolicy: release-series
+      required: true
+      scope: development
+      distribution: excluded
+      note: Provides CMake, compiler, and signed Ubuntu build-library packages for CI only.
