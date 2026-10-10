@@ -43,13 +43,43 @@ run_kcov_core_cli() {
 run_kcov_core_cli_expect() {
   local output_dir="$1"
   local expected_rc="$2"
+  local command_output="${tmp_dir}/${output_dir}.log"
   shift 2
-  run_kcov_core_cli "${output_dir}" "$@"
+  run_kcov_core_cli "${output_dir}" "$@" >"${command_output}" 2>&1
   local actual_rc=$?
   if [[ "${actual_rc}" -ne "${expected_rc}" ]]; then
+    cat "${command_output}" >&2
     printf 'coverage command %s returned %s, expected %s\n' "${output_dir}" "${actual_rc}" "${expected_rc}" >&2
     return 1
   fi
+  rm -f "${command_output}"
+}
+
+run_kcov_core_cli_concise() {
+  local output_dir="$1"
+  local command_output="${tmp_dir}/${output_dir}.log"
+  shift
+  run_kcov_core_cli "${output_dir}" "$@" >"${command_output}" 2>&1
+  local actual_rc=$?
+  if [[ "${actual_rc}" -ne 0 ]]; then
+    cat "${command_output}" >&2
+    return "${actual_rc}"
+  fi
+  rm -f "${command_output}"
+}
+
+run_kcov_scripts_concise() {
+  local output_dir="$1"
+  local command_output="${tmp_dir}/${output_dir}.log"
+  shift
+  run_kcov_scripts "${output_dir}" "$@" >"${command_output}" 2>&1
+  local actual_rc=$?
+  if [[ "${actual_rc}" -ne 0 ]]; then
+    cat "${command_output}" >&2
+    return "${actual_rc}"
+  fi
+  grep '^\[PASS\]' "${command_output}" || true
+  rm -f "${command_output}"
 }
 
 tmp_dir="$(mktemp -d)"
@@ -97,6 +127,9 @@ addon_pkg_dir="${tmp_dir}/addon/pkg"
 addon_tgz="${tmp_dir}/demo-addon.tgz"
 missing_revision_addon_tgz="${tmp_dir}/missing-revision-addon.tgz"
 mutable_revision_addon_tgz="${tmp_dir}/mutable-revision-addon.tgz"
+missing_name_addon_tgz="${tmp_dir}/missing-name-addon.tgz"
+missing_type_addon_tgz="${tmp_dir}/missing-type-addon.tgz"
+missing_install_script_addon_tgz="${tmp_dir}/missing-install-script-addon.tgz"
 addon_install_marker="${tmp_dir}/addon-installed.txt"
 private_addon_pkg_dir="${tmp_dir}/private-addon/pkg"
 private_addon_tgz="${tmp_dir}/private-addon.tgz"
@@ -155,6 +188,15 @@ tar -czf "${missing_revision_addon_tgz}" -C "${tmp_dir}/missing-revision-addon" 
 cp -R "${addon_pkg_dir}" "${tmp_dir}/mutable-revision-addon"
 sed -i 's/^  sourceRevision:.*/  sourceRevision: development/' "${tmp_dir}/mutable-revision-addon/addon.yaml"
 tar -czf "${mutable_revision_addon_tgz}" -C "${tmp_dir}/mutable-revision-addon" .
+for variant in missing-name missing-type missing-install-script; do
+  cp -R "${addon_pkg_dir}" "${tmp_dir}/${variant}-addon"
+done
+sed -i '/^  name: demo-addon$/d' "${tmp_dir}/missing-name-addon/addon.yaml"
+sed -i '/^  type: shell$/d' "${tmp_dir}/missing-type-addon/addon.yaml"
+sed -i '/^    script: scripts\/install.sh$/d' "${tmp_dir}/missing-install-script-addon/addon.yaml"
+tar -czf "${missing_name_addon_tgz}" -C "${tmp_dir}/missing-name-addon" .
+tar -czf "${missing_type_addon_tgz}" -C "${tmp_dir}/missing-type-addon" .
+tar -czf "${missing_install_script_addon_tgz}" -C "${tmp_dir}/missing-install-script-addon" .
 
 mkdir -p "${private_addon_pkg_dir}/scripts"
 cat >"${private_addon_pkg_dir}/addon.yaml" <<'EOF'
@@ -259,15 +301,18 @@ EOF
 inject_compatibility_contract "${stack_pkg_dir}/stack.yaml" k3s
 cp "${stack_pkg_dir}/stack.yaml" "${addons_repo}/stacks/base/stack.yaml"
 tar -czf "${stack_tgz}" -C "${stack_pkg_dir}" .
-for variant in mutable-revision missing-digest bad-digest mismatched-name mismatched-version; do
+for variant in mutable-revision missing-digest missing-addon-version missing-addon-source bad-digest mismatched-name mismatched-version; do
   cp -R "${stack_pkg_dir}" "${tmp_dir}/stack-${variant}"
 done
 sed -i 's/^  sourceRevision:.*/  sourceRevision: development/' "${tmp_dir}/stack-mutable-revision/stack.yaml"
 sed -i '/^      digest:/d' "${tmp_dir}/stack-missing-digest/stack.yaml"
+sed -i '/^      version: 0.1.0$/d' "${tmp_dir}/stack-missing-addon-version/stack.yaml"
+sed -i '/^      source: addons\/demo-addon.tgz$/d' "${tmp_dir}/stack-missing-addon-source/stack.yaml"
+sed -i 's/^    mode: bundled$/    mode: catalog/' "${tmp_dir}/stack-missing-addon-source/stack.yaml"
 sed -i 's/^      digest:.*/      digest: sha256:0000000000000000000000000000000000000000000000000000000000000000/' "${tmp_dir}/stack-bad-digest/stack.yaml"
 sed -i 's/^    - name: demo-addon/    - name: other-addon/' "${tmp_dir}/stack-mismatched-name/stack.yaml"
 sed -i 's/^      version: 0.1.0/      version: 0.2.0/' "${tmp_dir}/stack-mismatched-version/stack.yaml"
-for variant in mutable-revision missing-digest bad-digest mismatched-name mismatched-version; do
+for variant in mutable-revision missing-digest missing-addon-version missing-addon-source bad-digest mismatched-name mismatched-version; do
   tar -czf "${tmp_dir}/stack-${variant}.tgz" -C "${tmp_dir}/stack-${variant}" .
 done
 if [[ ! -e "${repo_bundle_info}" ]]; then
@@ -527,40 +572,43 @@ EOF
 chmod +x "${fake_bin}/systemctl" "${fake_bin}/sudo" "${fake_bin}/k3s"
 
 set +e
-run_kcov_scripts shellspec shellspec tests/spec
+shellspec_output="${tmp_dir}/shellspec.log"
+run_kcov_scripts shellspec shellspec tests/spec >"${shellspec_output}" 2>&1
 rc=$?
 if [[ ${rc} -eq 0 || (${rc} -eq 101 && -f "${COVERAGE_DIR}/shellspec/raw/shellspec/index.html") ]]; then
+  grep -E '^(Running:|Finished in|[0-9]+ examples)' "${shellspec_output}" || true
+  rm -f "${shellspec_output}"
   rc=0
-  run_kcov_core_cli cli-help ./productive-k3s-core.sh help || rc=$?
-  run_kcov_core_cli cli-bundle-info ./productive-k3s-core.sh bundle info --json || rc=$?
-  run_kcov_core_cli cli-bom ./productive-k3s-core.sh bom --json || rc=$?
-  run_kcov_core_cli cli-apply-help ./productive-k3s-core.sh apply --help || rc=$?
-  TELEMETRY_ENABLED=true TELEMETRY_ENDPOINT='' run_kcov_core_cli cli-apply-help-telemetry ./productive-k3s-core.sh apply --help || rc=$?
-  TELEMETRY_ENABLED=false run_kcov_core_cli cli-legacy-apply-option ./productive-k3s-core.sh --dry-run || rc=$?
-  run_kcov_core_cli cli-preflight-help ./productive-k3s-core.sh preflight --help || rc=$?
-  PRODUCTIVE_K3S_DISTRO=unsupported run_kcov_core_cli cli-preflight-invalid-runtime ./productive-k3s-core.sh preflight || rc=$?
-  run_kcov_core_cli cli-validate-help ./productive-k3s-core.sh validate --help || rc=$?
+  run_kcov_core_cli_concise cli-help ./productive-k3s-core.sh help || rc=$?
+  run_kcov_core_cli_concise cli-bundle-info ./productive-k3s-core.sh bundle info --json || rc=$?
+  run_kcov_core_cli_concise cli-bom ./productive-k3s-core.sh bom --json || rc=$?
+  run_kcov_core_cli_concise cli-apply-help ./productive-k3s-core.sh apply --help || rc=$?
+  TELEMETRY_ENABLED=true TELEMETRY_ENDPOINT='' run_kcov_core_cli_concise cli-apply-help-telemetry ./productive-k3s-core.sh apply --help || rc=$?
+  TELEMETRY_ENABLED=false run_kcov_core_cli_concise cli-legacy-apply-option ./productive-k3s-core.sh --dry-run || rc=$?
+  run_kcov_core_cli_concise cli-preflight-help ./productive-k3s-core.sh preflight --help || rc=$?
+  PRODUCTIVE_K3S_DISTRO=unsupported run_kcov_core_cli_concise cli-preflight-invalid-runtime ./productive-k3s-core.sh preflight || rc=$?
+  run_kcov_core_cli_concise cli-validate-help ./productive-k3s-core.sh validate --help || rc=$?
   PRODUCTIVE_K3S_DISTRO=unsupported run_kcov_core_cli_expect cli-validate-json-output-invalid-runtime 1 ./productive-k3s-core.sh validate --json-output || rc=$?
-  run_kcov_core_cli cli-addon-validate ./productive-k3s-core.sh addon validate --tgz "${addon_tgz}" || rc=$?
-  KUBECONFIG="${fake_kubeconfig}" HOME="${fake_home}" run_kcov_core_cli cli-addon-install ./productive-k3s-core.sh addon install --tgz "${addon_tgz}" || rc=$?
-  KUBECONFIG="${fake_kubeconfig}" HOME="${fake_home}" PATH="${fake_bin}:${PATH}" run_kcov_core_cli cli-addon-install-public ./productive-k3s-core.sh addon install --tgz "${addon_tgz}" --public-host demo.k3s.lab.internal || rc=$?
+  run_kcov_core_cli_concise cli-addon-validate ./productive-k3s-core.sh addon validate --tgz "${addon_tgz}" || rc=$?
+  KUBECONFIG="${fake_kubeconfig}" HOME="${fake_home}" run_kcov_core_cli_concise cli-addon-install ./productive-k3s-core.sh addon install --tgz "${addon_tgz}" || rc=$?
+  KUBECONFIG="${fake_kubeconfig}" HOME="${fake_home}" PATH="${fake_bin}:${PATH}" run_kcov_core_cli_concise cli-addon-install-public ./productive-k3s-core.sh addon install --tgz "${addon_tgz}" --public-host demo.k3s.lab.internal || rc=$?
   KUBECONFIG="${fake_kubeconfig}" HOME="${fake_home}" PATH="${fake_bin}:${PATH}" run_kcov_core_cli_expect cli-addon-install-public-invalid-host 4 ./productive-k3s-core.sh addon install --tgz "${addon_tgz}" --public-host "bad host" || rc=$?
   KUBECONFIG="${fake_kubeconfig}" HOME="${fake_home}" PATH="${fake_bin}:${PATH}" run_kcov_core_cli_expect cli-addon-install-public-unsupported 4 ./productive-k3s-core.sh addon install --tgz "${private_addon_tgz}" --public-host demo.k3s.lab.internal || rc=$?
   KUBECONFIG="${fake_kubeconfig}" HOME="${fake_home}" run_kcov_core_cli_expect cli-addon-install-missing-script 4 ./productive-k3s-core.sh addon install --tgz "${missing_installer_addon_tgz}" || rc=$?
   KUBECONFIG="${fake_kubeconfig}" HOME="${fake_home}" run_kcov_core_cli_expect cli-addon-install-failing-script 7 ./productive-k3s-core.sh addon install --tgz "${failing_installer_addon_tgz}" || rc=$?
   HOME="${tmp_dir}/no-kube-home" run_kcov_core_cli_expect cli-addon-install-no-kubeconfig 4 ./productive-k3s-core.sh addon install --tgz "${addon_tgz}" || rc=$?
   TELEMETRY_ENABLED=true TELEMETRY_ENDPOINT='' HOME="${tmp_dir}/no-kube-home" run_kcov_core_cli_expect cli-addon-install-no-kubeconfig-telemetry 4 ./productive-k3s-core.sh addon install --tgz "${addon_tgz}" || rc=$?
-  run_kcov_core_cli cli-dev-stack-validate ./productive-k3s-core.sh dev stack validate --source "${stack_pkg_dir}" || rc=$?
-  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli cli-stack-export-dir ./productive-k3s-core.sh stack export --tgz "${stack_tgz}" --output "${tmp_dir}/stack-export-dir" --dry-run || rc=$?
-  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli cli-stack-export-tgz ./productive-k3s-core.sh stack export --tgz "${stack_tgz}" --output "${tmp_dir}/stack-export.tgz" --dry-run || rc=$?
-  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli cli-stack-install-dry-run ./productive-k3s-core.sh stack install --tgz "${stack_tgz}" --dry-run || rc=$?
-  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli cli-stack-install-dry-run-semver ./productive-k3s-core.sh stack install --tgz "${stack_tgz}" --dry-run || rc=$?
-  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts cli-stack-validate-artifact ./productive-k3s-core.sh stack validate --tgz "${stack_tgz}" --json || rc=$?
-  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts cli-stack-cleanup-plan-artifact ./productive-k3s-core.sh stack cleanup --tgz "${stack_tgz}" --plan || rc=$?
-  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts cli-stack-cleanup-apply-artifact ./productive-k3s-core.sh stack cleanup --tgz "${stack_tgz}" --apply --yes --confirm-clean || rc=$?
-  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_SYSTEM_KUBECONFIG_PATH="${tmp_dir}/missing-system-kubeconfig" TELEMETRY_ENABLED=false run_kcov_scripts cli-stack-backup-artifact ./productive-k3s-core.sh stack backup --tgz "${stack_tgz}" "${backup_output}" || rc=$?
-  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts cli-stack-rollback-plan-artifact ./productive-k3s-core.sh stack rollback --tgz "${stack_tgz}" --to "${rollback_manifest}" --plan || rc=$?
-  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts cli-stack-rollback-apply-artifact ./productive-k3s-core.sh stack rollback --tgz "${stack_tgz}" --to "${rollback_manifest}" --apply --yes || rc=$?
+  run_kcov_core_cli_concise cli-dev-stack-validate ./productive-k3s-core.sh dev stack validate --source "${stack_pkg_dir}" || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_concise cli-stack-export-dir ./productive-k3s-core.sh stack export --tgz "${stack_tgz}" --output "${tmp_dir}/stack-export-dir" --dry-run || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_concise cli-stack-export-tgz ./productive-k3s-core.sh stack export --tgz "${stack_tgz}" --output "${tmp_dir}/stack-export.tgz" --dry-run || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_concise cli-stack-install-dry-run ./productive-k3s-core.sh stack install --tgz "${stack_tgz}" --dry-run || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_concise cli-stack-install-dry-run-semver ./productive-k3s-core.sh stack install --tgz "${stack_tgz}" --dry-run || rc=$?
+  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts_concise cli-stack-validate-artifact ./productive-k3s-core.sh stack validate --tgz "${stack_tgz}" --json || rc=$?
+  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts_concise cli-stack-cleanup-plan-artifact ./productive-k3s-core.sh stack cleanup --tgz "${stack_tgz}" --plan || rc=$?
+  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts_concise cli-stack-cleanup-apply-artifact ./productive-k3s-core.sh stack cleanup --tgz "${stack_tgz}" --apply --yes --confirm-clean || rc=$?
+  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_SYSTEM_KUBECONFIG_PATH="${tmp_dir}/missing-system-kubeconfig" TELEMETRY_ENABLED=false run_kcov_scripts_concise cli-stack-backup-artifact ./productive-k3s-core.sh stack backup --tgz "${stack_tgz}" "${backup_output}" || rc=$?
+  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts_concise cli-stack-rollback-plan-artifact ./productive-k3s-core.sh stack rollback --tgz "${stack_tgz}" --to "${rollback_manifest}" --plan || rc=$?
+  PATH="${fake_bin}:${PATH}" PRODUCTIVE_K3S_DISTRO=k3s TELEMETRY_ENABLED=false run_kcov_scripts_concise cli-stack-rollback-apply-artifact ./productive-k3s-core.sh stack rollback --tgz "${stack_tgz}" --to "${rollback_manifest}" --apply --yes || rc=$?
   PRODUCTIVE_K3S_ADDONS_REPO_DIR="${addons_repo}" TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-install-source-rejected 2 ./productive-k3s-core.sh stack install base --dry-run || rc=$?
   PRODUCTIVE_K3S_ADDONS_REPO_DIR="${addons_repo}" run_kcov_core_cli_expect cli-stack-cleanup-source-rejected 2 ./productive-k3s-core.sh stack cleanup base --plan || rc=$?
   PRODUCTIVE_K3S_ADDONS_REPO_DIR="${addons_repo}" run_kcov_core_cli_expect cli-stack-validate-source-rejected 2 ./productive-k3s-core.sh stack validate base --json || rc=$?
@@ -574,7 +622,12 @@ if [[ ${rc} -eq 0 || (${rc} -eq 101 && -f "${COVERAGE_DIR}/shellspec/raw/shellsp
   run_kcov_core_cli_expect cli-addon-usage 2 ./productive-k3s-core.sh addon || rc=$?
   run_kcov_core_cli_expect cli-addon-install-usage 2 ./productive-k3s-core.sh addon install || rc=$?
   run_kcov_core_cli_expect cli-addon-install-source-rejected 2 ./productive-k3s-core.sh addon install demo-addon || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-unexpected-argument 2 ./productive-k3s-core.sh addon validate unexpected || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-missing-tgz 2 ./productive-k3s-core.sh addon validate || rc=$?
   run_kcov_core_cli_expect cli-addon-validate-bad 4 ./productive-k3s-core.sh addon validate --tgz "${bad_addon_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-missing-name 4 ./productive-k3s-core.sh addon validate --tgz "${missing_name_addon_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-missing-type 4 ./productive-k3s-core.sh addon validate --tgz "${missing_type_addon_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-missing-install-script 4 ./productive-k3s-core.sh addon validate --tgz "${missing_install_script_addon_tgz}" || rc=$?
   run_kcov_core_cli_expect cli-addon-validate-missing-revision 4 ./productive-k3s-core.sh addon validate --tgz "${missing_revision_addon_tgz}" || rc=$?
   run_kcov_core_cli_expect cli-addon-validate-mutable-revision 4 ./productive-k3s-core.sh addon validate --tgz "${mutable_revision_addon_tgz}" || rc=$?
   run_kcov_core_cli_expect cli-addon-validate-missing-manifest 4 ./productive-k3s-core.sh addon validate --tgz "${missing_addon_manifest_tgz}" || rc=$?
@@ -606,12 +659,17 @@ if [[ ${rc} -eq 0 || (${rc} -eq 101 && -f "${COVERAGE_DIR}/shellspec/raw/shellsp
   PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-corrupt-tgz 4 ./productive-k3s-core.sh stack export --tgz "${corrupt_tgz}" --output "${tmp_dir}/corrupt-export" || rc=$?
   PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-mutable-revision 4 ./productive-k3s-core.sh stack export --tgz "${tmp_dir}/stack-mutable-revision.tgz" --output "${tmp_dir}/mutable-revision-export" || rc=$?
   PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-missing-digest 4 ./productive-k3s-core.sh stack export --tgz "${tmp_dir}/stack-missing-digest.tgz" --output "${tmp_dir}/missing-digest-export" || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-missing-addon-version 4 ./productive-k3s-core.sh stack export --tgz "${tmp_dir}/stack-missing-addon-version.tgz" --output "${tmp_dir}/missing-addon-version-export" || rc=$?
+  PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-export-missing-addon-source 4 ./productive-k3s-core.sh stack export --tgz "${tmp_dir}/stack-missing-addon-source.tgz" --output "${tmp_dir}/missing-addon-source-export" || rc=$?
   PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-install-bad-digest 4 ./productive-k3s-core.sh stack install --tgz "${tmp_dir}/stack-bad-digest.tgz" --dry-run || rc=$?
   PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-install-mismatched-name 4 ./productive-k3s-core.sh stack install --tgz "${tmp_dir}/stack-mismatched-name.tgz" --dry-run || rc=$?
   PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-install-mismatched-version 4 ./productive-k3s-core.sh stack install --tgz "${tmp_dir}/stack-mismatched-version.tgz" --dry-run || rc=$?
   PRODUCTIVE_K3S_DISTRO=rke2 PRODUCTIVE_K3S_ENGINE=native TELEMETRY_ENABLED=false run_kcov_core_cli_expect cli-stack-install-incompatible-distro 4 ./productive-k3s-core.sh stack install --tgz "${stack_tgz}" --dry-run || rc=$?
-  run_kcov_scripts runtime-compatibility ./tests/test-runtime-compatibility.sh || rc=$?
-  run_kcov_scripts core-cli-contract ./tests/test-productive-k3s-core-cli.sh || rc=$?
+  run_kcov_scripts_concise runtime-compatibility ./tests/test-runtime-compatibility.sh || rc=$?
+  run_kcov_scripts_concise core-cli-contract ./tests/test-productive-k3s-core-cli.sh || rc=$?
+fi
+if [[ ${rc} -ne 0 && -f "${shellspec_output}" ]]; then
+  cat "${shellspec_output}" >&2
 fi
 set -e
 
