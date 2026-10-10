@@ -85,11 +85,13 @@ Describe 'core export runtime helpers'
       test -x "${bundle_root}/productive-k3s-core.sh"
       test -x "${bundle_root}/scripts/productive-k3s-core.sh"
       test -f "${bundle_root}/scripts/apply.sh"
+      test -f "${bundle_root}/scripts/compatibility-runtime.sh"
       test -f "${bundle_root}/scripts/export-templates/stack/README.md"
-      find "${bundle_root}" -maxdepth 4 -type f | sed "s#${bundle_root}/##" | sort | grep -E "^(productive-k3s-core.sh|scripts/(apply|export-runtime|validate)\\.sh|scripts/export-templates/stack/README.md)$"'
+      find "${bundle_root}" -maxdepth 4 -type f | sed "s#${bundle_root}/##" | sort | grep -E "^(productive-k3s-core.sh|scripts/(apply|compatibility-runtime|export-runtime|validate)\\.sh|scripts/export-templates/stack/README.md)$"'
     The status should equal 0
     The output should include 'productive-k3s-core.sh'
     The output should include 'scripts/apply.sh'
+    The output should include 'scripts/compatibility-runtime.sh'
     The output should include 'scripts/export-runtime.sh'
     The output should include 'scripts/export-templates/stack/README.md'
   End

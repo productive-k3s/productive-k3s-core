@@ -135,6 +135,12 @@ To inspect the CLI/runtime bill of materials for a local checkout or a published
 ./productive-k3s-core.sh bom --json
 ```
 
+Packaged add-ons and stacks must declare the `artifact/v1` compatibility
+contract, an explicit Core version window, supported Kubernetes distributions,
+and an immutable source revision. Published stacks additionally lock every
+nested add-on under `spec.resolvedAddons`. Core validates all requirements and
+digests before invoking any package installer.
+
 The versions pinned for the managed stack components live in [scripts/component-versions.sh](./scripts/component-versions.sh). The bootstrap flow and the BOM both read from that same file so the reported versions match what the installer actually selects.
 
 Telemetry consent is only relevant for mutating public CLI flows such as `apply` and `addon install`. Read-only commands like `help`, `bundle info --json`, and `bom --json` do not prompt for telemetry and do not emit command-level telemetry events.
@@ -215,6 +221,15 @@ If you also want full repository validation coverage, add:
 - `jq`
 
 See the linked site pages above for details, platform notes, and validation expectations.
+
+## Software Materials
+
+The machine-readable `materials.lock.yaml` declares the exact K3S, RKE2,
+Helm, and checksum-verified k3sup versions used by Core. The bootstrap flow and
+`bom --json` read the same managed version definitions. It also inventories
+the exact Python and checksum-verified `kcov` versions used by CI with
+`scope: development` and `distribution: excluded`; those tools are not Core
+runtime requirements and are not installed on managed nodes.
 
 ## License
 

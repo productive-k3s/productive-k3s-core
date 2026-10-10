@@ -70,6 +70,8 @@ printf '%s\n' "$local_bom" | jq -e '
   (.requirements.required_commands | any(.name == "sha256sum" and .min_version == "8.32")) and
   (.requirements.optional_commands | any(.name == "helm" and .min_version == "3.21.0")) and
   .components.versions.k3s == "v1.35.5+k3s1" and
+  .components.versions.rke2 == "v1.35.5+rke2r1" and
+  .components.versions.k3sup == "0.13.13" and
   .components.versions.helm == "v3.21.0" and
   (.components.versions | has("cert-manager") | not) and
   (.components.versions | has("longhorn") | not) and
@@ -94,6 +96,7 @@ bundle_root="${extract_dir}/productive-k3s-core-HEAD"
 [[ -x "${bundle_root}/productive-k3s-core.sh" ]] || fail "bundle root entrypoint is missing"
 for required_path in \
   "productive-k3s-core-HEAD/bundle-info.json" \
+  "productive-k3s-core-HEAD/materials.lock.yaml" \
   "productive-k3s-core-HEAD/README.md" \
   "productive-k3s-core-HEAD/LICENSE" \
   "productive-k3s-core-HEAD/scripts/productive-k3s-core.sh" \
@@ -101,6 +104,7 @@ for required_path in \
   "productive-k3s-core-HEAD/scripts/addon-host-runtime.sh" \
   "productive-k3s-core-HEAD/scripts/runtime-contract.sh" \
   "productive-k3s-core-HEAD/scripts/component-versions.sh" \
+  "productive-k3s-core-HEAD/scripts/compatibility-runtime.sh" \
   "productive-k3s-core-HEAD/scripts/preflight-host.sh" \
   "productive-k3s-core-HEAD/scripts/apply.sh" \
   "productive-k3s-core-HEAD/scripts/backup.sh" \
@@ -164,7 +168,18 @@ kind: Addon
 metadata:
   name: demo-addon
   version: 0.1.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   type: shell
   install:
     script: scripts/install.sh
@@ -208,6 +223,7 @@ exit 1
 EOF
 chmod +x "${ADDON_BIN_DIR}/kubectl"
 tar -czf "${ADDON_ARCHIVE}" -C "${ADDON_PKG_DIR}" .
+ADDON_ARCHIVE_DIGEST="$(sha256sum "${ADDON_ARCHIVE}" | awk '{print $1}')"
 
 addon_validate_output="$(cd "$REPO_DIR" && ./productive-k3s-core.sh addon validate --tgz "${ADDON_ARCHIVE}")"
 printf '%s\n' "$addon_validate_output" | grep -q "Addon package validation passed" || fail "addon package validation did not pass"
@@ -226,7 +242,18 @@ kind: Stack
 metadata:
   name: base
   version: 0.1.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   addons:
     - cert-manager
     - longhorn
@@ -244,7 +271,18 @@ kind: Stack
 metadata:
   name: observability
   version: 1.0.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   resolution:
     mode: bundled
   runtime:
@@ -260,8 +298,11 @@ spec:
     - name: prometheus
       version: 1.2.0
       source: addons/prometheus.tgz
+      digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     - name: grafana
       version: 2.1.0
+      source: addons/grafana.tgz
+      digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   wiring:
     values:
       - values/prometheus.yaml
@@ -270,7 +311,7 @@ structured_stack_validate_output="$(cd "$REPO_DIR" && ./productive-k3s-core.sh d
 printf '%s\n' "$structured_stack_validate_output" | grep -q "Stack source validation passed" || fail "structured stack source validation did not pass"
 printf '%s\n' "$structured_stack_validate_output" | grep -q "observability" || fail "structured stack validation did not report stack metadata"
 printf '%s\n' "$structured_stack_validate_output" | grep -q "Stack resolution mode: bundled" || fail "structured stack validation did not report the resolution mode"
-printf '%s\n' "$structured_stack_validate_output" | grep -q "Minimum core version: v0.1.0" || fail "structured stack validation did not report the core compatibility floor"
+printf '%s\n' "$structured_stack_validate_output" | grep -q "Minimum core version: 0.9.6" || fail "structured stack validation did not report the core compatibility floor"
 printf '%s\n' "$structured_stack_validate_output" | grep -q "Compatible distros: k3s, rke2\|Compatible distros: k3s,rke2" || fail "structured stack validation did not report compatible distros"
 pass "stack source validation accepts structured addon entries"
 
@@ -280,7 +321,18 @@ kind: Stack
 metadata:
   name: broken
   version: 0.1.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   addons: []
 EOF
 if (cd "$REPO_DIR" && ./productive-k3s-core.sh dev stack validate --source "${STACK_BAD_SOURCE_DIR}" >/tmp/productive-k3s-core-stack-validate.out 2>&1); then
@@ -295,7 +347,18 @@ kind: Stack
 metadata:
   name: broken-mode
   version: 0.1.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   resolution:
     mode: archive
   addons:
@@ -313,12 +376,27 @@ kind: Stack
 metadata:
   name: broken-duplicate
   version: 0.1.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   addons:
     - name: registry
+      version: 0.1.0
       source: addons/registry.tgz
+      digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     - name: registry
+      version: 0.1.0
       source: addons/registry-copy.tgz
+      digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 EOF
 if (cd "$REPO_DIR" && ./productive-k3s-core.sh dev stack validate --source "${STACK_BAD_DUPLICATE_SOURCE_DIR}" >/tmp/productive-k3s-core-stack-validate-duplicate.out 2>&1); then
   fail "stack source validation unexpectedly succeeded for duplicate addon names"
@@ -352,7 +430,18 @@ kind: Addon
 metadata:
   name: demo-addon-no-public
   version: 0.1.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   type: shell
   install:
     script: scripts/install.sh
@@ -388,6 +477,7 @@ cp "${REPO_DIR}/LICENSE" "${STACK_DISPATCH_DIR}/"
 cp "${REPO_DIR}/README.md" "${STACK_DISPATCH_DIR}/"
 cp "${REPO_DIR}/scripts/productive-k3s-core.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/component-versions.sh" "${STACK_DISPATCH_DIR}/scripts/"
+cp "${REPO_DIR}/scripts/compatibility-runtime.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/addons-runtime.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/addon-host-runtime.sh" "${STACK_DISPATCH_DIR}/scripts/"
 cp "${REPO_DIR}/scripts/runtime-contract.sh" "${STACK_DISPATCH_DIR}/scripts/"
@@ -427,18 +517,31 @@ EOF
 STACK_TGZ_PKG_DIR="${ADDON_TMP_DIR}/stack-tgz"
 STACK_TGZ_ARCHIVE="${ADDON_TMP_DIR}/observability-stack.tgz"
 mkdir -p "${STACK_TGZ_PKG_DIR}/addons"
-cat > "${STACK_TGZ_PKG_DIR}/stack.yaml" <<'EOF'
+cat > "${STACK_TGZ_PKG_DIR}/stack.yaml" <<EOF
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
 metadata:
   name: observability
   version: 1.0.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   resolution:
     mode: bundled
   addons:
     - name: demo-addon
+      version: 0.1.0
       source: addons/demo-addon.tgz
+      digest: sha256:${ADDON_ARCHIVE_DIGEST}
 EOF
 cp "${ADDON_ARCHIVE}" "${STACK_TGZ_PKG_DIR}/addons/demo-addon.tgz"
 tar -czf "${STACK_TGZ_ARCHIVE}" -C "${STACK_TGZ_PKG_DIR}" .
@@ -489,13 +592,23 @@ STACK_TGZ_K3S_ONLY_DIR="${ADDON_TMP_DIR}/stack-tgz-k3s-only"
 STACK_TGZ_K3S_ONLY_ARCHIVE="${ADDON_TMP_DIR}/k3s-only-stack.tgz"
 mkdir -p "${STACK_TGZ_K3S_ONLY_DIR}/addons"
 cp "${ADDON_ARCHIVE}" "${STACK_TGZ_K3S_ONLY_DIR}/addons/demo-addon.tgz"
-cat > "${STACK_TGZ_K3S_ONLY_DIR}/stack.yaml" <<'EOF'
+cat > "${STACK_TGZ_K3S_ONLY_DIR}/stack.yaml" <<EOF
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
 metadata:
   name: k3s-only
   version: 1.0.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
   runtime:
     compatibility:
       kubernetes:
@@ -503,7 +616,9 @@ spec:
           - k3s
   addons:
     - name: demo-addon
+      version: 0.1.0
       source: addons/demo-addon.tgz
+      digest: sha256:${ADDON_ARCHIVE_DIGEST}
 EOF
 tar -czf "${STACK_TGZ_K3S_ONLY_ARCHIVE}" -C "${STACK_TGZ_K3S_ONLY_DIR}" .
 if (
@@ -512,27 +627,40 @@ if (
 ); then
   fail "stack tgz install unexpectedly succeeded for an incompatible distro"
 fi
-grep -q "does not support distro rke2" /tmp/productive-k3s-core-stack-distro.out || fail "missing stack distro compatibility error"
+grep -q "Kubernetes distro rke2 is not in the declared compatibility set" /tmp/productive-k3s-core-stack-distro.out || fail "missing stack distro compatibility error"
 pass "stack tgz install rejects incompatible distros before apply"
 
 STACK_TGZ_CORE_MIN_DIR="${ADDON_TMP_DIR}/stack-tgz-core-min"
 STACK_TGZ_CORE_MIN_ARCHIVE="${ADDON_TMP_DIR}/core-min-stack.tgz"
 mkdir -p "${STACK_TGZ_CORE_MIN_DIR}/addons"
 cp "${ADDON_ARCHIVE}" "${STACK_TGZ_CORE_MIN_DIR}/addons/demo-addon.tgz"
-cat > "${STACK_TGZ_CORE_MIN_DIR}/stack.yaml" <<'EOF'
+cat > "${STACK_TGZ_CORE_MIN_DIR}/stack.yaml" <<EOF
 apiVersion: addons.productive-k3s.io/v1
 kind: Stack
 metadata:
   name: future-core
   version: 1.0.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 9.9.9
+        maxVersionExclusive: 10.0.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   runtime:
     compatibility:
       core:
         minVersion: v9.9.9
   addons:
     - name: demo-addon
+      version: 0.1.0
       source: addons/demo-addon.tgz
+      digest: sha256:${ADDON_ARCHIVE_DIGEST}
 EOF
 tar -czf "${STACK_TGZ_CORE_MIN_ARCHIVE}" -C "${STACK_TGZ_CORE_MIN_DIR}" .
 if (
@@ -541,7 +669,7 @@ if (
 ); then
   fail "stack tgz install unexpectedly succeeded for an incompatible core version"
 fi
-grep -q "requires productive-k3s-core >=" /tmp/productive-k3s-core-stack-core-min.out || fail "missing stack core compatibility error"
+grep -q "requires Core >=9.9.9" /tmp/productive-k3s-core-stack-core-min.out || fail "missing stack core compatibility error"
 pass "stack tgz install rejects incompatible core versions before apply"
 
 STACK_TGZ_BAD_PKG_DIR="${ADDON_TMP_DIR}/stack-tgz-bad"
@@ -553,12 +681,25 @@ kind: Stack
 metadata:
   name: broken-stack
   version: 1.0.0
+  sourceRevision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 spec:
+  compatibility:
+    requires:
+      core:
+        contract: artifact/v1
+        minVersion: 0.9.6
+        maxVersionExclusive: 0.10.0
+      kubernetes:
+        distros:
+          - k3s
+          - rke2
   resolution:
     mode: bundled
   addons:
     - name: prometheus
+      version: 0.1.0
       source: addons/prometheus.tgz
+      digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 EOF
 tar -czf "${STACK_TGZ_BAD_ARCHIVE}" -C "${STACK_TGZ_BAD_PKG_DIR}" .
 if (

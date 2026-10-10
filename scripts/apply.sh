@@ -490,9 +490,30 @@ validate_runtime_engine() {
 }
 
 install_k3sup_if_needed() {
+  local machine asset checksum download_dir download_path download_url
   need_cmd k3sup && return 0
-  run_shell "Downloading k3sup installer" "curl -sLS https://get.k3sup.dev | sh"
-  run_shell "Installing k3sup into /usr/local/bin" "sudo install k3sup /usr/local/bin/"
+  machine="$(uname -m)"
+  case "${machine}" in
+    x86_64|amd64)
+      asset="k3sup"
+      checksum="${PRODUCTIVE_K3S_K3SUP_AMD64_SHA256}"
+      ;;
+    aarch64|arm64)
+      asset="k3sup-arm64"
+      checksum="${PRODUCTIVE_K3S_K3SUP_ARM64_SHA256}"
+      ;;
+    *)
+      err "Unsupported architecture for pinned k3sup ${PRODUCTIVE_K3S_K3SUP_VERSION}: ${machine}"
+      exit 1
+      ;;
+  esac
+  download_dir="$(mktemp -d)"
+  download_path="${download_dir}/k3sup"
+  download_url="https://github.com/alexellis/k3sup/releases/download/${PRODUCTIVE_K3S_K3SUP_VERSION}/${asset}"
+  run_shell "Downloading k3sup ${PRODUCTIVE_K3S_K3SUP_VERSION}" "curl -fL --retry 5 --retry-delay 3 --retry-all-errors -o '${download_path}' '${download_url}'"
+  run_shell "Verifying k3sup ${PRODUCTIVE_K3S_K3SUP_VERSION}" "printf '%s  %s\n' '${checksum}' '${download_path}' | sha256sum -c -"
+  run_shell "Installing k3sup ${PRODUCTIVE_K3S_K3SUP_VERSION} into /usr/local/bin" "sudo install '${download_path}' /usr/local/bin/k3sup"
+  run_shell "Removing temporary k3sup download" "rm -rf '${download_dir}'"
 }
 
 install_k3s_with_k3sup() {

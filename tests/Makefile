@@ -44,6 +44,7 @@ DEV_WRAPPER := ../scripts/productive-k3s-core-dev.sh
 	test-artifact-tools \
 	test-telemetry \
 	test-productive-k3s-core-cli \
+	test-stack-artifact-contract \
 	test-stack-export-artifact \
 	test-exported-stack-installers-k3s \
 	test-exported-stack-installers-all \
@@ -54,6 +55,7 @@ DEV_WRAPPER := ../scripts/productive-k3s-core-dev.sh
 	test-exported-stack-installer-k3s-debian13 \
 	test-exported-stack-installer-rke2-ubuntu24 \
 	test-exported-stack-installer-k3sup-ubuntu24 \
+	test-in-vm-repo-staging \
 	test-in-vm-engine-propagation \
 	test-in-vm-remote-log-capture \
 	test-agent-smoke \
@@ -102,6 +104,8 @@ test: test-unit test-lint test-format test-spell
 
 test-unit:
 	bash ./bin/run-shellspec.sh
+	bash ./test-runtime-compatibility.sh
+	bash ./test-kcov-installer-contract.sh
 
 test-lint:
 	bash ./bin/run-shellcheck.sh
@@ -194,6 +198,9 @@ test-telemetry:
 test-productive-k3s-core-cli:
 	bash $(DEV_WRAPPER) test-productive-k3s-core-cli
 
+test-stack-artifact-contract:
+	bash $(DEV_WRAPPER) test-stack-artifact-contract
+
 test-stack-export-artifact:
 	bash ./test-stack-export-artifact.sh
 
@@ -228,6 +235,9 @@ test-exported-stack-installer-rke2-ubuntu24:
 
 test-exported-stack-installer-k3sup-ubuntu24:
 	STACK_TEST_PLATFORM=ubuntu STACK_TEST_IMAGE=$(UBUNTU2404_IMAGE) PRODUCTIVE_K3S_DISTRO=k3s PRODUCTIVE_K3S_ENGINE=k3sup bash ./test-exported-stack-installer-in-vm.sh
+
+test-in-vm-repo-staging:
+	bash $(DEV_WRAPPER) test-in-vm-repo-staging
 
 test-in-vm-engine-propagation:
 	bash $(DEV_WRAPPER) test-in-vm-engine-propagation

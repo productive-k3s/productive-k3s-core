@@ -139,6 +139,7 @@ scripts/productive-k3s-core.sh
 scripts/addons-runtime.sh
 scripts/addon-host-runtime.sh
 scripts/runtime-contract.sh
+scripts/compatibility-runtime.sh
 scripts/component-versions.sh
 scripts/preflight-host.sh
 scripts/apply.sh

@@ -181,7 +181,7 @@ assert_contains "$root_local_all_recipe" "make -C ./tests test-local-all"
 
 root_external_all_recipe="$(make -C "${REPO_DIR}" -n test-external-all)"
 assert_contains "$root_external_all_recipe" "make -C ./tests test-external-all"
-assert_contains "$(sed -n '1,320p' "${REPO_DIR}/scripts/productive-k3s-core-dev.sh")" "run_suite_with_artifact external test-stacks"
+assert_contains "$(cat "${REPO_DIR}/scripts/productive-k3s-core-dev.sh")" "run_suite_with_artifact external test-stacks"
 
 root_matrix_all_recipe="$(make -C "${REPO_DIR}" -n test-matrix-all)"
 assert_contains "$root_matrix_all_recipe" "make -C ./tests test-matrix-all"

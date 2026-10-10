@@ -46,6 +46,8 @@ Development commands:
   test-artifact-tools
   test-telemetry
   test-productive-k3s-core-cli
+  test-stack-artifact-contract
+  test-in-vm-repo-staging
   test-in-vm-engine-propagation
   test-in-vm-remote-log-capture
   test-agent-smoke
@@ -68,7 +70,7 @@ Development commands:
   help
 
 Environment:
-  PRODUCTIVE_K3S_ADDONS_REPO_DIR  Local productive-k3s-addons checkout to copy for full/core VM tests
+  PRODUCTIVE_K3S_ADDONS_REPO_DIR  Local productive-k3s-addons checkout used to package full VM test artifacts
   PRODUCTIVE_K3S_ADDONS_REPO_URL  Git URL to clone productive-k3s-addons when no local checkout is provided
   PRODUCTIVE_K3S_ADDONS_REPO_REF  Branch or tag to clone from PRODUCTIVE_K3S_ADDONS_REPO_URL (default: current branch or main)
   PRODUCTIVE_K3S_GITHUB_OWNER     Default GitHub owner used to resolve ecosystem repositories (default: ${DEFAULT_GITHUB_OWNER})
@@ -124,9 +126,12 @@ prepare_addons_repo_checkout() {
   local source_dir=""
   local source_url=""
   local source_ref=""
+  local source_revision=""
+  local target_dir=""
 
   TEMP_ADDONS_CLONE_DIR="$(mktemp -d)"
   trap cleanup_temp_addons_clone EXIT
+  target_dir="${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"
 
   if [[ -n "${PRODUCTIVE_K3S_ADDONS_REPO_DIR:-}" ]]; then
     [[ -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/addons" && -d "${PRODUCTIVE_K3S_ADDONS_REPO_DIR}/stacks" ]] || {
@@ -138,22 +143,29 @@ prepare_addons_repo_checkout() {
 
   if [[ -n "${source_dir}" ]]; then
     log_addons_repo_source dir "${source_dir}"
-    mkdir -p "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"
-    cp -a "${source_dir}/." \
-      "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons/"
+    source_revision="$(git -C "${source_dir}" rev-parse HEAD 2>/dev/null)" || {
+      printf 'productive-k3s-addons source is not a Git checkout: %s\n' "${source_dir}" >&2
+      exit 1
+    }
+    if [[ -n "$(git -C "${source_dir}" status --porcelain --untracked-files=normal)" ]]; then
+      printf 'productive-k3s-addons source must be clean for immutable artifact tests: %s\n' "${source_dir}" >&2
+      exit 1
+    fi
+    git clone --quiet --no-hardlinks --no-checkout "${source_dir}" "${target_dir}"
+    git -C "${target_dir}" checkout --quiet --detach "${source_revision}"
   else
     source_url="${PRODUCTIVE_K3S_ADDONS_REPO_URL:-$(default_addons_repo_url)}"
     source_ref="${PRODUCTIVE_K3S_ADDONS_REPO_REF:-$(default_addons_repo_ref "${source_url}")}"
     log_addons_repo_source url "${source_url}" "${source_ref}"
     if ! git clone --depth 1 --branch "${source_ref}" \
       "${source_url}" \
-      "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"; then
+      "${target_dir}"; then
       printf 'failed to clone productive-k3s-addons from %s (ref: %s)\n' "${source_url}" "${source_ref}" >&2
       exit 1
     fi
   fi
 
-  cat >> "${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons/.gitignore" <<'EOF'
+  cat >> "${target_dir}/.git/info/exclude" <<'EOF'
 test-artifacts/
 .tmp/
 .tmp-*/
@@ -161,11 +173,11 @@ test-artifacts/
 runs/
 EOF
 
-  export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${TEMP_ADDONS_CLONE_DIR}/productive-k3s-addons"
+  export PRODUCTIVE_K3S_ADDONS_REPO_DIR="${target_dir}"
 }
 
 run_tests_make() {
-  exec make -C "${REPO_DIR}/tests" "$@"
+  make -C "${REPO_DIR}/tests" "$@"
 }
 
 run_checkstatus() {
@@ -302,12 +314,14 @@ main() {
       run_suite_with_artifact local test-arm-support-docs bash "${REPO_DIR}/tests/test-arm-support-docs.sh"
       run_suite_with_artifact local test-bootstrap-modes bash "${REPO_DIR}/tests/test-bootstrap-modes.sh"
       run_suite_with_artifact local test-artifact-tools bash "${REPO_DIR}/tests/test-artifact-tools.sh"
+      run_suite_with_artifact local test-stack-artifact-contract bash "${REPO_DIR}/tests/test-stack-artifact-contract.sh"
+      run_suite_with_artifact local test-in-vm-repo-staging bash "${REPO_DIR}/tests/test-in-vm-repo-staging.sh"
       run_suite_with_artifact local test-in-vm-cleanup-timeout bash "${REPO_DIR}/tests/test-in-vm-cleanup-timeout.sh"
       run_suite_with_artifact local test-productive-k3s-core-cli bash "${REPO_DIR}/tests/test-productive-k3s-core-cli.sh"
       run_suite_with_artifact local test-in-vm-engine-propagation bash "${REPO_DIR}/tests/test-in-vm-engine-propagation.sh"
       run_suite_with_artifact local test-in-vm-remote-log-capture bash "${REPO_DIR}/tests/test-in-vm-remote-log-capture.sh"
       run_suite_with_artifact local test-in-vm-longhorn-cleanup-contract bash "${REPO_DIR}/tests/test-in-vm-longhorn-cleanup-contract.sh"
-      exec "${REPO_DIR}/tests/run-suite-with-artifact.sh" local test-agent-smoke bash "${REPO_DIR}/tests/test-agent-in-docker.sh" "$@"
+      "${REPO_DIR}/tests/run-suite-with-artifact.sh" local test-agent-smoke bash "${REPO_DIR}/tests/test-agent-in-docker.sh" "$@"
       ;;
     test-external-all)
       shift
@@ -399,6 +413,15 @@ main() {
       shift
       exec bash "${REPO_DIR}/tests/test-productive-k3s-core-cli.sh" "$@"
       ;;
+    test-stack-artifact-contract)
+      shift
+      prepare_addons_repo_checkout
+      bash "${REPO_DIR}/tests/test-stack-artifact-contract.sh" "$@"
+      ;;
+    test-in-vm-repo-staging)
+      shift
+      exec bash "${REPO_DIR}/tests/test-in-vm-repo-staging.sh" "$@"
+      ;;
     test-in-vm-engine-propagation)
       shift
       exec bash "${REPO_DIR}/tests/test-in-vm-engine-propagation.sh" "$@"
@@ -418,32 +441,32 @@ main() {
     test-core)
       shift
       prepare_addons_repo_checkout
-      exec "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile core "$@"
+      "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile core "$@"
       ;;
     test-rke2-core)
       shift
       prepare_addons_repo_checkout
-      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile core "$@"
+      env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile core "$@"
       ;;
     test-rke2-core-ubuntu22)
       shift
       prepare_addons_repo_checkout
-      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_22_04_IMAGE}" --profile core "$@"
+      env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_22_04_IMAGE}" --profile core "$@"
       ;;
     test-rke2-full)
       shift
       prepare_addons_repo_checkout
-      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full "$@"
+      env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full "$@"
       ;;
     test-rke2-full-clean)
       shift
       prepare_addons_repo_checkout
-      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full-clean "$@"
+      env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full-clean "$@"
       ;;
     test-rke2-full-rollback)
       shift
       prepare_addons_repo_checkout
-      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full-rollback "$@"
+      env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full-rollback "$@"
       ;;
     test-rke2-ubuntu-all)
       shift
@@ -451,17 +474,17 @@ main() {
       env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile core "$@" || exit $?
       env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full "$@" || exit $?
       env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full-clean "$@" || exit $?
-      exec env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full-rollback "$@"
+      env PRODUCTIVE_K3S_DISTRO=rke2 "${REPO_DIR}/tests/test-in-vm.sh" --platform ubuntu --image "${UBUNTU_24_04_IMAGE}" --profile full-rollback "$@"
       ;;
     test-core-debian12)
       shift
       prepare_addons_repo_checkout
-      exec "${REPO_DIR}/tests/test-in-vm.sh" --platform debian12 --image "${DEBIAN_12_IMAGE}" --profile core "$@"
+      "${REPO_DIR}/tests/test-in-vm.sh" --platform debian12 --image "${DEBIAN_12_IMAGE}" --profile core "$@"
       ;;
     test-core-debian13)
       shift
       prepare_addons_repo_checkout
-      exec "${REPO_DIR}/tests/test-in-vm.sh" --platform debian13 --image "${DEBIAN_13_IMAGE}" --profile core "$@"
+      "${REPO_DIR}/tests/test-in-vm.sh" --platform debian13 --image "${DEBIAN_13_IMAGE}" --profile core "$@"
       ;;
     test-matrix-smoke)
       shift

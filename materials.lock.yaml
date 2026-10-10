@@ -1,0 +1,91 @@
+apiVersion: materials.productive-k3s.io/v1alpha1
+kind: MaterialsLock
+metadata:
+  owner: productive-k3s-core
+  package: productive-k3s-core
+  version: 0.9.5
+spec:
+  materials:
+    - id: k3s
+      type: binary
+      name: k3s
+      version: v1.35.5+k3s1
+      source: https://github.com/k3s-io/k3s
+      pinPolicy: exact
+      required: true
+      updateSource:
+        type: github-release
+        repository: k3s-io/k3s
+    - id: rke2
+      type: binary
+      name: rke2
+      version: v1.35.5+rke2r1
+      source: https://github.com/rancher/rke2
+      pinPolicy: exact
+      required: true
+      updateSource:
+        type: github-release
+        repository: rancher/rke2
+    - id: helm
+      type: binary
+      name: helm
+      version: v3.21.0
+      source: https://github.com/helm/helm
+      pinPolicy: exact
+      required: true
+      updateSource:
+        type: github-release
+        repository: helm/helm
+    - id: k3sup
+      type: binary
+      name: k3sup
+      version: 0.13.13
+      source: https://github.com/alexellis/k3sup
+      pinPolicy: exact-checksum
+      required: false
+      checksums:
+        linux-amd64: sha256:7f2db0cf4c28d413bc094aa2e1a809bd772875486f385bd57dd2d7575e7c7509
+        linux-arm64: sha256:0d3d5894dda1013943cfbfc443580d973402972ebda36a42365cf8b67aa22ea5
+      updateSource:
+        type: github-release
+        repository: alexellis/k3sup
+    - id: python-ci
+      type: binary
+      name: python
+      version: 3.11.17
+      source: https://github.com/actions/python-versions
+      pinPolicy: exact-toolchain
+      required: true
+      scope: development
+      distribution: excluded
+      usedBy:
+        - .github/workflows/docs.yml
+        - .github/workflows/hosted-validation.yml
+    - id: kcov
+      type: binary
+      name: kcov
+      version: "43"
+      source: https://github.com/SimonKagstrom/kcov
+      pinPolicy: exact-checksum
+      required: true
+      scope: development
+      distribution: excluded
+      checksums:
+        source-archive: sha256:4cbba86af11f72de0c7514e09d59c7927ed25df7cebdad087f6d3623213b95bf
+      usedBy:
+        - tests/bin/install-kcov.sh
+        - tests/bin/run-kcov.sh
+      updateSource:
+        type: github-release
+        repository: SimonKagstrom/kcov
+  requirements:
+    - id: kcov-build-host
+      type: os-image
+      name: ubuntu
+      version: "24.04"
+      source: https://github.com/actions/runner-images
+      pinPolicy: release-series
+      required: true
+      scope: development
+      distribution: excluded
+      note: Provides CMake, compiler, and signed Ubuntu build-library packages for CI only.
