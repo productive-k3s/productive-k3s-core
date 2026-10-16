@@ -270,6 +270,12 @@ bundled_without_sources_dir="${tmp_dir}/bundled-without-sources"
 unsupported_distro_stack_dir="${tmp_dir}/unsupported-distro-stack"
 duplicate_distro_stack_dir="${tmp_dir}/duplicate-distro-stack"
 corrupt_tgz="${tmp_dir}/corrupt.tgz"
+unsafe_archive_dir="${tmp_dir}/unsafe-archive"
+traversal_tgz="${tmp_dir}/traversal.tgz"
+absolute_path_tgz="${tmp_dir}/absolute-path.tgz"
+escaped_path_tgz="${tmp_dir}/escaped-path.tgz"
+symlink_tgz="${tmp_dir}/symlink.tgz"
+duplicate_path_tgz="${tmp_dir}/duplicate-path.tgz"
 missing_addon_manifest_tgz="${tmp_dir}/missing-addon-manifest.tgz"
 rollback_manifest="${tmp_dir}/rollback-manifest.json"
 backup_output="${tmp_dir}/backup-output"
@@ -511,6 +517,16 @@ inject_compatibility_contract "${unsupported_distro_stack_dir}/stack.yaml" unsup
 inject_compatibility_contract "${duplicate_distro_stack_dir}/stack.yaml" unsupported
 tar -czf "${missing_addon_manifest_tgz}" -C "${missing_stack_manifest_dir}" .
 printf 'not a tgz\n' >"${corrupt_tgz}"
+mkdir -p "${unsafe_archive_dir}"
+printf 'payload\n' >"${unsafe_archive_dir}/payload"
+tar -czf "${traversal_tgz}" --transform='s|^payload$|../escape-marker|' -C "${unsafe_archive_dir}" payload
+tar -czf "${absolute_path_tgz}" --transform='s|^payload$|/absolute-marker|' -C "${unsafe_archive_dir}" payload
+escaped_name=$'escaped\nname'
+printf 'escaped\n' >"${unsafe_archive_dir}/${escaped_name}"
+tar -czf "${escaped_path_tgz}" -C "${unsafe_archive_dir}" "${escaped_name}"
+ln -s /tmp "${unsafe_archive_dir}/outside"
+tar -czf "${symlink_tgz}" -C "${unsafe_archive_dir}" outside
+tar -czf "${duplicate_path_tgz}" -C "${addon_pkg_dir}" addon.yaml addon.yaml
 cat >"${rollback_manifest}" <<'EOF'
 {
   "run_id": "coverage-stack-run",
@@ -632,6 +648,15 @@ if [[ ${rc} -eq 0 || (${rc} -eq 101 && -f "${COVERAGE_DIR}/shellspec/raw/shellsp
   run_kcov_core_cli_expect cli-addon-validate-mutable-revision 4 ./productive-k3s-core.sh addon validate --tgz "${mutable_revision_addon_tgz}" || rc=$?
   run_kcov_core_cli_expect cli-addon-validate-missing-manifest 4 ./productive-k3s-core.sh addon validate --tgz "${missing_addon_manifest_tgz}" || rc=$?
   run_kcov_core_cli_expect cli-addon-validate-corrupt 4 ./productive-k3s-core.sh addon validate --tgz "${corrupt_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-traversal 4 ./productive-k3s-core.sh addon validate --tgz "${traversal_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-absolute-path 4 ./productive-k3s-core.sh addon validate --tgz "${absolute_path_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-escaped-path 4 ./productive-k3s-core.sh addon validate --tgz "${escaped_path_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-symlink 4 ./productive-k3s-core.sh addon validate --tgz "${symlink_tgz}" || rc=$?
+  run_kcov_core_cli_expect cli-addon-validate-duplicate-path 4 ./productive-k3s-core.sh addon validate --tgz "${duplicate_path_tgz}" || rc=$?
+  PK3S_ARCHIVE_MAX_ENTRIES=invalid run_kcov_core_cli_expect cli-addon-validate-invalid-entry-limit 4 ./productive-k3s-core.sh addon validate --tgz "${addon_tgz}" || rc=$?
+  PK3S_ARCHIVE_MAX_ENTRIES=1 run_kcov_core_cli_expect cli-addon-validate-entry-limit 4 ./productive-k3s-core.sh addon validate --tgz "${addon_tgz}" || rc=$?
+  PK3S_ARCHIVE_MAX_COMPRESSED_BYTES=1 run_kcov_core_cli_expect cli-addon-validate-compressed-limit 4 ./productive-k3s-core.sh addon validate --tgz "${addon_tgz}" || rc=$?
+  PK3S_ARCHIVE_MAX_EXPANDED_BYTES=1 run_kcov_core_cli_expect cli-addon-validate-expanded-limit 4 ./productive-k3s-core.sh addon validate --tgz "${addon_tgz}" || rc=$?
   run_kcov_core_cli_expect cli-dev-addon-missing 4 ./productive-k3s-core.sh dev addon validate --source "${tmp_dir}/missing-addon-source" || rc=$?
   run_kcov_core_cli_expect cli-dev-usage 2 ./productive-k3s-core.sh dev wrong validate || rc=$?
   run_kcov_core_cli_expect cli-dev-stack-bad 4 ./productive-k3s-core.sh dev stack validate --source "${bad_stack_dir}" || rc=$?

@@ -74,6 +74,12 @@ The important public split now is:
 - `./productive-k3s-core.sh addon install --tgz <artifact>`
   operates on the local host and local cluster, not on an external kubeconfig target
 
+### Archive extraction safety
+
+Core inspects every Addon and Stack TGZ before extracting it. Packages are rejected when they contain absolute or parent-traversal paths, escaped path names, duplicate entries, links, devices, FIFOs, or more than one critical `addon.yaml` or `stack.yaml` manifest.
+
+The default limits are 4,096 entries, 64 MiB compressed, and 512 MiB expanded. Accepted packages are extracted only into a private `0700` temporary directory without restoring archive ownership or unrestricted permissions. Maintainers may lower these limits for constrained environments with `PK3S_ARCHIVE_MAX_ENTRIES`, `PK3S_ARCHIVE_MAX_COMPRESSED_BYTES`, and `PK3S_ARCHIVE_MAX_EXPANDED_BYTES`.
+
 ## `productive-k3s-core.sh`
 
 ### Operation event stream

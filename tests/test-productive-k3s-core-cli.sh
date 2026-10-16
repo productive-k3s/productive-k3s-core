@@ -230,6 +230,47 @@ printf '%s\n' "$addon_validate_output" | grep -q "Addon package validation passe
 printf '%s\n' "$addon_validate_output" | grep -q "demo-addon" || fail "addon validation did not report addon metadata"
 pass "addon tgz validation works"
 
+expect_addon_archive_rejection() {
+  local label="$1" archive="$2" expected="$3"
+  shift 3
+  local output_file="${ADDON_TMP_DIR}/${label}.out"
+  if (cd "$REPO_DIR" && env "$@" ./productive-k3s-core.sh addon validate --tgz "${archive}" >"${output_file}" 2>&1); then
+    fail "unsafe addon archive unexpectedly passed: ${label}"
+  fi
+  grep -q "${expected}" "${output_file}" || fail "unsafe addon archive did not report ${expected}: ${label}"
+}
+
+ARCHIVE_ATTACK_DIR="${ADDON_TMP_DIR}/archive-attacks"
+mkdir -p "${ARCHIVE_ATTACK_DIR}/source" "${ARCHIVE_ATTACK_DIR}/duplicate-manifests/one" "${ARCHIVE_ATTACK_DIR}/duplicate-manifests/two"
+printf 'payload\n' >"${ARCHIVE_ATTACK_DIR}/source/payload"
+cp "${ADDON_PKG_DIR}/addon.yaml" "${ARCHIVE_ATTACK_DIR}/duplicate-manifests/one/addon.yaml"
+cp "${ADDON_PKG_DIR}/addon.yaml" "${ARCHIVE_ATTACK_DIR}/duplicate-manifests/two/addon.yaml"
+
+ARCHIVE_TRAVERSAL="${ARCHIVE_ATTACK_DIR}/traversal.tgz"
+ARCHIVE_SYMLINK="${ARCHIVE_ATTACK_DIR}/symlink.tgz"
+ARCHIVE_FIFO="${ARCHIVE_ATTACK_DIR}/fifo.tgz"
+ARCHIVE_DUPLICATE_PATH="${ARCHIVE_ATTACK_DIR}/duplicate-path.tgz"
+ARCHIVE_DUPLICATE_MANIFEST="${ARCHIVE_ATTACK_DIR}/duplicate-manifest.tgz"
+
+tar -czf "${ARCHIVE_TRAVERSAL}" --transform='s|^payload$|../pk3s-core-escape-marker|' -C "${ARCHIVE_ATTACK_DIR}/source" payload
+ln -s /tmp "${ARCHIVE_ATTACK_DIR}/source/outside"
+tar -czf "${ARCHIVE_SYMLINK}" -C "${ARCHIVE_ATTACK_DIR}/source" outside
+mkfifo "${ARCHIVE_ATTACK_DIR}/source/pipe"
+tar -czf "${ARCHIVE_FIFO}" -C "${ARCHIVE_ATTACK_DIR}/source" pipe
+tar -czf "${ARCHIVE_DUPLICATE_PATH}" -C "${ADDON_PKG_DIR}" addon.yaml addon.yaml
+tar -czf "${ARCHIVE_DUPLICATE_MANIFEST}" -C "${ARCHIVE_ATTACK_DIR}/duplicate-manifests" .
+
+expect_addon_archive_rejection traversal "${ARCHIVE_TRAVERSAL}" "unsafe path"
+[[ ! -e "${ADDON_TMP_DIR}/pk3s-core-escape-marker" ]] || fail "traversal archive wrote outside its extraction root"
+expect_addon_archive_rejection symlink "${ARCHIVE_SYMLINK}" "forbidden archive entry type"
+expect_addon_archive_rejection fifo "${ARCHIVE_FIFO}" "forbidden archive entry type"
+expect_addon_archive_rejection duplicate-path "${ARCHIVE_DUPLICATE_PATH}" "duplicate path"
+expect_addon_archive_rejection duplicate-manifest "${ARCHIVE_DUPLICATE_MANIFEST}" "exactly one addon.yaml"
+expect_addon_archive_rejection entry-limit "${ADDON_ARCHIVE}" "entry count is outside" PK3S_ARCHIVE_MAX_ENTRIES=1
+expect_addon_archive_rejection compressed-limit "${ADDON_ARCHIVE}" "compressed size limit" PK3S_ARCHIVE_MAX_COMPRESSED_BYTES=1
+expect_addon_archive_rejection expanded-limit "${ADDON_ARCHIVE}" "expanded size limit" PK3S_ARCHIVE_MAX_EXPANDED_BYTES=1
+pass "addon tgz validation rejects unsafe archive structures and expansion"
+
 STACK_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source"
 STACK_BAD_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source-bad"
 STACK_BAD_MODE_SOURCE_DIR="${ADDON_TMP_DIR}/stack-source-bad-mode"
