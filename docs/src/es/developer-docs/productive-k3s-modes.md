@@ -40,6 +40,8 @@ Internamente el script trata a los modos como switches de capacidades:
 
 - apunta a `k3s-agent` en lugar del servicio servidor
 - pide `Agent server URL` y `Agent cluster token` cuando hace falta instalar el agente
+- mantiene el token del clúster fuera de argumentos, dry-run, logs, telemetría y manifests públicos de ejecución
+- escribe la configuración del agente RKE2 mediante un archivo temporal privado y la instala con modo `0600`
 - omite Helm y componentes del stack
 
 ### `stack`

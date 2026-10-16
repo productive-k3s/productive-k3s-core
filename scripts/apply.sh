@@ -458,6 +458,51 @@ run_shell_with_retries() {
   done
 }
 
+run_shell_with_secret_env_retries() {
+  local desc="$1" timeout_secs="$2" sleep_secs="$3" secret_name="$4" secret_value="$5" cmd="$6"
+  local start_ts now_ts
+  if [[ "$DRY_RUN" == "1" ]]; then
+    run_shell "$desc" "$cmd"
+    return 0
+  fi
+  start_ts="$(date +%s)"
+  while true; do
+    if (
+      printf -v "${secret_name}" '%s' "${secret_value}"
+      export "${secret_name}"
+      run_shell "$desc" "$cmd"
+    ); then
+      return 0
+    fi
+    now_ts="$(date +%s)"
+    if (( now_ts - start_ts >= timeout_secs )); then
+      return 1
+    fi
+    warn "${desc} did not succeed yet. Waiting ${sleep_secs}s before retrying."
+    sleep "$sleep_secs"
+  done
+}
+
+write_rke2_agent_config() {
+  local config_dir="$1" config_path="$2"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "[dry-run] Writing rke2 agent config with protected credentials"
+    printf '  sudo install -m 0600 <protected-temporary-file> %q\n' "${config_path}"
+    return 0
+  fi
+
+  (
+    local config_tmp
+    umask 077
+    config_tmp="$(mktemp)"
+    trap 'rm -f "${config_tmp}"' EXIT
+    trap 'exit 130' HUP INT TERM
+    printf 'server: %s\ntoken: %s\n' "${AGENT_SERVER_URL}" "${AGENT_CLUSTER_TOKEN}" > "${config_tmp}"
+    sudo mkdir -p "${config_dir}"
+    sudo install -m 0600 "${config_tmp}" "${config_path}"
+  )
+}
+
 ensure_packages() {
   local label="$1"
   shift
@@ -542,8 +587,8 @@ install_k3s_with_native() {
   local install_cmd=""
   if [[ "$MODE" == "agent" ]]; then
     [[ -n "${AGENT_SERVER_URL:-}" && -n "${AGENT_CLUSTER_TOKEN:-}" ]] || { err "Agent mode requires both server URL and cluster token."; exit 1; }
-    printf -v install_cmd 'curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors https://get.k3s.io | K3S_URL=%q K3S_TOKEN=%q INSTALL_K3S_EXEC=agent INSTALL_K3S_VERSION=%q sh -' "$AGENT_SERVER_URL" "$AGENT_CLUSTER_TOKEN" "${PRODUCTIVE_K3S_K3S_VERSION}"
-    if ! run_shell_with_retries "Installing k3s agent" 600 15 "$install_cmd"; then
+    printf -v install_cmd 'curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors https://get.k3s.io | K3S_URL=%q INSTALL_K3S_EXEC=agent INSTALL_K3S_VERSION=%q sh -' "$AGENT_SERVER_URL" "${PRODUCTIVE_K3S_K3S_VERSION}"
+    if ! run_shell_with_secret_env_retries "Installing k3s agent" 600 15 K3S_TOKEN "$AGENT_CLUSTER_TOKEN" "$install_cmd"; then
       err "k3s agent installation failed."
       return 1
     fi
@@ -564,10 +609,7 @@ install_rke2_with_native() {
     [[ -n "${AGENT_SERVER_URL:-}" && -n "${AGENT_CLUSTER_TOKEN:-}" ]] || { err "Agent mode requires both server URL and cluster token."; exit 1; }
     printf -v install_cmd 'curl -sfL https://get.rke2.io | sudo env INSTALL_RKE2_VERSION=%q INSTALL_RKE2_TYPE=agent sh -' "${PRODUCTIVE_K3S_RKE2_VERSION}"
     run_shell "Installing rke2 agent" "$install_cmd"
-    run_shell "Writing rke2 agent config" "sudo mkdir -p ${config_dir} && sudo tee ${config_path} >/dev/null <<'EOF'
-server: ${AGENT_SERVER_URL}
-token: ${AGENT_CLUSTER_TOKEN}
-EOF"
+    write_rke2_agent_config "${config_dir}" "${config_path}"
     run_cmd "Enabling rke2-agent" sudo systemctl enable --now rke2-agent
     return
   fi

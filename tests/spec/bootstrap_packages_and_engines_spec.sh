@@ -61,15 +61,52 @@ Describe 'bootstrap package and engine helpers'
       DRY_RUN=1
       MODE=agent
       AGENT_SERVER_URL=https://server.example.local:6443
-      AGENT_CLUSTER_TOKEN=token-1
+      AGENT_CLUSTER_TOKEN=sentinel-native-agent-secret
       install_k3s_with_native'
     The status should equal 0
     The output should include 'Installing k3s agent'
     The output should include 'K3S_URL=https://server.example.local:6443'
-    The output should include 'K3S_TOKEN=token-1'
+    The output should not include 'sentinel-native-agent-secret'
+    The output should not include 'K3S_TOKEN='
     The output should include 'INSTALL_K3S_EXEC=agent'
     The output should include 'INSTALL_K3S_VERSION=v1.35.5+k3s1'
     The output should include '--retry 5 --retry-delay 3 --retry-all-errors'
+  End
+
+  It 'passes the native k3s agent token only through the child environment'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      MODE=agent
+      AGENT_SERVER_URL=https://server.example.local:6443
+      AGENT_CLUSTER_TOKEN=sentinel-native-agent-secret
+      attempt_file="$(mktemp)"
+      sleep() { :; }
+      run_shell() {
+        if [[ ! -s "${attempt_file}" ]]; then
+          printf "failed-once\n" > "${attempt_file}"
+          return 1
+        fi
+        [[ "${K3S_TOKEN:-}" == "${AGENT_CLUSTER_TOKEN}" ]] || return 90
+        printf "protected-token-present=yes cmd=%s\n" "$2"
+      }
+      install_k3s_with_native'
+    The status should equal 0
+    The output should include 'protected-token-present=yes'
+    The output should not include 'sentinel-native-agent-secret'
+    The output should not include 'K3S_TOKEN='
+  End
+
+  It 'fails without exposing the token when secret retries time out'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      date() { printf "100\n"; }
+      sleep() { :; }
+      run_shell() { return 1; }
+      if run_shell_with_secret_env_retries "Installing protected agent" 0 0 K3S_TOKEN sentinel-timeout-secret "false"; then
+        exit 91
+      fi
+      printf "protected-timeout=yes\n"'
+    The status should equal 0
+    The output should include 'protected-timeout=yes'
+    The output should not include 'sentinel-timeout-secret'
   End
 
   It 'wraps native k3s server installation in bounded retries'
@@ -88,12 +125,14 @@ Describe 'bootstrap package and engine helpers'
       MODE=agent
       AGENT_SERVER_URL=https://server.example.local:6443
       AGENT_CLUSTER_TOKEN=token-1
-      run_shell_with_retries() {
-        printf "desc=%s timeout=%s sleep=%s cmd=%s\n" "$1" "$2" "$3" "$4"
+      run_shell_with_secret_env_retries() {
+        printf "desc=%s timeout=%s sleep=%s secret-name=%s cmd=%s\n" "$1" "$2" "$3" "$4" "$6"
       }
       install_k3s_with_native'
     The status should equal 0
     The output should include 'desc=Installing k3s agent timeout=600 sleep=15'
+    The output should include 'secret-name=K3S_TOKEN'
+    The output should not include 'token-1'
   End
 
   It 'requires agent connection details for native agent installs'
@@ -154,6 +193,37 @@ Describe 'bootstrap package and engine helpers'
     The output should include 'Installing rke2 (v1.35.5+rke2r1)'
     The output should include 'INSTALL_RKE2_VERSION=v1.35.5+rke2r1'
     The output should include 'Enabling rke2-server'
+  End
+
+  It 'keeps rke2 agent credentials out of dry-run output'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      DRY_RUN=1
+      MODE=agent
+      AGENT_SERVER_URL=https://server.example.local:9345
+      AGENT_CLUSTER_TOKEN=sentinel-rke2-agent-secret
+      install_rke2_with_native'
+    The status should equal 0
+    The output should include 'Installing rke2 agent'
+    The output should include 'Writing rke2 agent config with protected credentials'
+    The output should include 'sudo install -m 0600'
+    The output should not include 'sentinel-rke2-agent-secret'
+  End
+
+  It 'writes rke2 agent credentials through a private temporary file'
+    When run /usr/bin/bash "$RUNNER" "$SCRIPT" '
+      DRY_RUN=0
+      AGENT_SERVER_URL=https://server.example.local:9345
+      AGENT_CLUSTER_TOKEN=sentinel-rke2-agent-secret
+      target_root="$(mktemp -d)"
+      sudo() { "$@"; }
+      write_rke2_agent_config "${target_root}/etc/rancher/rke2" "${target_root}/etc/rancher/rke2/config.yaml"
+      [[ "$(stat -c %a "${target_root}/etc/rancher/rke2/config.yaml")" == 600 ]]
+      grep -q "^server: https://server.example.local:9345$" "${target_root}/etc/rancher/rke2/config.yaml"
+      grep -q "^token: sentinel-rke2-agent-secret$" "${target_root}/etc/rancher/rke2/config.yaml"
+      printf "private-config=yes\n"'
+    The status should equal 0
+    The output should equal 'private-config=yes'
+    The output should not include 'sentinel-rke2-agent-secret'
   End
 
   It 'propagates pipeline failures from run_shell'
