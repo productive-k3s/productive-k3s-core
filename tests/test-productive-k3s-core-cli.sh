@@ -586,6 +586,19 @@ spec:
 EOF
 cp "${ADDON_ARCHIVE}" "${STACK_TGZ_PKG_DIR}/addons/demo-addon.tgz"
 tar -czf "${STACK_TGZ_ARCHIVE}" -C "${STACK_TGZ_PKG_DIR}" .
+
+STACK_DUPLICATE_MANIFEST_DIR="${ADDON_TMP_DIR}/stack-duplicate-manifests"
+STACK_DUPLICATE_MANIFEST_ARCHIVE="${ADDON_TMP_DIR}/stack-duplicate-manifests.tgz"
+STACK_DUPLICATE_MANIFEST_OUTPUT="${ADDON_TMP_DIR}/stack-duplicate-manifests.out"
+mkdir -p "${STACK_DUPLICATE_MANIFEST_DIR}/one" "${STACK_DUPLICATE_MANIFEST_DIR}/two"
+cp "${STACK_TGZ_PKG_DIR}/stack.yaml" "${STACK_DUPLICATE_MANIFEST_DIR}/one/stack.yaml"
+cp "${STACK_TGZ_PKG_DIR}/stack.yaml" "${STACK_DUPLICATE_MANIFEST_DIR}/two/stack.yaml"
+tar -czf "${STACK_DUPLICATE_MANIFEST_ARCHIVE}" -C "${STACK_DUPLICATE_MANIFEST_DIR}" .
+if (cd "${STACK_DISPATCH_DIR}" && ./productive-k3s-core.sh stack install --tgz "${STACK_DUPLICATE_MANIFEST_ARCHIVE}" --dry-run >"${STACK_DUPLICATE_MANIFEST_OUTPUT}" 2>&1); then
+  fail "stack tgz install unexpectedly accepted duplicate stack manifests"
+fi
+grep -q "exactly one stack.yaml" "${STACK_DUPLICATE_MANIFEST_OUTPUT}" || fail "duplicate stack manifest rejection was not reported"
+pass "stack tgz install rejects duplicate stack manifests"
 (
   cd "${STACK_DISPATCH_DIR}" &&
   ./productive-k3s-core.sh stack install --tgz "${STACK_TGZ_ARCHIVE}" --dry-run
