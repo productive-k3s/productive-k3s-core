@@ -506,42 +506,168 @@ stack_manifest_addon_records() {
   parse_stack_addon_records_from_manifest "${manifest}"
 }
 
+
+validate_archive_limit() {
+  local name="$1" value="$2"
+  [[ "${value}" =~ ^[1-9][0-9]*$ ]] || {
+    printf 'invalid %s archive limit: %s\n' "${name}" "${value}" >&2
+    return 4
+  }
+}
+
+validate_tgz_archive() {
+  local archive="$1"
+  local archive_label="${2:-$1}"
+  local max_compressed_bytes="${PK3S_ARCHIVE_MAX_COMPRESSED_BYTES:-67108864}"
+  local max_expanded_bytes="${PK3S_ARCHIVE_MAX_EXPANDED_BYTES:-536870912}"
+  local max_entries="${PK3S_ARCHIVE_MAX_ENTRIES:-4096}"
+  local compressed_bytes expanded_bytes entry_count entry normalized type_line entry_type duplicate_entry
+  local inspection_dir listing types normalized_listing duplicates
+
+  validate_archive_limit compressed-bytes "${max_compressed_bytes}" || return $?
+  validate_archive_limit expanded-bytes "${max_expanded_bytes}" || return $?
+  validate_archive_limit entries "${max_entries}" || return $?
+
+  compressed_bytes="$(stat -c %s "${archive}")" || return 4
+  if (( compressed_bytes > max_compressed_bytes )); then
+    printf 'tgz package exceeds compressed size limit (%s > %s bytes): %s\n' "${compressed_bytes}" "${max_compressed_bytes}" "${archive_label}" >&2
+    return 4
+  fi
+
+  inspection_dir="$(mktemp -d)"
+  listing="${inspection_dir}/entries"
+  types="${inspection_dir}/types"
+  normalized_listing="${inspection_dir}/normalized"
+  duplicates="${inspection_dir}/duplicates"
+  if ! LC_ALL=C tar -tzf "${archive}" --quoting-style=escape >"${listing}" 2>/dev/null ||
+    ! LC_ALL=C tar -tvzf "${archive}" --quoting-style=escape --numeric-owner >"${types}" 2>/dev/null; then
+    rm -rf "${inspection_dir}"
+    printf 'could not inspect tgz package: %s\n' "${archive_label}" >&2
+    return 4
+  fi
+
+  entry_count="$(wc -l <"${listing}")"
+  if (( entry_count == 0 || entry_count > max_entries )); then
+    rm -rf "${inspection_dir}"
+    printf 'tgz package entry count is outside the allowed range (1-%s): %s\n' "${max_entries}" "${archive_label}" >&2
+    return 4
+  fi
+
+  : >"${normalized_listing}"
+  while IFS= read -r entry || [[ -n "${entry}" ]]; do
+    [[ "${entry}" != *'\'* ]] || {
+      rm -rf "${inspection_dir}"
+      printf 'tgz package contains an escaped or unsupported path: %s\n' "${archive_label}" >&2
+      return 4
+    }
+    [[ "${entry}" != /* ]] || {
+      rm -rf "${inspection_dir}"
+      printf 'tgz package contains an absolute path: %s\n' "${archive_label}" >&2
+      return 4
+    }
+    normalized="${entry}"
+    while [[ "${normalized}" == ./* ]]; do
+      normalized="${normalized#./}"
+    done
+    [[ -n "${normalized}" ]] || continue
+    [[ "${normalized}" != '..' && "/${normalized}/" != *'/../'* && "/${normalized}/" != *'/./'* && "${normalized}" != *'//'* ]] || {
+      rm -rf "${inspection_dir}"
+      printf 'tgz package contains an unsafe path: %s\n' "${archive_label}" >&2
+      return 4
+    }
+    printf '%s\n' "${normalized}" >>"${normalized_listing}"
+  done <"${listing}"
+
+  LC_ALL=C sort "${normalized_listing}" | uniq -d >"${duplicates}"
+  if IFS= read -r duplicate_entry <"${duplicates}"; then
+    rm -rf "${inspection_dir}"
+    printf 'tgz package contains a duplicate path: %s\n' "${duplicate_entry}" >&2
+    return 4
+  fi
+
+  while IFS= read -r type_line || [[ -n "${type_line}" ]]; do
+    entry_type="${type_line:0:1}"
+    [[ "${entry_type}" == '-' || "${entry_type}" == 'd' ]] || {
+      rm -rf "${inspection_dir}"
+      printf 'tgz package contains a forbidden archive entry type: %s\n' "${entry_type}" >&2
+      return 4
+    }
+  done <"${types}"
+
+  expanded_bytes="$(LC_ALL=C tar -xOzf "${archive}" 2>/dev/null | wc -c)" || {
+    rm -rf "${inspection_dir}"
+    printf 'could not measure tgz package expansion: %s\n' "${archive_label}" >&2
+    return 4
+  }
+  rm -rf "${inspection_dir}"
+  if (( expanded_bytes > max_expanded_bytes )); then
+    printf 'tgz package exceeds expanded size limit (%s > %s bytes): %s\n' "${expanded_bytes}" "${max_expanded_bytes}" "${archive_label}" >&2
+    return 4
+  fi
+}
+
 extract_tgz_to_temp() {
   local archive="$1"
   [[ -f "${archive}" ]] || {
     printf 'tgz package not found: %s\n' "${archive}" >&2
     return 3
   }
-  local tmp_dir
+
+  local tmp_dir archive_copy rc
   tmp_dir="$(mktemp -d)"
-  tar -xzf "${archive}" -C "${tmp_dir}" || {
+  archive_copy="$(mktemp)"
+  chmod 0700 "${tmp_dir}"
+  chmod 0600 "${archive_copy}"
+  cp -- "${archive}" "${archive_copy}" || {
     rm -rf "${tmp_dir}"
+    rm -f "${archive_copy}"
+    printf 'could not snapshot tgz package: %s\n' "${archive}" >&2
+    return 4
+  }
+  validate_tgz_archive "${archive_copy}" "${archive}" || {
+    rc=$?
+    rm -rf "${tmp_dir}"
+    rm -f "${archive_copy}"
+    return "${rc}"
+  }
+  tar -xzf "${archive_copy}" --no-same-owner --no-same-permissions -C "${tmp_dir}" || {
+    rm -rf "${tmp_dir}"
+    rm -f "${archive_copy}"
     printf 'could not extract tgz package: %s\n' "${archive}" >&2
     return 4
   }
+  rm -f "${archive_copy}"
   printf '%s\n' "${tmp_dir}"
 }
 
 resolve_addon_manifest() {
   local package_root="$1"
-  local manifest
-  manifest="$(find "${package_root}" -type f -name 'addon.yaml' | head -n1)"
-  [[ -n "${manifest}" ]] || {
-    printf 'addon package is missing addon.yaml\n' >&2
+  local manifests=()
+  mapfile -t manifests < <(find "${package_root}" -type f -name 'addon.yaml' -print | sort)
+  (( ${#manifests[@]} == 1 )) || {
+    if (( ${#manifests[@]} == 0 )); then
+      printf 'addon package is missing addon.yaml\n' >&2
+    else
+      printf 'addon package must contain exactly one addon.yaml\n' >&2
+    fi
     return 4
   }
-  printf '%s\n' "${manifest}"
+  printf '%s\n' "${manifests[0]}"
 }
 
 resolve_stack_manifest() {
   local package_root="$1"
-  local manifest
-  manifest="$(find "${package_root}" -type f -name 'stack.yaml' | head -n1)"
-  [[ -n "${manifest}" ]] || {
-    printf 'stack source is missing stack.yaml\n' >&2
+  local manifests=()
+  mapfile -t manifests < <(find "${package_root}" -type f -name 'stack.yaml' -print | sort)
+  (( ${#manifests[@]} == 1 )) || {
+    if (( ${#manifests[@]} == 0 )); then
+      printf 'stack source is missing stack.yaml\n' >&2
+    else
+      printf 'stack package must contain exactly one stack.yaml\n' >&2
+    fi
     return 4
   }
-  printf '%s\n' "${manifest}"
+  printf '%s\n' "${manifests[0]}"
 }
 
 validate_addon_manifest() {

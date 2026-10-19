@@ -40,6 +40,8 @@ The script internally treats the modes as capability switches:
 
 - targets `k3s-agent` instead of the server service
 - prompts for `Agent server URL` and `Agent cluster token` when an agent install is needed
+- keeps the cluster token out of command arguments, dry-run output, logs, telemetry, and public run manifests
+- writes the RKE2 agent configuration through a private temporary file and installs it with mode `0600`
 - skips Helm and stack components
 
 ### `stack`
